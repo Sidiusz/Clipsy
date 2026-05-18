@@ -3,14 +3,47 @@
     x:Class="Clipsy.Views.CaptureOverlayWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
     <Grid x:Name="RootGrid"
           Background="Transparent"
           IsTabStop="True"
           KeyDown="OnKeyDown"
-          PointerPressed="OnPointerPressed"
-          PointerMoved="OnPointerMoved"
-          PointerReleased="OnPointerReleased">
-        <Image x:Name="FrozenImage" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top" />
+          PointerPressed="OnRootPointerPressed"
+          PointerMoved="OnRootPointerMoved"
+          PointerReleased="OnRootPointerReleased"
+          RightTapped="OnRootRightTapped">
+
+        <Grid.Resources>
+            <Style x:Key="ToolButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="34" />
+                <Setter Property="Height" Value="34" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="ToolToggleStyle" TargetType="ToggleButton">
+                <Setter Property="Width" Value="34" />
+                <Setter Property="Height" Value="34" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+            </Style>
+        </Grid.Resources>
+
+        <Image x:Name="FrozenImage"
+               Stretch="None"
+               HorizontalAlignment="Left"
+               VerticalAlignment="Top"
+               IsHitTestVisible="False" />
+
         <Path x:Name="DimPath"
               Fill="#99000000"
               IsHitTestVisible="False">
@@ -18,13 +51,86 @@
                 <GeometryGroup x:Name="DimGeometry" FillRule="EvenOdd" />
             </Path.Data>
         </Path>
-        <Rectangle x:Name="SelectionBorder"
-                   Stroke="#FF1F6FEB"
-                   StrokeThickness="1.5"
-                   IsHitTestVisible="False"
-                   Visibility="Collapsed"
-                   HorizontalAlignment="Left"
-                   VerticalAlignment="Top" />
+
+        <Canvas x:Name="SelectionLayer"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Visibility="Collapsed">
+            <Canvas x:Name="DrawingCanvas"
+                    Background="Transparent"
+                    IsHitTestVisible="False" />
+            <Rectangle x:Name="SelectionBorder"
+                       Stroke="#FF1F6FEB"
+                       StrokeThickness="1.5"
+                       IsHitTestVisible="False" />
+            <Canvas x:Name="HandlesLayer" />
+            <Canvas x:Name="CursorPreviewLayer" IsHitTestVisible="False" />
+        </Canvas>
+
+        <Canvas x:Name="OverlayLayer">
+            <Border x:Name="BottomToolbar"
+                    Visibility="Collapsed"
+                    Background="#F01E1E1E"
+                    BorderBrush="#FF2E2E2E"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="6">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Button x:Name="RecordBtn" Click="OnRecordClick" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Record">
+                        <FontIcon Glyph="&#xE7C8;" Foreground="#FFE05151" FontSize="18" />
+                    </Button>
+                    <Button x:Name="ScreenshotBtn" Click="OnScreenshotClick" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Screenshot">
+                        <FontIcon Glyph="&#xE722;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="CopyBtn" Click="OnCopyClick" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Copy">
+                        <FontIcon Glyph="&#xE8C8;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="CancelBtn" Click="OnCancelClick" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Cancel (Esc)">
+                        <FontIcon Glyph="&#xE711;" FontSize="18" />
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <Border x:Name="RightToolbar"
+                    Visibility="Collapsed"
+                    Background="#F01E1E1E"
+                    BorderBrush="#FF2E2E2E"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="6">
+                <StackPanel Orientation="Vertical" Spacing="4">
+                    <Button x:Name="ColorBtn" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Color">
+                        <Ellipse x:Name="ColorSwatch" Width="18" Height="18" Fill="#FFFF3B30" Stroke="White" StrokeThickness="1" />
+                        <Button.Flyout>
+                            <MenuFlyout Placement="Left">
+                                <MenuFlyoutItem Text="Red" Click="OnColorPick" Tag="#FFFF3B30" />
+                                <MenuFlyoutItem Text="Orange" Click="OnColorPick" Tag="#FFFF9500" />
+                                <MenuFlyoutItem Text="Yellow" Click="OnColorPick" Tag="#FFFFD60A" />
+                                <MenuFlyoutItem Text="Green" Click="OnColorPick" Tag="#FF34C759" />
+                                <MenuFlyoutItem Text="Cyan" Click="OnColorPick" Tag="#FF32ADE6" />
+                                <MenuFlyoutItem Text="Blue" Click="OnColorPick" Tag="#FF0A84FF" />
+                                <MenuFlyoutItem Text="Magenta" Click="OnColorPick" Tag="#FFFF2D55" />
+                                <MenuFlyoutItem Text="White" Click="OnColorPick" Tag="#FFFFFFFF" />
+                                <MenuFlyoutItem Text="Black" Click="OnColorPick" Tag="#FF000000" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                    <ToggleButton x:Name="PencilBtn" Click="OnToolToggle" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Pencil — LMB draw, RMB erase">
+                        <FontIcon Glyph="&#xE70F;" FontSize="18" />
+                    </ToggleButton>
+                    <ToggleButton x:Name="RectBtn" Click="OnToolToggle" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Rectangle">
+                        <FontIcon Glyph="&#xE7A8;" FontSize="18" />
+                    </ToggleButton>
+                    <ToggleButton x:Name="TextBtn" Click="OnToolToggle" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Text">
+                        <TextBlock Text="T" FontWeight="SemiBold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </ToggleButton>
+                    <Button x:Name="OcrBtn" Click="OnOcrClick" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Find text">
+                        <FontIcon Glyph="&#xE721;" FontSize="18" />
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Canvas>
+
         <TextBlock x:Name="Hint"
                    Text="Select area"
                    Foreground="White"
@@ -32,10 +138,20 @@
                    FontWeight="SemiLight"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
-                   IsHitTestVisible="False">
-            <TextBlock.Shadow>
-                <ThemeShadow />
-            </TextBlock.Shadow>
-        </TextBlock>
+                   IsHitTestVisible="False" />
+
+        <Grid.ContextFlyout>
+            <MenuFlyout x:Name="OverlayMenu">
+                <MenuFlyoutSubItem x:Name="SelectScreenMenu" Text="Select screen" />
+                <MenuFlyoutItem Text="Select all" Click="OnMenuSelectAll" />
+                <MenuFlyoutSeparator x:Name="SelectionMenuSeparator" Visibility="Collapsed" />
+                <MenuFlyoutItem x:Name="MenuCopy" Text="Copy" Click="OnMenuCopy" Visibility="Collapsed" />
+                <MenuFlyoutItem x:Name="MenuSave" Text="Save" Click="OnMenuSave" Visibility="Collapsed" />
+                <MenuFlyoutItem x:Name="MenuSaveAs" Text="Save As" Click="OnMenuSaveAs" Visibility="Collapsed" />
+                <MenuFlyoutItem x:Name="MenuClear" Text="Clear" Click="OnMenuClear" Visibility="Collapsed" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Text="Cancel" Click="OnMenuCancel" />
+            </MenuFlyout>
+        </Grid.ContextFlyout>
     </Grid>
 </Window>

@@ -1,30 +1,55 @@
 using System;
+using System.Collections.Generic;
+using Clipsy.Drawing;
 using Clipsy.Services;
-using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 using Windows.Graphics;
 using Windows.System;
+using Windows.UI;
 using WinRT.Interop;
-using DrawingRect = System.Drawing.Rectangle;
+using Point = Windows.Foundation.Point;
+using Rect = Windows.Foundation.Rect;
 
 namespace Clipsy.Views;
 
 public sealed partial class CaptureOverlayWindow : Window
 {
+    private enum InteractionMode { Idle, SelectingNew, MovingSelection, ResizingSelection, DrawingStroke, DrawingRect, Erasing, PlacingText }
+    private enum HandlePos { TL, T, TR, R, BR, B, BL, L }
+
+    private const double MinSelectionSize = 4.0;
+    private const double SingleClickFallbackSize = 100.0;
+    private const double HandleSize = 10.0;
+    private const double HandleHitInflate = 6.0;
+    private const double EraserRadius = 4.0;
+
     private readonly ScreenFreezeService.FrozenFrame _frame;
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
+    private readonly DrawingController _drawing;
+    private readonly List<Microsoft.UI.Xaml.Shapes.Rectangle> _handleVisuals = new();
+    private readonly Ellipse _pencilPreview;
 
-    private bool _isDragging;
-    private Point _dragStart;
-    private Point _dragCurrent;
+    private InteractionMode _mode = InteractionMode.Idle;
     private bool _hasSelection;
+    private Rect _selectionRect;
+    private Rect _selectionAtDragStart;
+    private Point _dragStart;
+    private HandlePos _activeHandle;
+
+    private Polyline? _activeStrokeVisual;
+    private StrokeElement? _activeStroke;
+    private Microsoft.UI.Xaml.Shapes.Rectangle? _activeRectVisual;
+    private Point _activeRectAnchor;
+    private TextBox? _activeTextBox;
 
     public CaptureOverlayWindow(ScreenFreezeService.FrozenFrame frame)
     {
@@ -35,13 +60,27 @@ public sealed partial class CaptureOverlayWindow : Window
         _appWindow = GetAppWindowForCurrentWindow();
         ConfigureAsOverlay();
 
+        _drawing = new DrawingController(DrawingCanvas);
+        BuildHandles();
+        _pencilPreview = new Ellipse
+        {
+            Width = 12,
+            Height = 12,
+            Stroke = new SolidColorBrush(Microsoft.UI.Colors.White),
+            StrokeThickness = 1,
+            Fill = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0)),
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+        };
+        CursorPreviewLayer.Children.Add(_pencilPreview);
+
+        BuildScreenMenu();
         Activated += OnActivated;
-        Closed += (_, _) => { };
     }
 
     private AppWindow GetAppWindowForCurrentWindow()
     {
-        var id = Win32Interop.GetWindowIdFromWindow(_hwnd);
+        var id = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(_hwnd);
         return AppWindow.GetFromWindowId(id);
     }
 
@@ -55,10 +94,8 @@ public sealed partial class CaptureOverlayWindow : Window
             op.IsMinimizable = false;
             op.IsAlwaysOnTop = true;
         }
-
         var b = _frame.VirtualBounds;
         _appWindow.MoveAndResize(new RectInt32(b.X, b.Y, b.Width, b.Height));
-
         FrozenImage.Width = b.Width;
         FrozenImage.Height = b.Height;
         UpdateDimGeometry(null);
@@ -73,18 +110,585 @@ public sealed partial class CaptureOverlayWindow : Window
         RootGrid.Focus(FocusState.Programmatic);
     }
 
+    // ---------- Handles ----------
+
+    private void BuildHandles()
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            var r = new Microsoft.UI.Xaml.Shapes.Rectangle
+            {
+                Width = HandleSize,
+                Height = HandleSize,
+                Fill = new SolidColorBrush(Microsoft.UI.Colors.White),
+                Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x1F, 0x6F, 0xEB)),
+                StrokeThickness = 1,
+                Visibility = Visibility.Collapsed,
+                IsHitTestVisible = false,
+            };
+            HandlesLayer.Children.Add(r);
+            _handleVisuals.Add(r);
+        }
+    }
+
+    private void PositionHandles()
+    {
+        if (!_hasSelection)
+        {
+            foreach (var hv in _handleVisuals) hv.Visibility = Visibility.Collapsed;
+            return;
+        }
+        double w = _selectionRect.Width, h = _selectionRect.Height;
+        var anchors = new (double X, double Y)[]
+        {
+            (0, 0), (w / 2, 0), (w, 0),
+            (w, h / 2),
+            (w, h), (w / 2, h), (0, h),
+            (0, h / 2),
+        };
+        for (int i = 0; i < 8; i++)
+        {
+            Canvas.SetLeft(_handleVisuals[i], anchors[i].X - HandleSize / 2);
+            Canvas.SetTop(_handleVisuals[i], anchors[i].Y - HandleSize / 2);
+            _handleVisuals[i].Visibility = Visibility.Visible;
+        }
+    }
+
+    private bool TryGetHandle(Point rootPos, out HandlePos handle)
+    {
+        handle = HandlePos.TL;
+        if (!_hasSelection) return false;
+        double w = _selectionRect.Width, h = _selectionRect.Height;
+        var local = new Point(rootPos.X - _selectionRect.X, rootPos.Y - _selectionRect.Y);
+        var anchors = new (double X, double Y, HandlePos H)[]
+        {
+            (0, 0, HandlePos.TL), (w / 2, 0, HandlePos.T), (w, 0, HandlePos.TR),
+            (w, h / 2, HandlePos.R),
+            (w, h, HandlePos.BR), (w / 2, h, HandlePos.B), (0, h, HandlePos.BL),
+            (0, h / 2, HandlePos.L),
+        };
+        double half = HandleSize / 2 + HandleHitInflate;
+        foreach (var a in anchors)
+        {
+            if (System.Math.Abs(local.X - a.X) <= half && System.Math.Abs(local.Y - a.Y) <= half)
+            {
+                handle = a.H;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ---------- Pointer input ----------
+
+    private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        var cp = e.GetCurrentPoint(RootGrid);
+        var pos = cp.Position;
+        bool rmb = cp.Properties.IsRightButtonPressed;
+        bool lmb = cp.Properties.IsLeftButtonPressed;
+
+        if (rmb)
+        {
+            if (_drawing.Settings.Tool != ToolKind.None && _hasSelection && IsInsideSelection(pos))
+            {
+                _mode = InteractionMode.Erasing;
+                RootGrid.CapturePointer(e.Pointer);
+                TryEraseAt(pos);
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if (!lmb) return;
+
+        if (_hasSelection && TryGetHandle(pos, out var hp))
+        {
+            _mode = InteractionMode.ResizingSelection;
+            _activeHandle = hp;
+            _selectionAtDragStart = _selectionRect;
+            _dragStart = pos;
+            RootGrid.CapturePointer(e.Pointer);
+            return;
+        }
+
+        if (_hasSelection && IsInsideSelection(pos))
+        {
+            if (_drawing.Settings.Tool == ToolKind.None)
+            {
+                _mode = InteractionMode.MovingSelection;
+                _selectionAtDragStart = _selectionRect;
+                _dragStart = pos;
+                RootGrid.CapturePointer(e.Pointer);
+            }
+            else
+            {
+                StartToolPress(pos, e.Pointer);
+            }
+            return;
+        }
+
+        // Outside or no selection: start new selection
+        if (_drawing.Elements.Count > 0)
+        {
+            _drawing.ClearAll();
+        }
+        _mode = InteractionMode.SelectingNew;
+        _hasSelection = false;
+        _dragStart = pos;
+        _selectionRect = new Rect(pos.X, pos.Y, 0, 0);
+        UpdateSelectionVisual();
+        Hint.Visibility = Visibility.Collapsed;
+        RootGrid.CapturePointer(e.Pointer);
+    }
+
+    private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        var pos = e.GetCurrentPoint(RootGrid).Position;
+        if (_drawing.Settings.Tool == ToolKind.Pencil && _hasSelection && IsInsideSelection(pos))
+        {
+            _pencilPreview.Visibility = Visibility.Visible;
+            var local = ToCanvas(pos);
+            Canvas.SetLeft(_pencilPreview, local.X - _pencilPreview.Width / 2);
+            Canvas.SetTop(_pencilPreview, local.Y - _pencilPreview.Height / 2);
+        }
+        else
+        {
+            _pencilPreview.Visibility = Visibility.Collapsed;
+        }
+
+        switch (_mode)
+        {
+            case InteractionMode.SelectingNew:
+                _selectionRect = MakeRect(_dragStart, pos);
+                UpdateSelectionVisual();
+                break;
+            case InteractionMode.MovingSelection:
+            {
+                double dx = pos.X - _dragStart.X;
+                double dy = pos.Y - _dragStart.Y;
+                _selectionRect = new Rect(
+                    _selectionAtDragStart.X + dx,
+                    _selectionAtDragStart.Y + dy,
+                    _selectionAtDragStart.Width,
+                    _selectionAtDragStart.Height);
+                UpdateSelectionVisual();
+                break;
+            }
+            case InteractionMode.ResizingSelection:
+                _selectionRect = ResizeFromHandle(_selectionAtDragStart, _activeHandle, pos);
+                UpdateSelectionVisual();
+                break;
+            case InteractionMode.DrawingStroke:
+                ExtendStroke(pos);
+                break;
+            case InteractionMode.DrawingRect:
+                UpdateActiveRect(pos);
+                break;
+            case InteractionMode.Erasing:
+                TryEraseAt(pos);
+                break;
+        }
+    }
+
+    private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        var pos = e.GetCurrentPoint(RootGrid).Position;
+        RootGrid.ReleasePointerCapture(e.Pointer);
+
+        switch (_mode)
+        {
+            case InteractionMode.SelectingNew:
+            {
+                var rect = MakeRect(_dragStart, pos);
+                if (rect.Width < MinSelectionSize && rect.Height < MinSelectionSize)
+                {
+                    double x = _dragStart.X - SingleClickFallbackSize / 2;
+                    double y = _dragStart.Y - SingleClickFallbackSize / 2;
+                    rect = new Rect(x, y, SingleClickFallbackSize, SingleClickFallbackSize);
+                }
+                _selectionRect = rect;
+                _hasSelection = true;
+                UpdateSelectionVisual();
+                ShowToolbars();
+                break;
+            }
+            case InteractionMode.DrawingStroke:
+                FinishStroke();
+                break;
+            case InteractionMode.DrawingRect:
+                FinishActiveRect();
+                break;
+        }
+
+        _mode = InteractionMode.Idle;
+    }
+
+    private void OnRootRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (_drawing.Settings.Tool != ToolKind.None && _hasSelection)
+        {
+            var pos = e.GetPosition(RootGrid);
+            if (IsInsideSelection(pos))
+            {
+                // RMB inside selection with tool active is erase, not menu.
+                e.Handled = true;
+                return;
+            }
+        }
+        UpdateContextMenuVisibility();
+    }
+
+    // ---------- Selection / drawing helpers ----------
+
+    private bool IsInsideSelection(Point p)
+    {
+        return _hasSelection
+            && p.X >= _selectionRect.X && p.X <= _selectionRect.X + _selectionRect.Width
+            && p.Y >= _selectionRect.Y && p.Y <= _selectionRect.Y + _selectionRect.Height;
+    }
+
+    private Point ToCanvas(Point root) => new(root.X - _selectionRect.X, root.Y - _selectionRect.Y);
+
+    private static Rect MakeRect(Point a, Point b)
+    {
+        double x = System.Math.Min(a.X, b.X);
+        double y = System.Math.Min(a.Y, b.Y);
+        double w = System.Math.Abs(a.X - b.X);
+        double h = System.Math.Abs(a.Y - b.Y);
+        return new Rect(x, y, w, h);
+    }
+
+    private Rect ResizeFromHandle(Rect baseRect, HandlePos h, Point pos)
+    {
+        double left = baseRect.X, top = baseRect.Y, right = baseRect.X + baseRect.Width, bottom = baseRect.Y + baseRect.Height;
+        switch (h)
+        {
+            case HandlePos.TL: left = pos.X; top = pos.Y; break;
+            case HandlePos.T:  top = pos.Y; break;
+            case HandlePos.TR: right = pos.X; top = pos.Y; break;
+            case HandlePos.R:  right = pos.X; break;
+            case HandlePos.BR: right = pos.X; bottom = pos.Y; break;
+            case HandlePos.B:  bottom = pos.Y; break;
+            case HandlePos.BL: left = pos.X; bottom = pos.Y; break;
+            case HandlePos.L:  left = pos.X; break;
+        }
+        if (right < left) (left, right) = (right, left);
+        if (bottom < top) (top, bottom) = (bottom, top);
+        return new Rect(left, top, right - left, bottom - top);
+    }
+
+    private void UpdateSelectionVisual()
+    {
+        if (_selectionRect.Width <= 0 || _selectionRect.Height <= 0)
+        {
+            SelectionLayer.Visibility = Visibility.Collapsed;
+            UpdateDimGeometry(null);
+            PositionToolbars();
+            return;
+        }
+
+        SelectionLayer.Visibility = Visibility.Visible;
+        Canvas.SetLeft(SelectionLayer, _selectionRect.X);
+        Canvas.SetTop(SelectionLayer, _selectionRect.Y);
+        SelectionLayer.Width = _selectionRect.Width;
+        SelectionLayer.Height = _selectionRect.Height;
+
+        DrawingCanvas.Width = _selectionRect.Width;
+        DrawingCanvas.Height = _selectionRect.Height;
+        SelectionBorder.Width = _selectionRect.Width;
+        SelectionBorder.Height = _selectionRect.Height;
+        HandlesLayer.Width = _selectionRect.Width;
+        HandlesLayer.Height = _selectionRect.Height;
+        CursorPreviewLayer.Width = _selectionRect.Width;
+        CursorPreviewLayer.Height = _selectionRect.Height;
+
+        PositionHandles();
+        UpdateDimGeometry(_selectionRect);
+        PositionToolbars();
+    }
+
+    private void UpdateDimGeometry(Rect? hole)
+    {
+        DimGeometry.Children.Clear();
+        DimGeometry.Children.Add(new RectangleGeometry { Rect = new Rect(0, 0, RootGrid.ActualWidth, RootGrid.ActualHeight) });
+        if (hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0)
+        {
+            DimGeometry.Children.Add(new RectangleGeometry { Rect = hole.Value });
+        }
+    }
+
+    private void ShowToolbars()
+    {
+        BottomToolbar.Visibility = Visibility.Visible;
+        RightToolbar.Visibility = Visibility.Visible;
+        PositionToolbars();
+    }
+
+    private void HideToolbars()
+    {
+        BottomToolbar.Visibility = Visibility.Collapsed;
+        RightToolbar.Visibility = Visibility.Collapsed;
+    }
+
+    private void PositionToolbars()
+    {
+        if (BottomToolbar.Visibility != Visibility.Visible || !_hasSelection) return;
+        BottomToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        RightToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var rootW = RootGrid.ActualWidth;
+        var rootH = RootGrid.ActualHeight;
+
+        double bw = BottomToolbar.DesiredSize.Width;
+        double bh = BottomToolbar.DesiredSize.Height;
+        double rw = RightToolbar.DesiredSize.Width;
+        double rh = RightToolbar.DesiredSize.Height;
+
+        double bx = _selectionRect.X + (_selectionRect.Width - bw) / 2;
+        double by = _selectionRect.Y + _selectionRect.Height + 12;
+        if (by + bh > rootH - 8)
+        {
+            by = _selectionRect.Y - bh - 12;
+            if (by < 8) by = _selectionRect.Y + _selectionRect.Height - bh - 8;
+        }
+        bx = System.Math.Clamp(bx, 8, System.Math.Max(8, rootW - bw - 8));
+        Canvas.SetLeft(BottomToolbar, bx);
+        Canvas.SetTop(BottomToolbar, by);
+
+        double rx = _selectionRect.X + _selectionRect.Width + 12;
+        double ry = _selectionRect.Y + (_selectionRect.Height - rh) / 2;
+        if (rx + rw > rootW - 8)
+        {
+            rx = _selectionRect.X - rw - 12;
+            if (rx < 8) rx = _selectionRect.X + _selectionRect.Width - rw - 8;
+        }
+        ry = System.Math.Clamp(ry, 8, System.Math.Max(8, rootH - rh - 8));
+        Canvas.SetLeft(RightToolbar, rx);
+        Canvas.SetTop(RightToolbar, ry);
+    }
+
+    // ---------- Drawing tools ----------
+
+    private void StartToolPress(Point pos, Pointer pointer)
+    {
+        var local = ToCanvas(pos);
+        switch (_drawing.Settings.Tool)
+        {
+            case ToolKind.Pencil:
+                _mode = InteractionMode.DrawingStroke;
+                _activeStrokeVisual = new Polyline
+                {
+                    Stroke = new SolidColorBrush(_drawing.Settings.Color),
+                    StrokeThickness = _drawing.Settings.PencilThickness,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
+                    StrokeLineJoin = PenLineJoin.Round,
+                };
+                _activeStrokeVisual.Points.Add(local);
+                _activeStroke = new StrokeElement
+                {
+                    Visual = _activeStrokeVisual,
+                    Points = new List<Point> { local },
+                    Thickness = _drawing.Settings.PencilThickness,
+                };
+                DrawingCanvas.Children.Add(_activeStrokeVisual);
+                RootGrid.CapturePointer(pointer);
+                break;
+            case ToolKind.Rectangle:
+                _mode = InteractionMode.DrawingRect;
+                _activeRectAnchor = local;
+                _activeRectVisual = new Microsoft.UI.Xaml.Shapes.Rectangle
+                {
+                    Stroke = new SolidColorBrush(_drawing.Settings.Color),
+                    StrokeThickness = _drawing.Settings.RectangleThickness,
+                    Width = 0,
+                    Height = 0,
+                };
+                Canvas.SetLeft(_activeRectVisual, local.X);
+                Canvas.SetTop(_activeRectVisual, local.Y);
+                DrawingCanvas.Children.Add(_activeRectVisual);
+                RootGrid.CapturePointer(pointer);
+                break;
+            case ToolKind.Text:
+                _mode = InteractionMode.PlacingText;
+                StartTextEntry(local);
+                break;
+        }
+    }
+
+    private void ExtendStroke(Point pos)
+    {
+        if (_activeStroke == null || _activeStrokeVisual == null) return;
+        var local = ToCanvas(pos);
+        _activeStroke.Points.Add(local);
+        _activeStrokeVisual.Points.Add(local);
+    }
+
+    private void FinishStroke()
+    {
+        if (_activeStroke == null || _activeStrokeVisual == null) return;
+        DrawingCanvas.Children.Remove(_activeStrokeVisual);
+        _drawing.Add(_activeStroke);
+        _activeStroke = null;
+        _activeStrokeVisual = null;
+    }
+
+    private void UpdateActiveRect(Point pos)
+    {
+        if (_activeRectVisual == null) return;
+        var local = ToCanvas(pos);
+        double x = System.Math.Min(_activeRectAnchor.X, local.X);
+        double y = System.Math.Min(_activeRectAnchor.Y, local.Y);
+        double w = System.Math.Abs(local.X - _activeRectAnchor.X);
+        double h = System.Math.Abs(local.Y - _activeRectAnchor.Y);
+        Canvas.SetLeft(_activeRectVisual, x);
+        Canvas.SetTop(_activeRectVisual, y);
+        _activeRectVisual.Width = w;
+        _activeRectVisual.Height = h;
+    }
+
+    private void FinishActiveRect()
+    {
+        if (_activeRectVisual == null) return;
+        double x = Canvas.GetLeft(_activeRectVisual);
+        double y = Canvas.GetTop(_activeRectVisual);
+        double w = _activeRectVisual.Width;
+        double h = _activeRectVisual.Height;
+        DrawingCanvas.Children.Remove(_activeRectVisual);
+        if (w < 2 || h < 2) { _activeRectVisual = null; return; }
+        var visual = new Microsoft.UI.Xaml.Shapes.Rectangle
+        {
+            Stroke = _activeRectVisual.Stroke,
+            StrokeThickness = _activeRectVisual.StrokeThickness,
+            Width = w,
+            Height = h,
+        };
+        Canvas.SetLeft(visual, x);
+        Canvas.SetTop(visual, y);
+        var element = new RectangleElement
+        {
+            Visual = visual,
+            Bounds = new Rect(x, y, w, h),
+            Thickness = _activeRectVisual.StrokeThickness,
+        };
+        _drawing.Add(element);
+        _activeRectVisual = null;
+    }
+
+    private void StartTextEntry(Point local)
+    {
+        var tb = new TextBox
+        {
+            MinWidth = 60,
+            AcceptsReturn = false,
+            Background = new SolidColorBrush(Color.FromArgb(160, 0, 0, 0)),
+            Foreground = new SolidColorBrush(_drawing.Settings.Color),
+            BorderBrush = new SolidColorBrush(_drawing.Settings.Color),
+            BorderThickness = new Thickness(1),
+            FontSize = _drawing.Settings.TextSize,
+            Padding = new Thickness(4, 2, 4, 2),
+        };
+        Canvas.SetLeft(tb, local.X);
+        Canvas.SetTop(tb, local.Y);
+        DrawingCanvas.Children.Add(tb);
+        _activeTextBox = tb;
+        tb.LostFocus += (_, _) => CommitText();
+        tb.KeyDown += (_, ke) =>
+        {
+            if (ke.Key == VirtualKey.Enter) { ke.Handled = true; CommitText(); }
+            else if (ke.Key == VirtualKey.Escape) { ke.Handled = true; CancelText(); }
+        };
+        DrawingCanvas.IsHitTestVisible = true; // so the textbox can receive input
+        tb.Focus(FocusState.Programmatic);
+    }
+
+    private void CommitText()
+    {
+        if (_activeTextBox == null) return;
+        var text = _activeTextBox.Text ?? string.Empty;
+        double x = Canvas.GetLeft(_activeTextBox);
+        double y = Canvas.GetTop(_activeTextBox);
+        var owning = _activeTextBox;
+        _activeTextBox = null;
+        DrawingCanvas.Children.Remove(owning);
+        DrawingCanvas.IsHitTestVisible = false;
+        _mode = InteractionMode.Idle;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        var tb = new TextBlock
+        {
+            Text = text,
+            FontSize = _drawing.Settings.TextSize,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(_drawing.Settings.Color),
+            IsHitTestVisible = false,
+        };
+        Canvas.SetLeft(tb, x);
+        Canvas.SetTop(tb, y);
+        tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var size = tb.DesiredSize;
+        var element = new TextElement
+        {
+            Visual = tb,
+            Position = new Point(x, y),
+            Text = text,
+            FontSize = _drawing.Settings.TextSize,
+            MeasuredSize = size,
+        };
+        _drawing.Add(element);
+    }
+
+    private void CancelText()
+    {
+        if (_activeTextBox == null) return;
+        DrawingCanvas.Children.Remove(_activeTextBox);
+        _activeTextBox = null;
+        DrawingCanvas.IsHitTestVisible = false;
+        _mode = InteractionMode.Idle;
+    }
+
+    private void TryEraseAt(Point rootPos)
+    {
+        var local = ToCanvas(rootPos);
+        var hit = _drawing.HitTestTopmost(local, EraserRadius);
+        if (hit != null) _drawing.Remove(hit);
+    }
+
+    // ---------- Keyboard ----------
+
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (e.Key == VirtualKey.Escape)
+        bool ctrl = IsCtrlDown();
+        if (_activeTextBox != null) return; // typing in textbox; handled by it
+
+        switch (e.Key)
         {
-            e.Handled = true;
-            Close();
+            case VirtualKey.Escape:
+                e.Handled = true;
+                HandleEscape();
+                return;
+            case VirtualKey.A when ctrl:
+                e.Handled = true;
+                SelectAll();
+                return;
+            case VirtualKey.Z when ctrl:
+                e.Handled = true;
+                _drawing.Undo();
+                return;
+            case VirtualKey.Y when ctrl:
+                e.Handled = true;
+                _drawing.Redo();
+                return;
         }
-        else if (e.Key == VirtualKey.A && IsCtrlDown())
+    }
+
+    private void HandleEscape()
+    {
+        if (_drawing.Settings.Tool != ToolKind.None)
         {
-            e.Handled = true;
-            SelectAll();
+            SetTool(ToolKind.None);
+            return;
         }
+        Close();
     }
 
     private static bool IsCtrlDown()
@@ -95,86 +699,134 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void SelectAll()
     {
-        _dragStart = new Point(0, 0);
-        _dragCurrent = new Point(RootGrid.ActualWidth, RootGrid.ActualHeight);
+        var rect = new Rect(0, 0, RootGrid.ActualWidth, RootGrid.ActualHeight);
+        SetSelection(rect);
+    }
+
+    private void SetSelection(Rect rect)
+    {
+        _selectionRect = rect;
         _hasSelection = true;
-        _isDragging = false;
         Hint.Visibility = Visibility.Collapsed;
         UpdateSelectionVisual();
+        ShowToolbars();
     }
 
-    private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
+    // ---------- Toolbar / tool selection ----------
+
+    private void OnToolToggle(object sender, RoutedEventArgs e)
     {
-        var p = e.GetCurrentPoint(RootGrid).Position;
-        if (e.GetCurrentPoint(RootGrid).Properties.IsLeftButtonPressed)
+        if (sender is not ToggleButton tb) return;
+        ToolKind tool = tb.Name switch
         {
-            _isDragging = true;
-            _dragStart = p;
-            _dragCurrent = p;
-            Hint.Visibility = Visibility.Collapsed;
-            RootGrid.CapturePointer(e.Pointer);
-            UpdateSelectionVisual();
+            "PencilBtn" => ToolKind.Pencil,
+            "RectBtn" => ToolKind.Rectangle,
+            "TextBtn" => ToolKind.Text,
+            _ => ToolKind.None,
+        };
+        SetTool(tb.IsChecked == true ? tool : ToolKind.None);
+    }
+
+    private void SetTool(ToolKind tool)
+    {
+        _drawing.Settings.Tool = tool;
+        PencilBtn.IsChecked = tool == ToolKind.Pencil;
+        RectBtn.IsChecked = tool == ToolKind.Rectangle;
+        TextBtn.IsChecked = tool == ToolKind.Text;
+        if (tool != ToolKind.Pencil) _pencilPreview.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnColorPick(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem mfi && mfi.Tag is string hex)
+        {
+            var color = ParseHexColor(hex);
+            _drawing.Settings.Color = color;
+            ColorSwatch.Fill = new SolidColorBrush(color);
         }
     }
 
-    private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
+    private static Color ParseHexColor(string hex)
     {
-        if (!_isDragging) return;
-        _dragCurrent = e.GetCurrentPoint(RootGrid).Position;
-        UpdateSelectionVisual();
-    }
-
-    private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
-    {
-        if (!_isDragging) return;
-        _isDragging = false;
-        RootGrid.ReleasePointerCapture(e.Pointer);
-
-        var rect = GetSelectionRect();
-        if (rect.Width < 4 && rect.Height < 4)
+        var s = hex.TrimStart('#');
+        if (s.Length == 8)
         {
-            // Single click = 100x100 minimum centered on click
-            _dragStart = new Point(_dragStart.X - 50, _dragStart.Y - 50);
-            _dragCurrent = new Point(_dragStart.X + 100, _dragStart.Y + 100);
+            byte a = System.Convert.ToByte(s.Substring(0, 2), 16);
+            byte r = System.Convert.ToByte(s.Substring(2, 2), 16);
+            byte g = System.Convert.ToByte(s.Substring(4, 2), 16);
+            byte b = System.Convert.ToByte(s.Substring(6, 2), 16);
+            return Color.FromArgb(a, r, g, b);
         }
-        _hasSelection = true;
-        UpdateSelectionVisual();
-    }
-
-    private Rect GetSelectionRect()
-    {
-        double x = Math.Min(_dragStart.X, _dragCurrent.X);
-        double y = Math.Min(_dragStart.Y, _dragCurrent.Y);
-        double w = Math.Abs(_dragCurrent.X - _dragStart.X);
-        double h = Math.Abs(_dragCurrent.Y - _dragStart.Y);
-        return new Rect(x, y, w, h);
-    }
-
-    private void UpdateSelectionVisual()
-    {
-        if (!_isDragging && !_hasSelection)
+        if (s.Length == 6)
         {
-            SelectionBorder.Visibility = Visibility.Collapsed;
-            UpdateDimGeometry(null);
-            return;
+            byte r = System.Convert.ToByte(s.Substring(0, 2), 16);
+            byte g = System.Convert.ToByte(s.Substring(2, 2), 16);
+            byte b = System.Convert.ToByte(s.Substring(4, 2), 16);
+            return Color.FromArgb(0xFF, r, g, b);
         }
-
-        var r = GetSelectionRect();
-        SelectionBorder.Visibility = Visibility.Visible;
-        SelectionBorder.Width = Math.Max(0, r.Width);
-        SelectionBorder.Height = Math.Max(0, r.Height);
-        SelectionBorder.Margin = new Thickness(r.X, r.Y, 0, 0);
-        UpdateDimGeometry(r);
+        return Microsoft.UI.Colors.Red;
     }
 
-    private void UpdateDimGeometry(Rect? hole)
+    // ---------- Bottom toolbar actions ----------
+
+    private void OnRecordClick(object sender, RoutedEventArgs e) { /* phase 5 */ }
+    private void OnScreenshotClick(object sender, RoutedEventArgs e) { /* phase 3 */ }
+    private void OnCopyClick(object sender, RoutedEventArgs e) { /* phase 3 */ }
+    private void OnCancelClick(object sender, RoutedEventArgs e) => Close();
+    private void OnOcrClick(object sender, RoutedEventArgs e) { /* phase 4 */ }
+
+    // ---------- Context menu ----------
+
+    private void BuildScreenMenu()
     {
-        DimGeometry.Children.Clear();
-        var outer = new Windows.Foundation.Rect(0, 0, RootGrid.ActualWidth, RootGrid.ActualHeight);
-        DimGeometry.Children.Add(new RectangleGeometry { Rect = outer });
-        if (hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0)
+        SelectScreenMenu.Items.Clear();
+        int i = 1;
+        foreach (var m in _frame.Monitors)
         {
-            DimGeometry.Children.Add(new RectangleGeometry { Rect = hole.Value });
+            var item = new MenuFlyoutItem
+            {
+                Text = $"Screen {i}" + (m.IsPrimary ? " (primary)" : string.Empty),
+                Tag = m,
+            };
+            item.Click += OnMenuSelectScreen;
+            SelectScreenMenu.Items.Add(item);
+            i++;
         }
     }
+
+    private void UpdateContextMenuVisibility()
+    {
+        bool s = _hasSelection;
+        var vis = s ? Visibility.Visible : Visibility.Collapsed;
+        SelectionMenuSeparator.Visibility = vis;
+        MenuCopy.Visibility = vis;
+        MenuSave.Visibility = vis;
+        MenuSaveAs.Visibility = vis;
+        MenuClear.Visibility = vis;
+    }
+
+    private void OnMenuSelectScreen(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem mfi && mfi.Tag is ScreenFreezeService.MonitorInfo m)
+        {
+            var b = _frame.VirtualBounds;
+            var rect = new Rect(m.Bounds.X - b.X, m.Bounds.Y - b.Y, m.Bounds.Width, m.Bounds.Height);
+            SetSelection(rect);
+        }
+    }
+
+    private void OnMenuSelectAll(object sender, RoutedEventArgs e) => SelectAll();
+    private void OnMenuCopy(object sender, RoutedEventArgs e) { /* phase 3 */ }
+    private void OnMenuSave(object sender, RoutedEventArgs e) { /* phase 3 */ }
+    private void OnMenuSaveAs(object sender, RoutedEventArgs e) { /* phase 3 */ }
+    private void OnMenuClear(object sender, RoutedEventArgs e)
+    {
+        _drawing.ClearAll();
+        _hasSelection = false;
+        SelectionLayer.Visibility = Visibility.Collapsed;
+        HideToolbars();
+        UpdateDimGeometry(null);
+        Hint.Visibility = Visibility.Visible;
+    }
+    private void OnMenuCancel(object sender, RoutedEventArgs e) => Close();
 }
