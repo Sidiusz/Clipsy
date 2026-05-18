@@ -817,7 +817,21 @@ public sealed partial class CaptureOverlayWindow : Window
 
     // ---------- Bottom toolbar actions ----------
 
-    private void OnRecordClick(object sender, RoutedEventArgs e) { /* phase 5 */ }
+    private async void OnRecordClick(object sender, RoutedEventArgs e)
+    {
+        if (!_hasSelection) return;
+        var scale = DpiScale;
+        var b = _frame.VirtualBounds;
+        int x = b.X + (int)System.Math.Round(_selectionRect.X * scale);
+        int y = b.Y + (int)System.Math.Round(_selectionRect.Y * scale);
+        int w = (int)System.Math.Round(_selectionRect.Width * scale);
+        int h = (int)System.Math.Round(_selectionRect.Height * scale);
+        if (w < 8 || h < 8) return;
+        var dq = App.Current.HostWindow!.DispatcherQueue;
+        Close();
+        await Task.Delay(150);
+        dq.TryEnqueue(() => RecordingController.TryStart(x, y, w, h));
+    }
     private void OnScreenshotClick(object sender, RoutedEventArgs e) => _ = SaveAsAsync();
     private void OnCopyClick(object sender, RoutedEventArgs e) => _ = CopyAsync();
     private void OnCancelClick(object sender, RoutedEventArgs e) => Close();

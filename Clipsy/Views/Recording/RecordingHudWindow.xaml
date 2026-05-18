@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Clipsy.Views.Recording.RecordingHudWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border x:Name="Root"
+            Background="#F01E1E1E"
+            BorderBrush="#FF2E2E2E"
+            BorderThickness="1"
+            CornerRadius="10"
+            Padding="8"
+            Opacity="1">
+        <Border.Resources>
+            <Style x:Key="HudButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="34" />
+                <Setter Property="Height" Value="34" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <Style x:Key="HudToggleStyle" TargetType="ToggleButton">
+                <Setter Property="Width" Value="34" />
+                <Setter Property="Height" Value="34" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+        </Border.Resources>
+        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <TextBlock x:Name="TimerText" Text="00:00" Foreground="White" FontSize="14" FontWeight="SemiBold" Width="56" TextAlignment="Center" VerticalAlignment="Center" />
+            <Button x:Name="PauseBtn" Style="{StaticResource HudButtonStyle}" Click="OnPauseClick" ToolTipService.ToolTip="Pause">
+                <FontIcon x:Name="PauseIcon" Glyph="&#xE769;" FontSize="18" />
+            </Button>
+            <Button x:Name="StopBtn" Style="{StaticResource HudButtonStyle}" Click="OnStopClick" ToolTipService.ToolTip="Stop (discard)">
+                <FontIcon Glyph="&#xE71A;" FontSize="18" />
+            </Button>
+            <Button x:Name="StopSaveBtn" Style="{StaticResource HudButtonStyle}" Click="OnStopSaveClick" ToolTipService.ToolTip="Stop and save">
+                <FontIcon Glyph="&#xE74E;" Foreground="#FF34C759" FontSize="18" />
+            </Button>
+            <ToggleButton x:Name="DrawBtn" Style="{StaticResource HudToggleStyle}" Click="OnDrawToggle" ToolTipService.ToolTip="Draw (coming soon)">
+                <FontIcon Glyph="&#xE70F;" FontSize="18" />
+            </ToggleButton>
+            <ToggleButton x:Name="LockBtn" Style="{StaticResource HudToggleStyle}" Click="OnLockToggle" ToolTipService.ToolTip="Lock region (double-click)" IsChecked="True">
+                <FontIcon x:Name="LockIcon" Glyph="&#xE72E;" FontSize="18" />
+            </ToggleButton>
+        </StackPanel>
+    </Border>
+</Window>
