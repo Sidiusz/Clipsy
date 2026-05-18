@@ -61,6 +61,25 @@
 
                         <ToggleSwitch x:Name="RememberFolderSwitch" Header="Remember last Save As folder" />
 
+                        <TextBlock Text="Screenshot format" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <ComboBox x:Name="ScreenshotFormatBox" Width="240" SelectionChanged="OnScreenshotFormatChanged">
+                            <ComboBoxItem Content="PNG (lossless)" Tag="png" />
+                            <ComboBoxItem Content="JPEG (smaller)" Tag="jpg" />
+                            <ComboBoxItem Content="WebP (preview - falls back to PNG)" Tag="webp" />
+                        </ComboBox>
+
+                        <Grid x:Name="JpgQualityRow" ColumnSpacing="10" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="48" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Text="JPEG quality" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <Slider x:Name="JpgQualitySlider" Minimum="50" Maximum="100" StepFrequency="1" ValueChanged="OnJpgQualityChanged" />
+                            </StackPanel>
+                            <TextBlock x:Name="JpgQualityLabel" Grid.Column="1" VerticalAlignment="Bottom" Margin="0,0,0,12" />
+                        </Grid>
+
                         <TextBlock Text="After save" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <ComboBox x:Name="AfterSaveBox" Width="240">
                             <ComboBoxItem Content="Do nothing" Tag="nothing" />

@@ -77,6 +77,10 @@ public sealed partial class CaptureOverlayWindow : Window
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = GetAppWindowForCurrentWindow();
         ConfigureAsOverlay();
+        // Load the frozen frame synchronously into the Image source so the
+        // very first frame the compositor renders already shows the desktop
+        // snapshot instead of black-then-desktop.
+        TryLoadFrozenImage();
 
         _drawing = new DrawingController(DrawingCanvas);
         Hint.Text = Strings.Get("HintSelectArea");
@@ -118,13 +122,33 @@ public sealed partial class CaptureOverlayWindow : Window
         UpdateDimGeometry(null);
     }
 
-    private async void OnActivated(object sender, WindowActivatedEventArgs e)
+    private void OnActivated(object sender, WindowActivatedEventArgs e)
     {
-        if (FrozenImage.Source == null)
-        {
-            FrozenImage.Source = await ScreenFreezeService.ToBitmapImageAsync(_frame.PngBytes);
-        }
+        if (FrozenImage.Source == null) TryLoadFrozenImage();
         RootGrid.Focus(FocusState.Programmatic);
+    }
+
+    private void TryLoadFrozenImage()
+    {
+        try
+        {
+            var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+            using (var writer = new Windows.Storage.Streams.DataWriter(stream.GetOutputStreamAt(0)))
+            {
+                writer.WriteBytes(_frame.PngBytes);
+                writer.StoreAsync().AsTask().GetAwaiter().GetResult();
+                writer.FlushAsync().AsTask().GetAwaiter().GetResult();
+                writer.DetachStream();
+            }
+            stream.Seek(0);
+            var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+            bmp.SetSource(stream);
+            FrozenImage.Source = bmp;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] FrozenImage sync load failed: {ex.Message}");
+        }
     }
 
     // ---------- Handles ----------
@@ -853,12 +877,15 @@ public sealed partial class CaptureOverlayWindow : Window
         try
         {
             var settings = SettingsService.Instance;
+            var fmt = ScreenshotRenderer.ParseFormat(settings.Settings.ScreenshotFormat);
+            var ext = ScreenshotRenderer.ExtensionFor(fmt);
             var folder = settings.GetEffectiveScreenshotFolder();
             Directory.CreateDirectory(folder);
-            var name = SaveDialogService.MakeTimestampName("Clipsy", "png");
+            var name = SaveDialogService.MakeTimestampName("Clipsy", ext);
             var fullPath = IOPath.Combine(folder, name);
-            var png = ScreenshotRenderer.RenderPng(_frame, _selectionRect, _drawing.Elements, DpiScale);
-            await File.WriteAllBytesAsync(fullPath, png);
+            var bytes = ScreenshotRenderer.RenderEncoded(_frame, _selectionRect, _drawing.Elements,
+                DpiScale, fmt, settings.Settings.JpgQuality);
+            await File.WriteAllBytesAsync(fullPath, bytes);
             Close();
         }
         catch (Exception ex)
@@ -875,12 +902,49 @@ public sealed partial class CaptureOverlayWindow : Window
         {
             var settings = SettingsService.Instance;
             var suggestedFolder = settings.GetEffectiveScreenshotFolder();
-            var name = SaveDialogService.MakeTimestampName("Clipsy", "png");
-            var result = await SaveDialogService.PickPngSaveAsync(_hwnd, suggestedFolder, name);
+            var preferredFmt = ScreenshotRenderer.ParseFormat(settings.Settings.ScreenshotFormat);
+            var preferredExt = ScreenshotRenderer.ExtensionFor(preferredFmt);
+            var name = SaveDialogService.MakeTimestampName("Clipsy", preferredExt);
+
+            var filters = new List<SaveDialogService.SaveFilter>
+            {
+                new("PNG image (*.png)",   "*.png"),
+                new("JPEG image (*.jpg)",  "*.jpg"),
+                new("WebP image (*.webp)", "*.webp"),
+            };
+            // Move the preferred format to the top so the dialog defaults to it.
+            int preferredIdx = preferredFmt switch
+            {
+                ScreenshotRenderer.OutputFormat.Jpeg => 1,
+                ScreenshotRenderer.OutputFormat.Webp => 2,
+                _ => 0,
+            };
+            if (preferredIdx > 0)
+            {
+                var picked = filters[preferredIdx];
+                filters.RemoveAt(preferredIdx);
+                filters.Insert(0, picked);
+            }
+
+            var result = await SaveDialogService.PickSaveAsync(_hwnd, suggestedFolder, name, filters, preferredExt);
             if (result == null) return;
-            var png = ScreenshotRenderer.RenderPng(_frame, _selectionRect, _drawing.Elements, DpiScale);
-            await File.WriteAllBytesAsync(result.Path, png);
-            var dir = IOPath.GetDirectoryName(result.Path);
+
+            // Figure out the format from the chosen filter; fall back to file extension.
+            var chosen = filters[System.Math.Max(0, result.FilterIndex - 1)];
+            var chosenExt = SaveDialogService.ExtensionFromPattern(chosen.Pattern);
+            var pathExt = IOPath.GetExtension(result.Path);
+            var finalExt = string.IsNullOrEmpty(pathExt) ? chosenExt : pathExt;
+            var fmt = ScreenshotRenderer.ParseFormat(finalExt.TrimStart('.'));
+            var finalPath = result.Path;
+            if (string.IsNullOrEmpty(pathExt))
+            {
+                finalPath = result.Path + chosenExt;
+            }
+
+            var bytes = ScreenshotRenderer.RenderEncoded(_frame, _selectionRect, _drawing.Elements,
+                DpiScale, fmt, settings.Settings.JpgQuality);
+            await File.WriteAllBytesAsync(finalPath, bytes);
+            var dir = IOPath.GetDirectoryName(finalPath);
             if (!string.IsNullOrEmpty(dir))
             {
                 settings.Settings.LastScreenshotFolder = dir;

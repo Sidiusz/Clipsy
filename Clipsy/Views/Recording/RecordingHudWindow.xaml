@@ -35,11 +35,11 @@
             <Button x:Name="PauseBtn" Style="{StaticResource HudButtonStyle}" Click="OnPauseClick" ToolTipService.ToolTip="Pause">
                 <FontIcon x:Name="PauseIcon" Glyph="&#xE769;" FontSize="18" />
             </Button>
-            <Button x:Name="StopBtn" Style="{StaticResource HudButtonStyle}" Click="OnStopClick" ToolTipService.ToolTip="Stop (discard)">
-                <FontIcon Glyph="&#xE71A;" FontSize="18" />
+            <Button x:Name="StopBtn" Style="{StaticResource HudButtonStyle}" Click="OnStopClick" ToolTipService.ToolTip="Stop and save to last folder">
+                <FontIcon Glyph="&#xE71A;" Foreground="#FFE05151" FontSize="18" />
             </Button>
-            <Button x:Name="StopSaveBtn" Style="{StaticResource HudButtonStyle}" Click="OnStopSaveClick" ToolTipService.ToolTip="Stop and save">
-                <FontIcon Glyph="&#xE74E;" Foreground="#FF34C759" FontSize="18" />
+            <Button x:Name="StopSaveBtn" Style="{StaticResource HudButtonStyle}" Click="OnStopSaveClick" ToolTipService.ToolTip="Stop and Save As">
+                <FontIcon Glyph="&#xE74E;" FontSize="18" />
             </Button>
             <ToggleButton x:Name="DrawBtn" Style="{StaticResource HudToggleStyle}" Click="OnDrawToggle" ToolTipService.ToolTip="Draw">
                 <FontIcon Glyph="&#xE70F;" FontSize="18" />

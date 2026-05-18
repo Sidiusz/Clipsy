@@ -111,19 +111,25 @@ public sealed class RecordingController
     private void OnPauseRequested() => _service?.Pause();
     private void OnResumeRequested() => _service?.Resume();
 
+    private bool _saveAsDialog;
+
+    /// <summary>Stop button: silent save to the last/default video folder.</summary>
     private void OnStopRequested()
     {
         if (_stopping) return;
         _stopping = true;
-        _stopAndSave = false;
+        _stopAndSave = true;
+        _saveAsDialog = false;
         _service?.Stop();
     }
 
+    /// <summary>Save button: stop then open a Save As dialog.</summary>
     private void OnStopSaveRequested()
     {
         if (_stopping) return;
         _stopping = true;
         _stopAndSave = true;
+        _saveAsDialog = true;
         _service?.Stop();
     }
 
@@ -138,7 +144,8 @@ public sealed class RecordingController
             {
                 if (_stopAndSave)
                 {
-                    await OfferSaveAsync(filePath);
+                    if (_saveAsDialog) await OfferSaveAsync(filePath);
+                    else SilentSave(filePath);
                 }
                 else
                 {
@@ -150,6 +157,29 @@ public sealed class RecordingController
                 Cleanup(discardTemp: false);
             }
         });
+    }
+
+    private void SilentSave(string tempPath)
+    {
+        try
+        {
+            var settings = SettingsService.Instance;
+            var folder = settings.Settings.RememberLastFolder && !string.IsNullOrEmpty(settings.Settings.LastVideoFolder)
+                ? settings.Settings.LastVideoFolder!
+                : (settings.Settings.VideoFolder ?? settings.DefaultVideoFolder);
+            Directory.CreateDirectory(folder);
+            var name = SaveDialogService.MakeTimestampName("Clipsy", "mp4");
+            var dest = Path.Combine(folder, name);
+            File.Copy(tempPath, dest, overwrite: true);
+            TryDelete(tempPath);
+            settings.Settings.LastVideoFolder = folder;
+            settings.Save();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Clipsy] Silent recording save failed: {ex.Message}");
+            NotificationService.Error("ErrSaveFailed");
+        }
     }
 
     private void OnRecordingFailed(string error)
@@ -171,7 +201,11 @@ public sealed class RecordingController
         Directory.CreateDirectory(initialDir);
         var name = SaveDialogService.MakeTimestampName("Clipsy", "mp4");
         var hwnd = _hud != null ? WinRT.Interop.WindowNative.GetWindowHandle(_hud) : IntPtr.Zero;
-        var pick = await SaveDialogService.PickPngSaveAsync(hwnd, initialDir!, name);
+        var filters = new System.Collections.Generic.List<SaveDialogService.SaveFilter>
+        {
+            new("MP4 video (*.mp4)", "*.mp4"),
+        };
+        var pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir!, name, filters, ".mp4");
         if (pick == null)
         {
             TryDelete(tempPath);

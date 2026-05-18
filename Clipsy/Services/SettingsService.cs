@@ -18,6 +18,10 @@ public sealed class AppSettings
     public string UpdateInterval { get; set; } = "daily";   // hourly / daily / weekly / monthly / never
     public string AfterSaveAction { get; set; } = "nothing"; // open-file / open-folder / nothing
 
+    // Screenshot
+    public string ScreenshotFormat { get; set; } = "png";   // png / jpg / webp
+    public int JpgQuality { get; set; } = 90;               // 50..100
+
     // Video
     public string VideoCodec { get; set; } = "H.264";       // H.264 / H.265 / VP9 / AV1
     public string VideoResolution { get; set; } = "1080p";  // 480p / 720p / 1080p / 1440p / Original

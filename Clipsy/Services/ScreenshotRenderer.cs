@@ -16,6 +16,25 @@ namespace Clipsy.Services;
 /// </summary>
 public static class ScreenshotRenderer
 {
+    public enum OutputFormat { Png, Jpeg, Webp }
+
+    public static OutputFormat ParseFormat(string s)
+    {
+        return s?.ToLowerInvariant() switch
+        {
+            "jpg" or "jpeg" => OutputFormat.Jpeg,
+            "webp" => OutputFormat.Webp,
+            _ => OutputFormat.Png,
+        };
+    }
+
+    public static string ExtensionFor(OutputFormat fmt) => fmt switch
+    {
+        OutputFormat.Jpeg => ".jpg",
+        OutputFormat.Webp => ".webp",
+        _ => ".png",
+    };
+
     /// <param name="selectionDip">Selection rect in overlay-window DIPs.</param>
     /// <param name="dpiScale">Scale factor that converts DIPs to source-bitmap pixels.</param>
     public static byte[] RenderPng(
@@ -24,10 +43,65 @@ public static class ScreenshotRenderer
         IReadOnlyList<DrawElement> elements,
         double dpiScale)
     {
+        return RenderEncoded(frame, selectionDip, elements, dpiScale, OutputFormat.Png, 95);
+    }
+
+    public static byte[] RenderEncoded(
+        ScreenFreezeService.FrozenFrame frame,
+        Rect selectionDip,
+        IReadOnlyList<DrawElement> elements,
+        double dpiScale,
+        OutputFormat format,
+        int quality = 90)
+    {
         using var bmp = RenderBitmap(frame, selectionDip, elements, dpiScale);
         using var ms = new MemoryStream();
-        bmp.Save(ms, ImageFormat.Png);
+        switch (format)
+        {
+            case OutputFormat.Jpeg:
+                {
+                    var encoder = GetEncoder(ImageFormat.Jpeg);
+                    if (encoder == null)
+                    {
+                        bmp.Save(ms, ImageFormat.Jpeg);
+                    }
+                    else
+                    {
+                        using var ep = new EncoderParameters(1);
+                        ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,
+                            System.Math.Clamp((long)quality, 1L, 100L));
+                        // JPG has no alpha channel - drop alpha first to avoid pink-tinted output.
+                        using var flat = new Bitmap(bmp.Width, bmp.Height, PixelFormat.Format24bppRgb);
+                        using (var g = Graphics.FromImage(flat))
+                        {
+                            g.Clear(Color.White);
+                            g.DrawImage(bmp, 0, 0, bmp.Width, bmp.Height);
+                        }
+                        flat.Save(ms, encoder, ep);
+                    }
+                    break;
+                }
+            case OutputFormat.Webp:
+                // System.Drawing.Common does not encode WebP. Fall back to PNG so
+                // the user still gets a valid file. A real WebP encoder is a
+                // follow-up; for now we log and return PNG bytes.
+                System.Diagnostics.Debug.WriteLine("[Clipsy] WebP requested but not supported; saving PNG.");
+                bmp.Save(ms, ImageFormat.Png);
+                break;
+            default:
+                bmp.Save(ms, ImageFormat.Png);
+                break;
+        }
         return ms.ToArray();
+    }
+
+    private static ImageCodecInfo? GetEncoder(ImageFormat format)
+    {
+        foreach (var c in ImageCodecInfo.GetImageEncoders())
+        {
+            if (c.FormatID == format.Guid) return c;
+        }
+        return null;
     }
 
     public static Bitmap RenderBitmap(

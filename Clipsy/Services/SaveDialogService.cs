@@ -1,25 +1,43 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace Clipsy.Services;
 
 /// <summary>
 /// Save dialog backed by Win32 GetSaveFileNameW. We do not use
-/// FileSavePicker because that API can't be pointed at an arbitrary
-/// folder — only at the PickerLocationId enum.
+/// FileSavePicker because that API can't point at an arbitrary folder,
+/// only at the PickerLocationId enum.
 /// </summary>
 public static class SaveDialogService
 {
-    public sealed record SavePickResult(string Path);
+    public sealed record SaveFilter(string Label, string Pattern);
+    public sealed record SavePickResult(string Path, int FilterIndex);
 
-    public static async Task<SavePickResult?> PickPngSaveAsync(IntPtr hwnd, string initialDir, string suggestedName)
+    public static async Task<SavePickResult?> PickSaveAsync(
+        IntPtr hwnd,
+        string initialDir,
+        string suggestedName,
+        IList<SaveFilter> filters,
+        string defaultExt)
     {
-        return await Task.Run(() => PickSync(hwnd, initialDir, suggestedName, "PNG image (*.png)\0*.png\0\0", ".png"));
+        return await Task.Run(() => PickSync(hwnd, initialDir, suggestedName, filters, defaultExt));
     }
 
-    private static SavePickResult? PickSync(IntPtr hwnd, string initialDir, string suggestedName, string filter, string defExt)
+    // Convenience for PNG-only callers (kept for any existing call sites).
+    public static Task<SavePickResult?> PickPngSaveAsync(IntPtr hwnd, string initialDir, string suggestedName)
+        => PickSaveAsync(hwnd, initialDir, suggestedName,
+            new List<SaveFilter> { new("PNG image (*.png)", "*.png") }, ".png");
+
+    private static SavePickResult? PickSync(
+        IntPtr hwnd,
+        string initialDir,
+        string suggestedName,
+        IList<SaveFilter> filters,
+        string defaultExt)
     {
         const int bufCh = 32768;
         var fileBuf = Marshal.AllocHGlobal(bufCh * sizeof(char));
@@ -27,24 +45,24 @@ public static class SaveDialogService
         {
             byte[] empty = new byte[bufCh * sizeof(char)];
             Marshal.Copy(empty, 0, fileBuf, empty.Length);
-            var bytes = System.Text.Encoding.Unicode.GetBytes(suggestedName);
-            if (bytes.Length < bufCh * sizeof(char))
+            var nameBytes = Encoding.Unicode.GetBytes(suggestedName);
+            if (nameBytes.Length < bufCh * sizeof(char))
             {
-                Marshal.Copy(bytes, 0, fileBuf, bytes.Length);
+                Marshal.Copy(nameBytes, 0, fileBuf, nameBytes.Length);
             }
 
             var ofn = new OPENFILENAMEW
             {
                 lStructSize = Marshal.SizeOf<OPENFILENAMEW>(),
                 hwndOwner = hwnd,
-                lpstrFilter = filter,
+                lpstrFilter = BuildFilterString(filters),
                 nFilterIndex = 1,
                 lpstrFile = fileBuf,
                 nMaxFile = bufCh,
                 lpstrInitialDir = !string.IsNullOrEmpty(initialDir) && Directory.Exists(initialDir) ? initialDir : null,
-                lpstrTitle = "Save screenshot",
+                lpstrTitle = "Save",
                 Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER | OFN_NOCHANGEDIR,
-                lpstrDefExt = defExt.TrimStart('.'),
+                lpstrDefExt = defaultExt.TrimStart('.'),
             };
 
             if (!GetSaveFileNameW(ref ofn))
@@ -58,7 +76,8 @@ public static class SaveDialogService
             }
 
             var path = Marshal.PtrToStringUni(fileBuf);
-            return string.IsNullOrEmpty(path) ? null : new SavePickResult(path!);
+            if (string.IsNullOrEmpty(path)) return null;
+            return new SavePickResult(path!, ofn.nFilterIndex);
         }
         finally
         {
@@ -66,11 +85,29 @@ public static class SaveDialogService
         }
     }
 
+    private static string BuildFilterString(IList<SaveFilter> filters)
+    {
+        var sb = new StringBuilder();
+        foreach (var f in filters)
+        {
+            sb.Append(f.Label).Append('\0').Append(f.Pattern).Append('\0');
+        }
+        sb.Append('\0'); // double-null terminator
+        return sb.ToString();
+    }
+
     public static string MakeTimestampName(string prefix, string extension)
     {
         var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         var ext = extension.StartsWith('.') ? extension : "." + extension;
         return $"{prefix}_{ts}{ext}";
+    }
+
+    /// <summary>Pulls the extension from a SaveFilter's pattern such as "*.png".</summary>
+    public static string ExtensionFromPattern(string pattern)
+    {
+        var i = pattern.LastIndexOf('.');
+        return i < 0 ? "" : pattern.Substring(i).ToLowerInvariant();
     }
 
     private const int OFN_OVERWRITEPROMPT = 0x00000002;

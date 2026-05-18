@@ -91,6 +91,10 @@ public sealed partial class SettingsWindow : Window
             ? SettingsService.Instance.DefaultVideoFolder
             : _draft.VideoFolder!;
         RememberFolderSwitch.IsOn = _draft.RememberLastFolder;
+        SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
+        JpgQualitySlider.Value = System.Math.Clamp(_draft.JpgQuality, 50, 100);
+        JpgQualityLabel.Text = ((int)JpgQualitySlider.Value).ToString();
+        UpdateJpgQualityRowVisibility();
         SelectComboByTag(AfterSaveBox, _draft.AfterSaveAction);
         SelectComboByTag(UpdateIntervalBox, _draft.UpdateInterval);
 
@@ -135,6 +139,8 @@ public sealed partial class SettingsWindow : Window
         _draft.ScreenshotFolder = ScreenshotFolderBox.Text;
         _draft.VideoFolder = VideoFolderBox.Text;
         _draft.RememberLastFolder = RememberFolderSwitch.IsOn;
+        _draft.ScreenshotFormat = SelectedComboTag(ScreenshotFormatBox);
+        _draft.JpgQuality = (int)JpgQualitySlider.Value;
         _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
         _draft.UpdateInterval = SelectedComboTag(UpdateIntervalBox);
 
@@ -225,6 +231,23 @@ public sealed partial class SettingsWindow : Window
     // ---------- Video / GIF sliders ----------
 
     private void OnCodecChanged(object sender, SelectionChangedEventArgs e) { /* codec change has no immediate UI dep */ }
+
+    private void OnScreenshotFormatChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateJpgQualityRowVisibility();
+    }
+
+    private void UpdateJpgQualityRowVisibility()
+    {
+        if (JpgQualityRow == null || ScreenshotFormatBox == null) return;
+        var tag = SelectedComboTag(ScreenshotFormatBox);
+        JpgQualityRow.Visibility = tag == "jpg" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnJpgQualityChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (JpgQualityLabel != null) JpgQualityLabel.Text = ((int)JpgQualitySlider.Value).ToString();
+    }
 
     private void OnResolutionChanged(object sender, SelectionChangedEventArgs e)
     {
