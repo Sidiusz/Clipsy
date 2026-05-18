@@ -6,20 +6,46 @@ namespace Clipsy.Services;
 
 public sealed class AppSettings
 {
+    // General
+    public string Language { get; set; } = "auto";          // auto / en / ru
+    public string Theme { get; set; } = "auto";             // auto / dark / light
+    public string OcrEngine { get; set; } = "Tesseract";    // Tesseract / WinRT
     public string? ScreenshotFolder { get; set; }
     public string? VideoFolder { get; set; }
     public bool RememberLastFolder { get; set; } = true;
     public string? LastScreenshotFolder { get; set; }
     public string? LastVideoFolder { get; set; }
-    public string OcrEngine { get; set; } = "Tesseract";
-    public string Language { get; set; } = "auto";
-    public string Theme { get; set; } = "auto";
+    public string UpdateInterval { get; set; } = "daily";   // hourly / daily / weekly / monthly / never
+    public string AfterSaveAction { get; set; } = "nothing"; // open-file / open-folder / nothing
+
+    // Video
+    public string VideoCodec { get; set; } = "H.264";       // H.264 / H.265 / VP9 / AV1
+    public string VideoResolution { get; set; } = "1080p";  // 480p / 720p / 1080p / 1440p / Original
+    public int VideoBitrateMbps { get; set; } = 8;
+
+    // GIF
+    public int GifColors { get; set; } = 256;
+    public int GifFps { get; set; } = 12;
+    public bool GifDither { get; set; } = true;
+
+    // Hotkeys (stored as human-readable accelerator strings)
+    public string HotkeyCapture { get; set; } = "PrintScreen";
+    public string HotkeyScreenshotSilent { get; set; } = "Ctrl+S";
+    public string HotkeyCopy { get; set; } = "Ctrl+C";
+    public string HotkeyUndo { get; set; } = "Ctrl+Z";
+    public string HotkeyRedo { get; set; } = "Ctrl+Y";
+    public string HotkeySelectAll { get; set; } = "Ctrl+A";
+    public string HotkeyRecordSilentSave { get; set; } = ""; // disabled by default
+
+    // Pro v1 stubs
+    public bool ProEnabled { get; set; } = false;
+
+    public AppSettings Clone()
+    {
+        return (AppSettings)MemberwiseClone();
+    }
 }
 
-/// <summary>
-/// Persists user settings as JSON at %LOCALAPPDATA%\Clipsy\settings.json.
-/// Reads on demand; writes synchronously when Save() is called.
-/// </summary>
 public sealed class SettingsService
 {
     private static readonly Lazy<SettingsService> _instance = new(() => new SettingsService());
@@ -28,6 +54,8 @@ public sealed class SettingsService
     private readonly string _path;
     private readonly JsonSerializerOptions _json = new() { WriteIndented = true };
     public AppSettings Settings { get; private set; }
+
+    public event Action? SettingsChanged;
 
     public string DefaultScreenshotFolder => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Clipsy", "Screenshots");
@@ -66,11 +94,24 @@ public sealed class SettingsService
         try
         {
             File.WriteAllText(_path, JsonSerializer.Serialize(Settings, _json));
+            SettingsChanged?.Invoke();
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Settings save failed: {ex.Message}");
         }
+    }
+
+    public void Replace(AppSettings updated)
+    {
+        Settings = updated;
+        Save();
+    }
+
+    public void ResetToDefaults()
+    {
+        Settings = new AppSettings();
+        Save();
     }
 
     public string GetEffectiveScreenshotFolder()

@@ -40,7 +40,7 @@ public partial class App : Application
 
     private void OnSettingsRequested()
     {
-        // Phase 6
+        Clipsy.Views.Settings.SettingsWindow.ShowOrActivate();
     }
 
     private void OnExitRequested()

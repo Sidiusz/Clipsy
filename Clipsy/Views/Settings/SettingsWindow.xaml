@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Clipsy.Views.Settings.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TabView x:Name="Tabs"
+                 Grid.Row="0"
+                 IsAddTabButtonVisible="False"
+                 CanDragTabs="False"
+                 CanReorderTabs="False"
+                 TabWidthMode="SizeToContent">
+
+            <TabViewItem Header="General" IsClosable="False">
+                <ScrollViewer Padding="20">
+                    <StackPanel Spacing="14" MaxWidth="520" HorizontalAlignment="Left">
+                        <TextBlock Text="Language" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <ComboBox x:Name="LangBox" Width="240">
+                            <ComboBoxItem Content="Auto-detect" Tag="auto" />
+                            <ComboBoxItem Content="English" Tag="en" />
+                            <ComboBoxItem Content="Russian" Tag="ru" />
+                        </ComboBox>
+
+                        <TextBlock Text="Theme" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <ComboBox x:Name="ThemeBox" Width="240">
+                            <ComboBoxItem Content="Auto-detect" Tag="auto" />
+                            <ComboBoxItem Content="Dark" Tag="dark" />
+                            <ComboBoxItem Content="Light" Tag="light" />
+                        </ComboBox>
+
+                        <TextBlock Text="OCR engine" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <ComboBox x:Name="OcrEngineBox" Width="240">
+                            <ComboBoxItem Content="Tesseract (default)" Tag="Tesseract" />
+                            <ComboBoxItem Content="Windows OCR" Tag="WinRT" />
+                        </ComboBox>
+
+                        <TextBlock Text="Screenshot folder" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="ScreenshotFolderBox" Grid.Column="0" />
+                            <Button x:Name="ScreenshotFolderPick" Grid.Column="1" Content="Browse" Click="OnScreenshotFolderPick" />
+                        </Grid>
+
+                        <TextBlock Text="Video folder" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="VideoFolderBox" Grid.Column="0" />
+                            <Button x:Name="VideoFolderPick" Grid.Column="1" Content="Browse" Click="OnVideoFolderPick" />
+                        </Grid>
+
+                        <ToggleSwitch x:Name="RememberFolderSwitch" Header="Remember last Save As folder" />
+
+                        <TextBlock Text="After save" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <ComboBox x:Name="AfterSaveBox" Width="240">
+                            <ComboBoxItem Content="Do nothing" Tag="nothing" />
+                            <ComboBoxItem Content="Open file" Tag="open-file" />
+                            <ComboBoxItem Content="Open folder" Tag="open-folder" />
+                        </ComboBox>
+
+                        <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="240" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ComboBox x:Name="UpdateIntervalBox" Grid.Column="0">
+                                <ComboBoxItem Content="Hourly" Tag="hourly" />
+                                <ComboBoxItem Content="Daily" Tag="daily" />
+                                <ComboBoxItem Content="Weekly" Tag="weekly" />
+                                <ComboBoxItem Content="Monthly" Tag="monthly" />
+                                <ComboBoxItem Content="Never" Tag="never" />
+                            </ComboBox>
+                            <Button Grid.Column="1" Content="Check now" Click="OnCheckUpdates" />
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabViewItem>
+
+            <TabViewItem Header="Video" IsClosable="False">
+                <ScrollViewer Padding="20">
+                    <StackPanel Spacing="14" MaxWidth="520" HorizontalAlignment="Left">
+                        <TextBlock Text="Codec" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <ComboBox x:Name="CodecBox" Width="240" SelectionChanged="OnCodecChanged">
+                            <ComboBoxItem Content="H.264 — wide compatibility, good compression" Tag="H.264" />
+                            <ComboBoxItem Content="H.265 — smaller files, needs HEVC support" Tag="H.265" />
+                            <ComboBoxItem Content="VP9 — open codec, web-friendly" Tag="VP9" />
+                            <ComboBoxItem Content="AV1 — smallest files, slow encoder" Tag="AV1" />
+                        </ComboBox>
+
+                        <TextBlock Text="Resolution (full-screen recording only)" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <ComboBox x:Name="ResolutionBox" Width="240" SelectionChanged="OnResolutionChanged">
+                            <ComboBoxItem Content="480p" Tag="480p" />
+                            <ComboBoxItem Content="720p" Tag="720p" />
+                            <ComboBoxItem Content="1080p" Tag="1080p" />
+                            <ComboBoxItem Content="1440p" Tag="1440p" />
+                            <ComboBoxItem Content="Original" Tag="Original" />
+                        </ComboBox>
+                        <TextBlock Text="Region recordings use the selection size directly." FontSize="12" Foreground="#FFAAAAAA" />
+
+                        <TextBlock Text="Bitrate (Mbps)" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="48" />
+                            </Grid.ColumnDefinitions>
+                            <Slider x:Name="BitrateSlider" Grid.Column="0" Minimum="1" Maximum="16" StepFrequency="1" SmallChange="1" ValueChanged="OnBitrateChanged" />
+                            <TextBlock x:Name="BitrateLabel" Grid.Column="1" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <TextBlock x:Name="EstFileSizeLabel" Foreground="#FFAAAAAA" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabViewItem>
+
+            <TabViewItem Header="GIF" IsClosable="False">
+                <ScrollViewer Padding="20">
+                    <StackPanel Spacing="14" MaxWidth="520" HorizontalAlignment="Left">
+                        <TextBlock Text="Color count" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="48" />
+                            </Grid.ColumnDefinitions>
+                            <Slider x:Name="GifColorSlider" Grid.Column="0" Minimum="16" Maximum="256" StepFrequency="16" ValueChanged="OnGifColorChanged" />
+                            <TextBlock x:Name="GifColorLabel" Grid.Column="1" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <TextBlock Text="Frame rate (fps)" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="48" />
+                            </Grid.ColumnDefinitions>
+                            <Slider x:Name="GifFpsSlider" Grid.Column="0" Minimum="5" Maximum="30" StepFrequency="1" ValueChanged="OnGifFpsChanged" />
+                            <TextBlock x:Name="GifFpsLabel" Grid.Column="1" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <ToggleSwitch x:Name="GifDitherSwitch" Header="Dithering" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabViewItem>
+
+            <TabViewItem Header="Hotkeys" IsClosable="False">
+                <ScrollViewer Padding="20">
+                    <StackPanel Spacing="12" MaxWidth="520" HorizontalAlignment="Left">
+                        <TextBlock Text="Click a binding to rebind. Esc is reserved." FontSize="12" Foreground="#FFAAAAAA" />
+                        <ListView x:Name="HotkeyList" SelectionMode="None">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnSpacing="10" Padding="6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center" />
+                                        <Button Grid.Column="1" Content="{Binding Binding}" Click="OnHotkeyRebindClick" Tag="{Binding Key}" MinWidth="140" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabViewItem>
+
+            <TabViewItem Header="Info" IsClosable="False">
+                <ScrollViewer Padding="20">
+                    <StackPanel Spacing="10" MaxWidth="520" HorizontalAlignment="Left">
+                        <TextBlock Text="Clipsy" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock x:Name="VersionLabel" Foreground="#FFAAAAAA" />
+                        <TextBlock Text="Author: Sidiusz" />
+                        <HyperlinkButton Content="github.com/Sidiusz/Clipsy" NavigateUri="https://github.com/Sidiusz/Clipsy" />
+                        <Button Content="Check for updates" Click="OnCheckUpdates" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabViewItem>
+        </TabView>
+
+        <Border Grid.Row="1"
+                BorderBrush="#FF2E2E2E"
+                BorderThickness="0,1,0,0"
+                Padding="16,10">
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Content="Reset" Click="OnReset" />
+                <Button Content="Close" Click="OnClose" />
+                <Button Content="Save" Style="{StaticResource AccentButtonStyle}" Click="OnSave" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
