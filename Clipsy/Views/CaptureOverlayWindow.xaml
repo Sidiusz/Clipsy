@@ -196,17 +196,15 @@
                     <Button x:Name="ColorBtn" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Color">
                         <Ellipse x:Name="ColorSwatch" Width="18" Height="18" Fill="#FFFF3B30" Stroke="White" StrokeThickness="1" />
                         <Button.Flyout>
-                            <MenuFlyout Placement="Left">
-                                <MenuFlyoutItem Text="Red" Click="OnColorPick" Tag="#FFFF3B30" />
-                                <MenuFlyoutItem Text="Orange" Click="OnColorPick" Tag="#FFFF9500" />
-                                <MenuFlyoutItem Text="Yellow" Click="OnColorPick" Tag="#FFFFD60A" />
-                                <MenuFlyoutItem Text="Green" Click="OnColorPick" Tag="#FF34C759" />
-                                <MenuFlyoutItem Text="Cyan" Click="OnColorPick" Tag="#FF32ADE6" />
-                                <MenuFlyoutItem Text="Blue" Click="OnColorPick" Tag="#FF0A84FF" />
-                                <MenuFlyoutItem Text="Magenta" Click="OnColorPick" Tag="#FFFF2D55" />
-                                <MenuFlyoutItem Text="White" Click="OnColorPick" Tag="#FFFFFFFF" />
-                                <MenuFlyoutItem Text="Black" Click="OnColorPick" Tag="#FF000000" />
-                            </MenuFlyout>
+                            <Flyout Placement="Left">
+                                <ColorPicker x:Name="ColorPickerCtl"
+                                             Color="#FFFF3B30"
+                                             IsColorChannelTextInputVisible="True"
+                                             IsHexInputVisible="True"
+                                             IsAlphaEnabled="False"
+                                             IsMoreButtonVisible="True"
+                                             ColorChanged="OnColorPickerChanged" />
+                            </Flyout>
                         </Button.Flyout>
                     </Button>
                     <ToggleButton x:Name="PencilBtn" Click="OnToolToggle" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Pencil. LMB draw, RMB erase">

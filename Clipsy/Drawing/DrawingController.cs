@@ -79,6 +79,107 @@ public sealed class DrawingController
         return null;
     }
 
+    /// <summary>
+    /// Eraser pass at the given root-space cursor. Pencil strokes are split:
+    /// every stroke point within <paramref name="radius"/> of the cursor is
+    /// dropped and the surviving runs become their own polylines. Rectangles
+    /// and text fall back to whole-element removal on touch since they are
+    /// not point-sampled.
+    /// </summary>
+    public bool PartialErase(Point cursor, double radius)
+    {
+        bool changed = false;
+        for (int i = _elements.Count - 1; i >= 0; i--)
+        {
+            var el = _elements[i];
+            switch (el)
+            {
+                case StrokeElement s:
+                    var splits = SplitStrokeAroundEraser(s, cursor, radius);
+                    if (splits == null) continue;
+                    changed = true;
+                    _host.Children.Remove(s.Visual);
+                    _elements.RemoveAt(i);
+                    foreach (var sub in splits)
+                    {
+                        _elements.Insert(i, sub);
+                        _host.Children.Add(sub.Visual);
+                    }
+                    break;
+                default:
+                    if (el.HitTest(cursor, radius))
+                    {
+                        _host.Children.Remove(el.Visual);
+                        _elements.RemoveAt(i);
+                        changed = true;
+                    }
+                    break;
+            }
+        }
+        if (changed)
+        {
+            // Eraser commits make the existing history meaningless for the
+            // affected stroke; clear redo and skip undo bookkeeping.
+            _redo.Clear();
+        }
+        return changed;
+    }
+
+    private static List<StrokeElement>? SplitStrokeAroundEraser(StrokeElement stroke, Point cursor, double radius)
+    {
+        double reach = radius + stroke.Thickness * 0.5;
+        double r2 = reach * reach;
+        var keep = new bool[stroke.Points.Count];
+        bool anyHit = false;
+        for (int i = 0; i < stroke.Points.Count; i++)
+        {
+            var p = stroke.Points[i];
+            var dx = p.X - cursor.X;
+            var dy = p.Y - cursor.Y;
+            bool hit = dx * dx + dy * dy <= r2;
+            keep[i] = !hit;
+            if (hit) anyHit = true;
+        }
+        if (!anyHit) return null;
+
+        var results = new List<StrokeElement>();
+        var run = new List<Point>();
+        for (int i = 0; i < stroke.Points.Count; i++)
+        {
+            if (keep[i])
+            {
+                run.Add(stroke.Points[i]);
+            }
+            else
+            {
+                if (run.Count >= 2) results.Add(CloneStrokeWithPoints(stroke, run));
+                run = new List<Point>();
+            }
+        }
+        if (run.Count >= 2) results.Add(CloneStrokeWithPoints(stroke, run));
+        return results;
+    }
+
+    private static StrokeElement CloneStrokeWithPoints(StrokeElement orig, List<Point> pts)
+    {
+        var poly = new Polyline();
+        if (orig.Visual is Polyline op)
+        {
+            poly.Stroke = op.Stroke;
+            poly.StrokeThickness = op.StrokeThickness;
+            poly.StrokeStartLineCap = op.StrokeStartLineCap;
+            poly.StrokeEndLineCap = op.StrokeEndLineCap;
+            poly.StrokeLineJoin = op.StrokeLineJoin;
+        }
+        foreach (var p in pts) poly.Points.Add(p);
+        return new StrokeElement
+        {
+            Visual = poly,
+            Points = pts,
+            Thickness = orig.Thickness,
+        };
+    }
+
     private void Apply(HistoryOp op)
     {
         if (op.Kind == HistoryKind.Add)

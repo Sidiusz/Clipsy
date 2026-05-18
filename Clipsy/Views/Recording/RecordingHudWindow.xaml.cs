@@ -109,19 +109,37 @@ public sealed partial class RecordingHudWindow : Window
             : elapsed.ToString(@"mm\:ss");
     }
 
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _bgClose =
+        new(Windows.UI.Color.FromArgb(0xF0, 0x1E, 0x1E, 0x1E));
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _bgFar =
+        new(Windows.UI.Color.FromArgb(0x40, 0x1E, 0x1E, 0x1E));
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _borderClose =
+        new(Windows.UI.Color.FromArgb(0xFF, 0x2E, 0x2E, 0x2E));
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _borderFar =
+        new(Windows.UI.Color.FromArgb(0x40, 0x2E, 0x2E, 0x2E));
+
+    private bool _hudFar;
+
     private void OnHideTick(object? s, object e)
     {
-        if (_draggingMove) { Root.Opacity = 1.0; return; }
+        if (_draggingMove) { ApplyHudFar(false); return; }
         if (!GetCursorPos(out POINT pt) || !GetWindowRect(_hwnd, out RECT wr)) return;
         int cx = (wr.Left + wr.Right) / 2;
         int cy = (wr.Top + wr.Bottom) / 2;
         double dist = System.Math.Sqrt((pt.X - cx) * (pt.X - cx) + (pt.Y - cy) * (pt.Y - cy));
         double half = System.Math.Max(wr.Right - wr.Left, wr.Bottom - wr.Top);
-        double target = dist < half * 1.3 ? 1.0 : 0.25;
-        if (System.Math.Abs(Root.Opacity - target) > 0.02)
-        {
-            Root.Opacity = target;
-        }
+        bool far = dist >= half * 1.3;
+        if (far != _hudFar) ApplyHudFar(far);
+    }
+
+    private void ApplyHudFar(bool far)
+    {
+        _hudFar = far;
+        // Translucent the panel itself (background + border) but keep the
+        // buttons / timer text fully opaque so they stay readable when the
+        // cursor is away from the HUD.
+        Root.Background  = far ? _bgFar : _bgClose;
+        Root.BorderBrush = far ? _borderFar : _borderClose;
     }
 
     private void OnPauseClick(object sender, RoutedEventArgs e)

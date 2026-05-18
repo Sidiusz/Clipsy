@@ -148,6 +148,11 @@ public sealed class RecordingController
                     _drawWin = new RecordingDrawingWindow();
                     _drawWin.MoveTo(_x, _y, _w, _h);
                     _drawWin.Activate();
+                    // Match the main capture overlay's pencil defaults so users
+                    // get the same color and thickness they were drawing with.
+                    var s = SettingsService.Instance;
+                    _drawWin.SetColor(Microsoft.UI.Colors.Red);
+                    _drawWin.SetThickness(3.0);
                 }
                 _drawWin.SetActive(true);
             }

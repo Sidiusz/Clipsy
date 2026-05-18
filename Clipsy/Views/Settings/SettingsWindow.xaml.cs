@@ -35,27 +35,41 @@ public sealed partial class SettingsWindow : Window
     private Button? _listeningButton;
     private string? _listeningKey;
 
+    private bool _firstActivated;
+
     public SettingsWindow()
     {
         InitializeComponent();
         _hwnd = WindowNative.GetWindowHandle(this);
-        var appWin = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
-        appWin.Title = "Clipsy — Settings";
-        appWin.Resize(new SizeInt32(720, 640));
-
         _draft = SettingsService.Instance.Settings.Clone();
         HotkeyList.ItemsSource = _hotkeyRows;
-        Load();
-        VersionLabel.Text = "Version " + GetVersion();
-
+        Activated += OnFirstActivated;
         Closed += (_, _) => { if (_current == this) _current = null; };
+    }
+
+    private void OnFirstActivated(object sender, WindowActivatedEventArgs e)
+    {
+        if (_firstActivated) return;
+        _firstActivated = true;
+        try
+        {
+            var appWin = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
+            appWin.Title = "Clipsy Settings";
+            appWin.Resize(new SizeInt32(720, 640));
+            Load();
+            VersionLabel.Text = "Version " + GetVersion();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Show("SettingsWindow.OnFirstActivated", ex);
+        }
     }
 
     public static void ShowOrActivate()
     {
         if (_current != null)
         {
-            try { _current.Activate(); } catch { }
+            try { _current.Activate(); } catch (Exception ex) { Diagnostics.Show("SettingsWindow.Activate", ex); }
             return;
         }
         try
@@ -65,9 +79,8 @@ public sealed partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Clipsy] SettingsWindow open failed: {ex}");
             _current = null;
-            NotificationService.InfoText("Clipsy", "Could not open settings: " + ex.Message);
+            Diagnostics.Show("SettingsWindow.Create", ex);
         }
     }
 

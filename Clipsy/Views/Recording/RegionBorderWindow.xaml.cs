@@ -37,7 +37,33 @@ public sealed partial class RegionBorderWindow : Window
         }
         _appWindow.IsShownInSwitchers = false;
         ApplyTransparencyClickThrough();
+        DisableDwmDecorations();
     }
+
+    /// <summary>
+    /// Tell DWM not to round corners and not to render the drop shadow
+    /// around this window. The red ring should look like a flat red
+    /// rectangle drawn straight on the screen, not a Win11-themed panel.
+    /// </summary>
+    private void DisableDwmDecorations()
+    {
+        try
+        {
+            // DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_DONOTROUND = 1
+            int donotround = 1;
+            DwmSetWindowAttribute(_hwnd, 33, ref donotround, sizeof(int));
+            // DWMWA_NCRENDERING_POLICY = 2, DWMNCRP_DISABLED = 1 - drops the shadow.
+            int ncDisabled = 1;
+            DwmSetWindowAttribute(_hwnd, 2, ref ncDisabled, sizeof(int));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] DWM disable decorations failed: {ex.Message}");
+        }
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int pvAttribute, int cbAttribute);
 
     public void MoveTo(int x, int y, int w, int h)
     {

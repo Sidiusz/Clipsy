@@ -251,17 +251,30 @@ public sealed partial class CaptureOverlayWindow : Window
             return;
         }
 
-        if (rmb)
+        // When a paint tool is active the selection is locked: clicks
+        // anywhere on the overlay paint (LMB) or erase (RMB). The user can
+        // draw outside the selection rectangle without accidentally
+        // starting a new selection.
+        if (_drawing.Settings.Tool != ToolKind.None)
         {
-            if (_drawing.Settings.Tool != ToolKind.None && _hasSelection && IsInsideSelection(pos))
+            if (rmb)
             {
                 _mode = InteractionMode.Erasing;
                 RootGrid.CapturePointer(e.Pointer);
                 TryEraseAt(pos);
                 e.Handled = true;
+                return;
+            }
+            if (lmb)
+            {
+                StartToolPress(pos, e.Pointer);
+                e.Handled = true;
+                return;
             }
             return;
         }
+
+        if (rmb) return; // let RightTapped surface the overlay context menu
 
         if (!lmb) return;
 
@@ -277,17 +290,10 @@ public sealed partial class CaptureOverlayWindow : Window
 
         if (_hasSelection && IsInsideSelection(pos))
         {
-            if (_drawing.Settings.Tool == ToolKind.None)
-            {
-                _mode = InteractionMode.MovingSelection;
-                _selectionAtDragStart = _selectionRect;
-                _dragStart = pos;
-                RootGrid.CapturePointer(e.Pointer);
-            }
-            else
-            {
-                StartToolPress(pos, e.Pointer);
-            }
+            _mode = InteractionMode.MovingSelection;
+            _selectionAtDragStart = _selectionRect;
+            _dragStart = pos;
+            RootGrid.CapturePointer(e.Pointer);
             return;
         }
 
@@ -308,10 +314,11 @@ public sealed partial class CaptureOverlayWindow : Window
     private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         var pos = e.GetCurrentPoint(RootGrid).Position;
-        if (_drawing.Settings.Tool == ToolKind.Pencil && _hasSelection && IsInsideSelection(pos))
+        if (_drawing.Settings.Tool == ToolKind.Pencil)
         {
             _pencilPreview.Visibility = Visibility.Visible;
-            var local = ToCanvas(pos);
+            // The preview lives inside SelectionLayer; convert from root DIPs.
+            var local = new Point(pos.X - _selectionRect.X, pos.Y - _selectionRect.Y);
             Canvas.SetLeft(_pencilPreview, local.X - _pencilPreview.Width / 2);
             Canvas.SetTop(_pencilPreview, local.Y - _pencilPreview.Height / 2);
         }
@@ -726,8 +733,11 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void TryEraseAt(Point rootPos)
     {
-        var hit = _drawing.HitTestTopmost(rootPos, EraserRadius);
-        if (hit != null) _drawing.Remove(hit);
+        // Partial-erase pencil strokes (drop the points inside the eraser
+        // disc, keep the surrounding sub-strokes). Rectangles and text are
+        // removed whole on touch since they are not point-sampled.
+        double r = System.Math.Max(EraserRadius, _drawing.Settings.PencilThickness * 1.5);
+        _drawing.PartialErase(rootPos, r);
     }
 
     // ---------- Keyboard ----------
@@ -840,14 +850,12 @@ public sealed partial class CaptureOverlayWindow : Window
         _pencilPreview.Height = d;
     }
 
-    private void OnColorPick(object sender, RoutedEventArgs e)
+    private void OnColorPickerChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
-        if (sender is MenuFlyoutItem mfi && mfi.Tag is string hex)
-        {
-            var color = ParseHexColor(hex);
-            _drawing.Settings.Color = color;
-            ColorSwatch.Fill = new SolidColorBrush(color);
-        }
+        if (_drawing == null) return;
+        var c = Color.FromArgb(0xFF, args.NewColor.R, args.NewColor.G, args.NewColor.B);
+        _drawing.Settings.Color = c;
+        ColorSwatch.Fill = new SolidColorBrush(c);
     }
 
     private static Color ParseHexColor(string hex)
