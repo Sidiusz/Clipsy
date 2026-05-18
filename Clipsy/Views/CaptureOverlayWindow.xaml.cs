@@ -172,6 +172,35 @@ public sealed partial class CaptureOverlayWindow : Window
         }
     }
 
+    /// <summary>
+    /// Anchor positions in selection-local coords, clamped so the handle stays
+    /// fully visible when the selection touches a screen edge.
+    /// </summary>
+    private (double X, double Y, HandlePos H)[] GetClampedAnchors()
+    {
+        double w = _selectionRect.Width, h = _selectionRect.Height;
+        var raw = new (double X, double Y, HandlePos H)[]
+        {
+            (0, 0, HandlePos.TL), (w / 2, 0, HandlePos.T), (w, 0, HandlePos.TR),
+            (w, h / 2, HandlePos.R),
+            (w, h, HandlePos.BR), (w / 2, h, HandlePos.B), (0, h, HandlePos.BL),
+            (0, h / 2, HandlePos.L),
+        };
+        double rootW = RootGrid.ActualWidth;
+        double rootH = RootGrid.ActualHeight;
+        double margin = HandleSize / 2 + 2;
+        var result = new (double X, double Y, HandlePos H)[raw.Length];
+        for (int i = 0; i < raw.Length; i++)
+        {
+            double rx = _selectionRect.X + raw[i].X;
+            double ry = _selectionRect.Y + raw[i].Y;
+            rx = System.Math.Clamp(rx, margin, System.Math.Max(margin, rootW - margin));
+            ry = System.Math.Clamp(ry, margin, System.Math.Max(margin, rootH - margin));
+            result[i] = (rx - _selectionRect.X, ry - _selectionRect.Y, raw[i].H);
+        }
+        return result;
+    }
+
     private void PositionHandles()
     {
         if (!_hasSelection)
@@ -179,14 +208,7 @@ public sealed partial class CaptureOverlayWindow : Window
             foreach (var hv in _handleVisuals) hv.Visibility = Visibility.Collapsed;
             return;
         }
-        double w = _selectionRect.Width, h = _selectionRect.Height;
-        var anchors = new (double X, double Y)[]
-        {
-            (0, 0), (w / 2, 0), (w, 0),
-            (w, h / 2),
-            (w, h), (w / 2, h), (0, h),
-            (0, h / 2),
-        };
+        var anchors = GetClampedAnchors();
         for (int i = 0; i < 8; i++)
         {
             Canvas.SetLeft(_handleVisuals[i], anchors[i].X - HandleSize / 2);
@@ -199,17 +221,9 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         handle = HandlePos.TL;
         if (!_hasSelection) return false;
-        double w = _selectionRect.Width, h = _selectionRect.Height;
         var local = new Point(rootPos.X - _selectionRect.X, rootPos.Y - _selectionRect.Y);
-        var anchors = new (double X, double Y, HandlePos H)[]
-        {
-            (0, 0, HandlePos.TL), (w / 2, 0, HandlePos.T), (w, 0, HandlePos.TR),
-            (w, h / 2, HandlePos.R),
-            (w, h, HandlePos.BR), (w / 2, h, HandlePos.B), (0, h, HandlePos.BL),
-            (0, h / 2, HandlePos.L),
-        };
         double half = HandleSize / 2 + HandleHitInflate;
-        foreach (var a in anchors)
+        foreach (var a in GetClampedAnchors())
         {
             if (System.Math.Abs(local.X - a.X) <= half && System.Math.Abs(local.Y - a.Y) <= half)
             {
@@ -812,6 +826,18 @@ public sealed partial class CaptureOverlayWindow : Window
         RectBtn.IsChecked = tool == ToolKind.Rectangle;
         TextBtn.IsChecked = tool == ToolKind.Text;
         if (tool != ToolKind.Pencil) _pencilPreview.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnBrushSizeChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (_drawing == null) return;
+        double v = e.NewValue;
+        _drawing.Settings.PencilThickness = v;
+        _drawing.Settings.RectangleThickness = System.Math.Max(1, v * 0.7);
+        // Update cursor preview ring to reflect thickness.
+        var d = System.Math.Max(8, v * 2 + 4);
+        _pencilPreview.Width = d;
+        _pencilPreview.Height = d;
     }
 
     private void OnColorPick(object sender, RoutedEventArgs e)

@@ -23,6 +23,7 @@ public sealed class RecordingController
     private readonly DispatcherQueue _ui;
     private RegionBorderWindow? _border;
     private RecordingHudWindow? _hud;
+    private RecordingDrawingWindow? _drawWin;
     private RecordingService? _service;
     private int _x, _y, _w, _h;
     private bool _stopAndSave;
@@ -101,6 +102,7 @@ public sealed class RecordingController
             _border?.MoveTo(_x, _y, _w, _h);
             var screenH = ScreenFreezeService.GetVirtualScreenBounds().Height;
             _hud?.PositionBelowRegion(_x, _y, _w, _h, screenH);
+            _drawWin?.MoveTo(_x, _y, _w, _h);
         }
         catch (Exception ex)
         {
@@ -134,7 +136,31 @@ public sealed class RecordingController
     }
 
     private void OnLockChanged(bool locked) { /* phase 5: visual only */ }
-    private void OnDrawToggled(bool on) { /* drawing-during-recording deferred */ }
+
+    private void OnDrawToggled(bool on)
+    {
+        try
+        {
+            if (on)
+            {
+                if (_drawWin == null)
+                {
+                    _drawWin = new RecordingDrawingWindow();
+                    _drawWin.MoveTo(_x, _y, _w, _h);
+                    _drawWin.Activate();
+                }
+                _drawWin.SetActive(true);
+            }
+            else
+            {
+                _drawWin?.SetActive(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Clipsy] Draw overlay toggle failed: {ex.Message}");
+        }
+    }
 
     private void OnRecordingComplete(string filePath)
     {
@@ -240,6 +266,7 @@ public sealed class RecordingController
             _hud?.Shutdown();
             _hud?.Close();
             _border?.Close();
+            _drawWin?.Close();
             _service?.Dispose();
             if (discardTemp && _service != null && !string.IsNullOrEmpty(_service.TempPath))
             {
@@ -250,6 +277,7 @@ public sealed class RecordingController
         {
             _border = null;
             _hud = null;
+            _drawWin = null;
             _service = null;
             _stopping = false;
             _current = null;

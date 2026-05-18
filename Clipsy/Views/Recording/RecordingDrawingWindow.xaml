@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Clipsy.Views.Recording.RecordingDrawingWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Canvas x:Name="DrawCanvas"
+            Background="#FFFF00FF"
+            PointerPressed="OnPointerPressedHandler"
+            PointerMoved="OnPointerMovedHandler"
+            PointerReleased="OnPointerReleasedHandler" />
+</Window>
