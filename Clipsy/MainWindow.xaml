@@ -12,10 +12,10 @@
             LeftClickCommand="{x:Bind CaptureCommand}">
             <tb:TaskbarIcon.ContextFlyout>
                 <MenuFlyout Placement="Top">
-                    <MenuFlyoutItem Text="Capture Screen" Click="OnCaptureClick" />
-                    <MenuFlyoutItem Text="Settings" Click="OnSettingsClick" />
+                    <MenuFlyoutItem x:Name="MenuCapture" Text="Capture Screen" Click="OnCaptureClick" />
+                    <MenuFlyoutItem x:Name="MenuSettings" Text="Settings" Click="OnSettingsClick" />
                     <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Text="Exit" Click="OnExitClick" />
+                    <MenuFlyoutItem x:Name="MenuExit" Text="Exit" Click="OnExitClick" />
                 </MenuFlyout>
             </tb:TaskbarIcon.ContextFlyout>
         </tb:TaskbarIcon>

@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using IOPath = System.IO.Path;
 using Clipsy.Drawing;
+using Clipsy.Localization;
 using Clipsy.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
@@ -78,6 +79,7 @@ public sealed partial class CaptureOverlayWindow : Window
         ConfigureAsOverlay();
 
         _drawing = new DrawingController(DrawingCanvas);
+        Hint.Text = Strings.Get("HintSelectArea");
         BuildHandles();
         _pencilPreview = new Ellipse
         {
@@ -858,6 +860,7 @@ public sealed partial class CaptureOverlayWindow : Window
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Silent save failed: {ex.Message}");
+            NotificationService.Error("ErrSaveFailed");
         }
     }
 
@@ -884,6 +887,7 @@ public sealed partial class CaptureOverlayWindow : Window
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Save As failed: {ex.Message}");
+            NotificationService.Error("ErrSaveFailed");
         }
     }
 
@@ -899,6 +903,7 @@ public sealed partial class CaptureOverlayWindow : Window
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Copy failed: {ex.Message}");
+            NotificationService.Error("ErrCopyFailed");
         }
     }
 
@@ -984,6 +989,7 @@ public sealed partial class CaptureOverlayWindow : Window
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] OCR failed: {ex.Message}");
+            NotificationService.Error("ErrOcrFailed");
             words = Array.Empty<OcrWord>();
         }
 
@@ -1057,7 +1063,7 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         if (words.Count == 0)
         {
-            OcrStatusLabel.Text = "No text found";
+            OcrStatusLabel.Text = Strings.Get("NoTextFound");
             Canvas.SetLeft(OcrStatusLabel, System.Math.Max(8, _selectionRect.Width / 2 - 50));
             Canvas.SetTop(OcrStatusLabel, System.Math.Max(8, _selectionRect.Height / 2 - 10));
             OcrStatusLabel.Visibility = Visibility.Visible;
@@ -1233,7 +1239,7 @@ public sealed partial class CaptureOverlayWindow : Window
         dp.SetText(text);
         Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
         Windows.ApplicationModel.DataTransfer.Clipboard.Flush();
-        OcrStatusLabel.Text = "Copied";
+        OcrStatusLabel.Text = Strings.Get("Copied");
         Canvas.SetLeft(OcrStatusLabel, System.Math.Max(8, _selectionRect.Width / 2 - 30));
         Canvas.SetTop(OcrStatusLabel, 8);
         OcrStatusLabel.Visibility = Visibility.Visible;
@@ -1255,7 +1261,7 @@ public sealed partial class CaptureOverlayWindow : Window
         PositionTranslatePanel();
         var (from, to) = TranslationService.GuessLangPair(text);
         var translated = await TranslationService.TranslateAsync(text, from, to);
-        TranslateTarget.Text = translated ?? "Translation unavailable";
+        TranslateTarget.Text = translated ?? Strings.Get("TranslateUnavailable");
         PositionTranslatePanel();
     }
 

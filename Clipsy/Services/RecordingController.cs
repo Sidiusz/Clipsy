@@ -72,6 +72,7 @@ public sealed class RecordingController
         catch (Exception ex)
         {
             Debug.WriteLine($"[Clipsy] Recording start failed: {ex.Message}");
+            NotificationService.Error("ErrRecordFailed");
             Cleanup(discardTemp: true);
         }
     }
@@ -123,7 +124,11 @@ public sealed class RecordingController
     private void OnRecordingFailed(string error)
     {
         Debug.WriteLine($"[Clipsy] Recording failed: {error}");
-        _ui.TryEnqueue(() => Cleanup(discardTemp: true));
+        _ui.TryEnqueue(() =>
+        {
+            NotificationService.Error("ErrRecordRuntime");
+            Cleanup(discardTemp: true);
+        });
     }
 
     private async Task OfferSaveAsync(string tempPath)

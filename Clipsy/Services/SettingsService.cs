@@ -37,6 +37,10 @@ public sealed class AppSettings
     public string HotkeySelectAll { get; set; } = "Ctrl+A";
     public string HotkeyRecordSilentSave { get; set; } = ""; // disabled by default
 
+    // Updates
+    public DateTime LastUpdateCheckUtc { get; set; } = DateTime.MinValue;
+    public string SkippedVersion { get; set; } = string.Empty;
+
     // Pro v1 stubs
     public bool ProEnabled { get; set; } = false;
 

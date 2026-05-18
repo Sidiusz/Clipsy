@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Windows.Input;
+using Clipsy.Localization;
+using H.NotifyIcon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Imaging;
 using WinRT.Interop;
@@ -23,7 +25,18 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         Hwnd = WindowNative.GetWindowHandle(this);
         TrySetTrayIcon();
+        ApplyLocalization();
         AppWindow.Hide();
+    }
+
+    public TaskbarIcon TrayIconControl => TrayIcon;
+
+    private void ApplyLocalization()
+    {
+        TrayIcon.ToolTipText = Strings.Get("TrayTooltip");
+        MenuCapture.Text = Strings.Get("TrayCapture");
+        MenuSettings.Text = Strings.Get("TraySettings");
+        MenuExit.Text = Strings.Get("TrayExit");
     }
 
     private void TrySetTrayIcon()

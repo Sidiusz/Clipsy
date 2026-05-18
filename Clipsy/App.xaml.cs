@@ -1,5 +1,7 @@
 using System;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
+using Clipsy.Localization;
 using Clipsy.Services;
 using Clipsy.Views;
 
@@ -24,6 +26,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        Strings.Initialize();
         HostWindow = new MainWindow();
         HostWindow.CaptureRequested += OnCaptureRequested;
         HostWindow.SettingsRequested += OnSettingsRequested;
@@ -31,6 +34,40 @@ public partial class App : Application
 
         Hotkey = new HotkeyService(HostWindow.Hwnd);
         Hotkey.RegisterDefault(OnCaptureRequested);
+
+        _ = CheckUpdatesIfDueAsync();
+    }
+
+    public async Task CheckUpdatesIfDueAsync(bool force = false)
+    {
+        try
+        {
+            var s = SettingsService.Instance.Settings;
+            if (!force)
+            {
+                if (s.UpdateInterval == "never") return;
+                if (!UpdateService.ShouldCheckNow(s.UpdateInterval, s.LastUpdateCheckUtc)) return;
+            }
+            var info = await UpdateService.CheckLatestAsync();
+            s.LastUpdateCheckUtc = DateTime.UtcNow;
+            SettingsService.Instance.Save();
+            if (info == null)
+            {
+                if (force) NotificationService.Warning("UpdateCheckFailed");
+                return;
+            }
+            if (!UpdateService.IsNewer(info.Version, UpdateService.CurrentVersion()))
+            {
+                if (force) NotificationService.Info("UpdateUpToDate");
+                return;
+            }
+            if (!force && info.Version == s.SkippedVersion) return;
+            NotificationService.InfoText($"Clipsy {info.Version}", Strings.Get("UpdateAvailable"));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Update check pipeline failed: {ex.Message}");
+        }
     }
 
     private void OnCaptureRequested()

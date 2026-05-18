@@ -364,9 +364,10 @@ public sealed partial class SettingsWindow : Window
         Load();
     }
 
-    private void OnCheckUpdates(object sender, RoutedEventArgs e)
+    private async void OnCheckUpdates(object sender, RoutedEventArgs e)
     {
-        // Phase 7: real update check
+        try { await Clipsy.App.Current.CheckUpdatesIfDueAsync(force: true); }
+        catch (Exception ex) { Debug.WriteLine($"[Clipsy] Forced update check failed: {ex.Message}"); }
     }
 
     // ---------- Win32 folder picker ----------
