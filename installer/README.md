@@ -17,16 +17,14 @@ installer/
 
 1. .NET 8 SDK (or newer) on PATH — `dotnet --version`
 2. Windows PowerShell 5.1 (ships with Windows) or PowerShell 7+
-3. Inno Setup 6 installed; the default location
-   `C:\Program Files\Inno Setup 6\ISCC.exe` (or the x86 equivalent)
-   is auto-detected by `build.ps1`. Download:
-   https://jrsoftware.org/isdl.php
+3. Internet access — Inno Setup 6 is fetched automatically if missing
 4. The script wipes `Clipsy\bin\publish\win-x64\` before publishing,
    so don't park anything important there
 
 ## Build
 
-Easiest — double-click `BuildInstaller.cmd` at the repo root.
+Easiest — double-click `BuildInstaller.cmd` at the repo root. The
+wrapper resolves its own path, so it works from any directory.
 
 From a shell:
 
@@ -34,6 +32,7 @@ From a shell:
 BuildInstaller.cmd
 BuildInstaller.cmd -Version 0.2.0
 BuildInstaller.cmd -Configuration Debug
+BuildInstaller.cmd -SkipInnoInstall      :: refuse auto-install
 ```
 
 Or call PowerShell directly:
@@ -45,10 +44,20 @@ powershell -ExecutionPolicy Bypass -File installer\build.ps1 -Version 0.2.0
 
 Output goes to `installer\output\Clipsy-Setup-<version>.exe`.
 
-If Inno Setup isn't installed yet, the script publishes the app to
-`Clipsy\bin\publish\win-x64\` and exits with code 2 telling you where
-to grab Inno Setup. Re-run after installing — the publish step is
-incremental.
+## Inno Setup auto-install
+
+If `ISCC.exe` is not present in `Program Files\Inno Setup 6\` or the
+(x86) equivalent, the script will fetch and install it for you:
+
+1. Tries `winget install JRSoftware.InnoSetup` first (silent, scope
+   machine). Most Windows 11 / recent Windows 10 already have winget.
+2. Falls back to downloading the official installer from
+   `https://jrsoftware.org/download.php/is.exe` and running it with
+   `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-`.
+
+Both paths trigger one UAC prompt. Pass `-SkipInnoInstall` to refuse
+the auto-install — the script will publish and exit with code 2, then
+you can install Inno Setup manually and re-run.
 
 ## What the installer does
 

@@ -5,13 +5,18 @@
 .DESCRIPTION
     Publishes the WinUI 3 app self-contained for win-x64 and then compiles
     the Inno Setup script into installer\output\Clipsy-Setup-<ver>.exe.
+    Auto-installs Inno Setup 6 if it is not already on the machine, using
+    winget when available, otherwise a direct download from jrsoftware.org.
 
 .PARAMETER Version
-    Override the version that ends up in the installer file name. Default
-    is read from Clipsy.csproj's <Version> property or 0.1.0.
+    Override the version that ends up in the installer file name.
 
 .PARAMETER Configuration
     Build configuration. Default Release.
+
+.PARAMETER SkipInnoInstall
+    Do not auto-install Inno Setup. The script will publish and stop with
+    exit code 2 if ISCC.exe is not found.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File installer\build.ps1
@@ -22,15 +27,82 @@
 [CmdletBinding()]
 param(
     [string]$Version = "0.1.0",
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [switch]$SkipInnoInstall
 )
 
 $ErrorActionPreference = "Stop"
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$project = Join-Path $repoRoot "Clipsy\Clipsy.csproj"
+$repoRoot   = Resolve-Path (Join-Path $PSScriptRoot "..")
+$project    = Join-Path $repoRoot "Clipsy\Clipsy.csproj"
 $publishDir = Join-Path $repoRoot "Clipsy\bin\publish\win-x64"
-$iss = Join-Path $PSScriptRoot "Clipsy.iss"
-$outputDir = Join-Path $PSScriptRoot "output"
+$iss        = Join-Path $PSScriptRoot "Clipsy.iss"
+$outputDir  = Join-Path $PSScriptRoot "output"
+
+function Find-Iscc {
+    $pf   = $env:ProgramFiles
+    $pf86 = [System.Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+    $candidates = @(
+        (Join-Path $pf   "Inno Setup 6\ISCC.exe"),
+        (Join-Path $pf86 "Inno Setup 6\ISCC.exe"),
+        (Join-Path $pf   "Inno Setup 5\ISCC.exe"),
+        (Join-Path $pf86 "Inno Setup 5\ISCC.exe")
+    )
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path $c)) { return $c }
+    }
+    return $null
+}
+
+function Install-InnoSetup {
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        Write-Host "Installing Inno Setup via winget (UAC may prompt)..." -ForegroundColor Cyan
+        try {
+            $wingetArgs = @(
+                "install","--id","JRSoftware.InnoSetup","-e","--silent",
+                "--accept-source-agreements","--accept-package-agreements",
+                "--scope","machine"
+            )
+            & winget @wingetArgs
+            if ($LASTEXITCODE -eq 0) {
+                Start-Sleep -Seconds 2
+                $found = Find-Iscc
+                if ($found) { return $found }
+            } else {
+                Write-Host "winget exit $LASTEXITCODE - falling back to direct download." -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host ("winget failed ({0}) - falling back to direct download." -f $_) -ForegroundColor Yellow
+        }
+    }
+
+    $url     = "https://jrsoftware.org/download.php/is.exe"
+    $tempExe = Join-Path ([System.IO.Path]::GetTempPath()) "innosetup-installer.exe"
+    Write-Host "Downloading Inno Setup from $url ..." -ForegroundColor Cyan
+
+    $oldProgress = $ProgressPreference
+    try {
+        $ProgressPreference = "SilentlyContinue"
+        Invoke-WebRequest -Uri $url -OutFile $tempExe -UseBasicParsing
+    } finally {
+        $ProgressPreference = $oldProgress
+    }
+    if (-not (Test-Path $tempExe)) { throw "Inno Setup download failed." }
+
+    Write-Host "Running Inno Setup installer silently (UAC may prompt)..." -ForegroundColor Cyan
+    $proc = Start-Process -FilePath $tempExe `
+        -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-" `
+        -Wait -PassThru
+    Remove-Item $tempExe -Force -ErrorAction SilentlyContinue
+    if ($proc.ExitCode -ne 0) { throw "Inno Setup installer exited with code $($proc.ExitCode)." }
+
+    Start-Sleep -Seconds 1
+    $found = Find-Iscc
+    if (-not $found) { throw "Inno Setup install ran but ISCC.exe is still missing." }
+    return $found
+}
+
+# ---------- Publish ----------
 
 if (Test-Path $publishDir) {
     Write-Host "Cleaning previous publish output..."
@@ -51,23 +123,29 @@ Write-Host "Publishing Clipsy ($Configuration / win-x64)..." -ForegroundColor Cy
     -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit $LASTEXITCODE" }
 
-$pf86 = ${env:ProgramFiles(x86)}
-$isccCandidates = @(
-    (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
-    (Join-Path $pf86 "Inno Setup 6\ISCC.exe"),
-    (Join-Path $env:ProgramFiles "Inno Setup 5\ISCC.exe"),
-    (Join-Path $pf86 "Inno Setup 5\ISCC.exe")
-)
-$iscc = $isccCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+# ---------- Inno Setup ----------
+
+$iscc = Find-Iscc
 if (-not $iscc) {
-    Write-Host ""
-    Write-Host "Inno Setup compiler (ISCC.exe) not found." -ForegroundColor Yellow
-    Write-Host "Install Inno Setup 6 from https://jrsoftware.org/isdl.php and re-run." -ForegroundColor Yellow
-    Write-Host "Publish output is ready at: $publishDir" -ForegroundColor Yellow
-    exit 2
+    if ($SkipInnoInstall) {
+        Write-Host ""
+        Write-Host "Inno Setup not found and -SkipInnoInstall is set." -ForegroundColor Yellow
+        Write-Host "Install Inno Setup 6 from https://jrsoftware.org/isdl.php and re-run." -ForegroundColor Yellow
+        Write-Host "Publish output ready at: $publishDir" -ForegroundColor Yellow
+        exit 2
+    }
+    try {
+        $iscc = Install-InnoSetup
+    } catch {
+        Write-Host ""
+        Write-Host ("Automatic Inno Setup install failed: {0}" -f $_) -ForegroundColor Red
+        Write-Host "Install manually from https://jrsoftware.org/isdl.php and re-run." -ForegroundColor Yellow
+        Write-Host "Publish output ready at: $publishDir" -ForegroundColor Yellow
+        exit 2
+    }
 }
 
-Write-Host "Compiling installer with $iscc..." -ForegroundColor Cyan
+Write-Host "Compiling installer with $iscc ..." -ForegroundColor Cyan
 & $iscc "/DClipsyVersion=$Version" $iss
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit $LASTEXITCODE" }
 
