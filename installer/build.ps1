@@ -1,4 +1,3 @@
-#requires -Version 7
 <#
 .SYNOPSIS
     Build the Clipsy installer.
@@ -15,8 +14,10 @@
     Build configuration. Default Release.
 
 .EXAMPLE
-    pwsh -File installer\build.ps1
-    pwsh -File installer\build.ps1 -Version 0.2.0
+    powershell -ExecutionPolicy Bypass -File installer\build.ps1
+    powershell -ExecutionPolicy Bypass -File installer\build.ps1 -Version 0.2.0
+
+    Or double-click BuildInstaller.cmd at the repo root.
 #>
 [CmdletBinding()]
 param(
@@ -50,14 +51,20 @@ Write-Host "Publishing Clipsy ($Configuration / win-x64)..." -ForegroundColor Cy
     -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit $LASTEXITCODE" }
 
+$pf86 = ${env:ProgramFiles(x86)}
 $isccCandidates = @(
-    "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
-    "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
-    "$env:ProgramFiles\Inno Setup 5\ISCC.exe"
+    (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
+    (Join-Path $pf86 "Inno Setup 6\ISCC.exe"),
+    (Join-Path $env:ProgramFiles "Inno Setup 5\ISCC.exe"),
+    (Join-Path $pf86 "Inno Setup 5\ISCC.exe")
 )
-$iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+$iscc = $isccCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $iscc) {
-    throw "Inno Setup compiler (ISCC.exe) not found. Install from https://jrsoftware.org/isdl.php."
+    Write-Host ""
+    Write-Host "Inno Setup compiler (ISCC.exe) not found." -ForegroundColor Yellow
+    Write-Host "Install Inno Setup 6 from https://jrsoftware.org/isdl.php and re-run." -ForegroundColor Yellow
+    Write-Host "Publish output is ready at: $publishDir" -ForegroundColor Yellow
+    exit 2
 }
 
 Write-Host "Compiling installer with $iscc..." -ForegroundColor Cyan

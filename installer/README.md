@@ -16,21 +16,39 @@ installer/
 ## Prerequisites
 
 1. .NET 8 SDK (or newer) on PATH — `dotnet --version`
-2. PowerShell 7 — `pwsh --version`
+2. Windows PowerShell 5.1 (ships with Windows) or PowerShell 7+
 3. Inno Setup 6 installed; the default location
-   `C:\Program Files\Inno Setup 6\ISCC.exe` is auto-detected by `build.ps1`
-4. Repo at a clean state — the script wipes `Clipsy\bin\publish\win-x64\`
-   before publishing
+   `C:\Program Files\Inno Setup 6\ISCC.exe` (or the x86 equivalent)
+   is auto-detected by `build.ps1`. Download:
+   https://jrsoftware.org/isdl.php
+4. The script wipes `Clipsy\bin\publish\win-x64\` before publishing,
+   so don't park anything important there
 
 ## Build
 
+Easiest — double-click `BuildInstaller.cmd` at the repo root.
+
+From a shell:
+
 ```
-pwsh -File installer\build.ps1
-pwsh -File installer\build.ps1 -Version 0.2.0
-pwsh -File installer\build.ps1 -Configuration Debug
+BuildInstaller.cmd
+BuildInstaller.cmd -Version 0.2.0
+BuildInstaller.cmd -Configuration Debug
+```
+
+Or call PowerShell directly:
+
+```
+powershell -ExecutionPolicy Bypass -File installer\build.ps1
+powershell -ExecutionPolicy Bypass -File installer\build.ps1 -Version 0.2.0
 ```
 
 Output goes to `installer\output\Clipsy-Setup-<version>.exe`.
+
+If Inno Setup isn't installed yet, the script publishes the app to
+`Clipsy\bin\publish\win-x64\` and exits with code 2 telling you where
+to grab Inno Setup. Re-run after installing — the publish step is
+incremental.
 
 ## What the installer does
 
