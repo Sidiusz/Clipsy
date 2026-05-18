@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using IOPath = System.IO.Path;
 using Clipsy.Drawing;
 using Clipsy.Services;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -25,7 +28,7 @@ namespace Clipsy.Views;
 
 public sealed partial class CaptureOverlayWindow : Window
 {
-    private enum InteractionMode { Idle, SelectingNew, MovingSelection, ResizingSelection, DrawingStroke, DrawingRect, Erasing, PlacingText }
+    private enum InteractionMode { Idle, SelectingNew, MovingSelection, ResizingSelection, DrawingStroke, DrawingRect, Erasing, PlacingText, SelectingOcrText }
     private enum HandlePos { TL, T, TR, R, BR, B, BL, L }
 
     private const double MinSelectionSize = 4.0;
@@ -53,6 +56,17 @@ public sealed partial class CaptureOverlayWindow : Window
     private Microsoft.UI.Xaml.Shapes.Rectangle? _activeRectVisual;
     private Point _activeRectAnchor;
     private TextBox? _activeTextBox;
+
+    // OCR state
+    private bool _inOcrMode;
+    private readonly List<(Rect bounds, Microsoft.UI.Xaml.Shapes.Rectangle box, TextBlock glyph)> _ocrVisuals = new();
+    private readonly List<OcrWord> _ocrWordsRaw = new();
+    private readonly List<Rect> _ocrWordsDip = new();
+    private readonly HashSet<int> _ocrSelected = new();
+    private DispatcherTimer? _scanTimer;
+    private double _scanY;
+    private int _scanDir = 1;
+    private Point _ocrDragStart;
 
     public CaptureOverlayWindow(ScreenFreezeService.FrozenFrame frame)
     {
@@ -189,6 +203,20 @@ public sealed partial class CaptureOverlayWindow : Window
         bool rmb = cp.Properties.IsRightButtonPressed;
         bool lmb = cp.Properties.IsLeftButtonPressed;
 
+        if (_inOcrMode)
+        {
+            if (lmb && IsInsideSelection(pos))
+            {
+                _mode = InteractionMode.SelectingOcrText;
+                _ocrDragStart = pos;
+                _ocrSelected.Clear();
+                UpdateOcrSelectionVisual();
+                RootGrid.CapturePointer(e.Pointer);
+                e.Handled = true;
+            }
+            return;
+        }
+
         if (rmb)
         {
             if (_drawing.Settings.Tool != ToolKind.None && _hasSelection && IsInsideSelection(pos))
@@ -289,6 +317,9 @@ public sealed partial class CaptureOverlayWindow : Window
             case InteractionMode.Erasing:
                 TryEraseAt(pos);
                 break;
+            case InteractionMode.SelectingOcrText:
+                UpdateOcrDragSelection(pos);
+                break;
         }
     }
 
@@ -319,6 +350,9 @@ public sealed partial class CaptureOverlayWindow : Window
                 break;
             case InteractionMode.DrawingRect:
                 FinishActiveRect();
+                break;
+            case InteractionMode.SelectingOcrText:
+                FinishOcrSelection(pos);
                 break;
         }
 
@@ -692,6 +726,11 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void HandleEscape()
     {
+        if (_inOcrMode)
+        {
+            ExitOcrMode();
+            return;
+        }
         if (_drawing.Settings.Tool != ToolKind.None)
         {
             SetTool(ToolKind.None);
@@ -782,7 +821,7 @@ public sealed partial class CaptureOverlayWindow : Window
     private void OnScreenshotClick(object sender, RoutedEventArgs e) => _ = SaveAsAsync();
     private void OnCopyClick(object sender, RoutedEventArgs e) => _ = CopyAsync();
     private void OnCancelClick(object sender, RoutedEventArgs e) => Close();
-    private void OnOcrClick(object sender, RoutedEventArgs e) { /* phase 4 */ }
+    private async void OnOcrClick(object sender, RoutedEventArgs e) => await EnterOcrModeAsync();
 
     // ---------- Screenshot save / copy ----------
 
@@ -816,11 +855,11 @@ public sealed partial class CaptureOverlayWindow : Window
             var settings = SettingsService.Instance;
             var suggestedFolder = settings.GetEffectiveScreenshotFolder();
             var name = SaveDialogService.MakeTimestampName("Clipsy", "png");
-            var file = await SaveDialogService.PickPngSaveAsync(_hwnd, suggestedFolder, name);
-            if (file == null) return;
+            var result = await SaveDialogService.PickPngSaveAsync(_hwnd, suggestedFolder, name);
+            if (result == null) return;
             var png = ScreenshotRenderer.RenderPng(_frame, _selectionRect, _drawing.Elements, DpiScale);
-            await Windows.Storage.FileIO.WriteBytesAsync(file, png);
-            var dir = IOPath.GetDirectoryName(file.Path);
+            await File.WriteAllBytesAsync(result.Path, png);
+            var dir = IOPath.GetDirectoryName(result.Path);
             if (!string.IsNullOrEmpty(dir))
             {
                 settings.Settings.LastScreenshotFolder = dir;
@@ -903,4 +942,318 @@ public sealed partial class CaptureOverlayWindow : Window
         Hint.Visibility = Visibility.Visible;
     }
     private void OnMenuCancel(object sender, RoutedEventArgs e) => Close();
+
+    // ---------- OCR ----------
+
+    private async Task EnterOcrModeAsync()
+    {
+        if (!_hasSelection || _inOcrMode) return;
+        _inOcrMode = true;
+        SetTool(ToolKind.None);
+        BottomToolbar.Visibility = Visibility.Collapsed;
+        RightToolbar.Visibility = Visibility.Collapsed;
+        TranslatePanel.Visibility = Visibility.Collapsed;
+        ClearOcrVisuals();
+        OcrStatusLabel.Visibility = Visibility.Collapsed;
+        OcrLayer.Visibility = Visibility.Visible;
+        OcrToolbar.Visibility = Visibility.Visible;
+        PositionOcrToolbar();
+        StartScanAnimation();
+
+        IReadOnlyList<OcrWord> words;
+        try
+        {
+            var png = ScreenshotRenderer.RenderPng(_frame, _selectionRect, Array.Empty<DrawElement>(), DpiScale);
+            var engine = OcrEngineFactory.Resolve();
+            words = await engine.RecognizeAsync(png);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] OCR failed: {ex.Message}");
+            words = Array.Empty<OcrWord>();
+        }
+
+        StopScanAnimation();
+        if (!_inOcrMode) return;
+        RenderOcrResults(words);
+    }
+
+    private void ExitOcrMode()
+    {
+        _inOcrMode = false;
+        StopScanAnimation();
+        OcrLayer.Visibility = Visibility.Collapsed;
+        ClearOcrVisuals();
+        OcrToolbar.Visibility = Visibility.Collapsed;
+        TranslatePanel.Visibility = Visibility.Collapsed;
+        OcrStatusLabel.Visibility = Visibility.Collapsed;
+        if (_hasSelection)
+        {
+            BottomToolbar.Visibility = Visibility.Visible;
+            RightToolbar.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void StartScanAnimation()
+    {
+        ScanLine.Visibility = Visibility.Visible;
+        ScanLine.Width = _selectionRect.Width;
+        Canvas.SetLeft(ScanLine, 0);
+        Canvas.SetTop(ScanLine, 0);
+        _scanY = 0;
+        _scanDir = 1;
+        _scanTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _scanTimer.Tick += OnScanTick;
+        _scanTimer.Start();
+    }
+
+    private void OnScanTick(object? sender, object e)
+    {
+        _scanY += _scanDir * 6;
+        if (_scanY >= _selectionRect.Height) { _scanY = _selectionRect.Height; _scanDir = -1; }
+        if (_scanY <= 0) { _scanY = 0; _scanDir = 1; }
+        Canvas.SetTop(ScanLine, _scanY);
+    }
+
+    private void StopScanAnimation()
+    {
+        if (_scanTimer != null)
+        {
+            _scanTimer.Stop();
+            _scanTimer.Tick -= OnScanTick;
+            _scanTimer = null;
+        }
+        ScanLine.Visibility = Visibility.Collapsed;
+    }
+
+    private void ClearOcrVisuals()
+    {
+        foreach (var (_, box, glyph) in _ocrVisuals)
+        {
+            OcrLayer.Children.Remove(box);
+            OcrLayer.Children.Remove(glyph);
+        }
+        _ocrVisuals.Clear();
+        _ocrWordsRaw.Clear();
+        _ocrWordsDip.Clear();
+        _ocrSelected.Clear();
+    }
+
+    private void RenderOcrResults(IReadOnlyList<OcrWord> words)
+    {
+        if (words.Count == 0)
+        {
+            OcrStatusLabel.Text = "No text found";
+            Canvas.SetLeft(OcrStatusLabel, System.Math.Max(8, _selectionRect.Width / 2 - 50));
+            Canvas.SetTop(OcrStatusLabel, System.Math.Max(8, _selectionRect.Height / 2 - 10));
+            OcrStatusLabel.Visibility = Visibility.Visible;
+            _ = FadeOutLaterAsync(OcrStatusLabel, 2500);
+            return;
+        }
+
+        foreach (var w in words)
+        {
+            _ocrWordsRaw.Add(w);
+            var b = new Rect(
+                w.BoundsPixels.X / DpiScale,
+                w.BoundsPixels.Y / DpiScale,
+                w.BoundsPixels.Width / DpiScale,
+                w.BoundsPixels.Height / DpiScale);
+            _ocrWordsDip.Add(b);
+
+            var rect = new Microsoft.UI.Xaml.Shapes.Rectangle
+            {
+                Width = b.Width,
+                Height = b.Height,
+                Fill = new SolidColorBrush(Color.FromArgb(80, 0xFF, 0xEB, 0x3B)),
+                IsHitTestVisible = false,
+            };
+            Canvas.SetLeft(rect, b.X);
+            Canvas.SetTop(rect, b.Y);
+            OcrLayer.Children.Add(rect);
+
+            var glyph = new TextBlock
+            {
+                Text = w.Text,
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
+                FontSize = System.Math.Max(8, b.Height * 0.78),
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                IsHitTestVisible = false,
+            };
+            Canvas.SetLeft(glyph, b.X);
+            Canvas.SetTop(glyph, b.Y);
+            OcrLayer.Children.Add(glyph);
+
+            _ocrVisuals.Add((b, rect, glyph));
+        }
+    }
+
+    private void UpdateOcrDragSelection(Point pos)
+    {
+        var dragRoot = MakeRect(_ocrDragStart, pos);
+        var dragLocal = new Rect(
+            dragRoot.X - _selectionRect.X,
+            dragRoot.Y - _selectionRect.Y,
+            dragRoot.Width,
+            dragRoot.Height);
+        _ocrSelected.Clear();
+        for (int i = 0; i < _ocrWordsDip.Count; i++)
+        {
+            if (RectsIntersect(_ocrWordsDip[i], dragLocal)) _ocrSelected.Add(i);
+        }
+        UpdateOcrSelectionVisual();
+    }
+
+    private void FinishOcrSelection(Point pos)
+    {
+        var dragRoot = MakeRect(_ocrDragStart, pos);
+        if (dragRoot.Width < 4 && dragRoot.Height < 4)
+        {
+            var local = new Point(_ocrDragStart.X - _selectionRect.X, _ocrDragStart.Y - _selectionRect.Y);
+            int idx = -1;
+            for (int i = 0; i < _ocrWordsDip.Count; i++)
+            {
+                var b = _ocrWordsDip[i];
+                if (local.X >= b.X && local.X <= b.X + b.Width && local.Y >= b.Y && local.Y <= b.Y + b.Height)
+                {
+                    idx = i;
+                    break;
+                }
+            }
+            _ocrSelected.Clear();
+            if (idx >= 0) _ocrSelected.Add(idx);
+            UpdateOcrSelectionVisual();
+        }
+    }
+
+    private static bool RectsIntersect(Rect a, Rect b)
+    {
+        return !(b.X > a.X + a.Width || b.X + b.Width < a.X || b.Y > a.Y + a.Height || b.Y + b.Height < a.Y);
+    }
+
+    private void UpdateOcrSelectionVisual()
+    {
+        var unsel = new SolidColorBrush(Color.FromArgb(80, 0xFF, 0xEB, 0x3B));
+        var sel = new SolidColorBrush(Color.FromArgb(170, 0xFF, 0xEB, 0x3B));
+        for (int i = 0; i < _ocrVisuals.Count; i++)
+        {
+            _ocrVisuals[i].box.Fill = _ocrSelected.Contains(i) ? sel : unsel;
+        }
+    }
+
+    private string GetSelectedOcrText()
+    {
+        if (_ocrSelected.Count == 0) return string.Empty;
+        var sorted = _ocrSelected
+            .OrderBy(i => _ocrWordsDip[i].Y)
+            .ThenBy(i => _ocrWordsDip[i].X)
+            .ToList();
+        var sb = new StringBuilder();
+        double lastY = double.NaN;
+        double lastH = 0;
+        foreach (var i in sorted)
+        {
+            var b = _ocrWordsDip[i];
+            if (!double.IsNaN(lastY) && System.Math.Abs(b.Y - lastY) > lastH * 0.6)
+            {
+                sb.AppendLine();
+            }
+            else if (sb.Length > 0)
+            {
+                sb.Append(' ');
+            }
+            sb.Append(_ocrWordsRaw[i].Text);
+            lastY = b.Y;
+            lastH = b.Height;
+        }
+        return sb.ToString();
+    }
+
+    private void PositionOcrToolbar()
+    {
+        OcrToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var rootW = RootGrid.ActualWidth;
+        var rootH = RootGrid.ActualHeight;
+        double w = OcrToolbar.DesiredSize.Width;
+        double h = OcrToolbar.DesiredSize.Height;
+        double x = _selectionRect.X + (_selectionRect.Width - w) / 2;
+        double y = _selectionRect.Y + _selectionRect.Height + 12;
+        if (y + h > rootH - 8) y = _selectionRect.Y - h - 12;
+        x = System.Math.Clamp(x, 8, System.Math.Max(8, rootW - w - 8));
+        Canvas.SetLeft(OcrToolbar, x);
+        Canvas.SetTop(OcrToolbar, y);
+    }
+
+    private void PositionTranslatePanel()
+    {
+        TranslatePanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var rootW = RootGrid.ActualWidth;
+        var rootH = RootGrid.ActualHeight;
+        double w = TranslatePanel.DesiredSize.Width;
+        double h = TranslatePanel.DesiredSize.Height;
+        double x = _selectionRect.X + (_selectionRect.Width - w) / 2;
+        double y = Canvas.GetTop(OcrToolbar) + OcrToolbar.DesiredSize.Height + 8;
+        if (y + h > rootH - 8) y = _selectionRect.Y - h - 12;
+        x = System.Math.Clamp(x, 8, System.Math.Max(8, rootW - w - 8));
+        Canvas.SetLeft(TranslatePanel, x);
+        Canvas.SetTop(TranslatePanel, y);
+    }
+
+    private void OnOcrSelectAll(object sender, RoutedEventArgs e)
+    {
+        _ocrSelected.Clear();
+        for (int i = 0; i < _ocrWordsDip.Count; i++) _ocrSelected.Add(i);
+        UpdateOcrSelectionVisual();
+    }
+
+    private async void OnOcrCopy(object sender, RoutedEventArgs e)
+    {
+        var text = GetSelectedOcrText();
+        if (string.IsNullOrEmpty(text))
+        {
+            OnOcrSelectAll(sender, e);
+            text = GetSelectedOcrText();
+        }
+        if (string.IsNullOrEmpty(text)) return;
+        var dp = new Windows.ApplicationModel.DataTransfer.DataPackage();
+        dp.SetText(text);
+        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
+        Windows.ApplicationModel.DataTransfer.Clipboard.Flush();
+        OcrStatusLabel.Text = "Copied";
+        Canvas.SetLeft(OcrStatusLabel, System.Math.Max(8, _selectionRect.Width / 2 - 30));
+        Canvas.SetTop(OcrStatusLabel, 8);
+        OcrStatusLabel.Visibility = Visibility.Visible;
+        await FadeOutLaterAsync(OcrStatusLabel, 1200);
+    }
+
+    private async void OnOcrTranslate(object sender, RoutedEventArgs e)
+    {
+        var text = GetSelectedOcrText();
+        if (string.IsNullOrEmpty(text))
+        {
+            OnOcrSelectAll(sender, e);
+            text = GetSelectedOcrText();
+        }
+        if (string.IsNullOrEmpty(text)) return;
+        TranslateOriginal.Text = text;
+        TranslateTarget.Text = "…";
+        TranslatePanel.Visibility = Visibility.Visible;
+        PositionTranslatePanel();
+        var (from, to) = TranslationService.GuessLangPair(text);
+        var translated = await TranslationService.TranslateAsync(text, from, to);
+        TranslateTarget.Text = translated ?? "Translation unavailable";
+        PositionTranslatePanel();
+    }
+
+    private void OnOcrExit(object sender, RoutedEventArgs e) => ExitOcrMode();
+
+    private async Task FadeOutLaterAsync(UIElement el, int delayMs)
+    {
+        try
+        {
+            await Task.Delay(delayMs);
+            el.Visibility = Visibility.Collapsed;
+        }
+        catch { /* ignore */ }
+    }
 }

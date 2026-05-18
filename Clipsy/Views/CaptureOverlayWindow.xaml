@@ -57,6 +57,20 @@
             <Canvas x:Name="DrawingCanvas"
                     Background="Transparent"
                     IsHitTestVisible="False" />
+            <Canvas x:Name="OcrLayer"
+                    Background="Transparent"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed" />
+            <Rectangle x:Name="ScanLine"
+                       Height="2"
+                       Fill="#FFFFEB3B"
+                       Opacity="0.85"
+                       Visibility="Collapsed" />
+            <TextBlock x:Name="OcrStatusLabel"
+                       Text="No text found"
+                       Foreground="White"
+                       FontSize="16"
+                       Visibility="Collapsed" />
             <Rectangle x:Name="SelectionBorder"
                        Stroke="#FF1F6FEB"
                        StrokeThickness="1.5"
@@ -87,6 +101,60 @@
                         <FontIcon Glyph="&#xE711;" FontSize="18" />
                     </Button>
                 </StackPanel>
+            </Border>
+
+            <Border x:Name="OcrToolbar"
+                    Visibility="Collapsed"
+                    Background="#F01E1E1E"
+                    BorderBrush="#FF2E2E2E"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="6">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Button x:Name="OcrSelectAllBtn" Click="OnOcrSelectAll" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Select all">
+                        <FontIcon Glyph="&#xE8B3;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="OcrCopyBtn" Click="OnOcrCopy" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Copy text">
+                        <FontIcon Glyph="&#xE8C8;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="OcrTranslateBtn" Click="OnOcrTranslate" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Translate">
+                        <FontIcon Glyph="&#xE8C1;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="OcrExitBtn" Click="OnOcrExit" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Exit OCR (Esc)">
+                        <FontIcon Glyph="&#xE711;" FontSize="18" />
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <Border x:Name="TranslatePanel"
+                    Visibility="Collapsed"
+                    Background="#F01E1E1E"
+                    BorderBrush="#FF2E2E2E"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="10">
+                <Grid ColumnSpacing="12" RowSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Original" Foreground="#FFAAAAAA" FontSize="11" Grid.Row="0" Grid.Column="0" />
+                    <TextBlock Text="Translation" Foreground="#FFAAAAAA" FontSize="11" Grid.Row="0" Grid.Column="1" />
+                    <TextBlock x:Name="TranslateOriginal"
+                               Grid.Row="1" Grid.Column="0"
+                               Foreground="White" FontSize="14"
+                               TextWrapping="Wrap"
+                               MaxWidth="320" />
+                    <TextBlock x:Name="TranslateTarget"
+                               Grid.Row="1" Grid.Column="1"
+                               Foreground="White" FontSize="14"
+                               TextWrapping="Wrap"
+                               MaxWidth="320" />
+                </Grid>
             </Border>
 
             <Border x:Name="RightToolbar"
