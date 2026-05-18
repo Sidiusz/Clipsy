@@ -20,46 +20,32 @@ public sealed partial class MainWindow : Window
     public event Action? ExitRequested;
 
     public ICommand CaptureCommand { get; }
+    public ICommand TrayRightClickCommand { get; }
 
     public MainWindow()
     {
         CaptureCommand = new RelayCommand(() => CaptureRequested?.Invoke());
+        TrayRightClickCommand = new RelayCommand(ShowTrayMenu);
         InitializeComponent();
         Hwnd = WindowNative.GetWindowHandle(this);
         TrySetTrayIcon();
+        WireTrayCommands();
         ApplyLocalization();
         HideAsTrayHost();
     }
 
-    /// <summary>
-    /// The host window must be a real, activated window for the WinUI 3
-    /// XAML island (and therefore TaskbarIcon's commands and ContextFlyout)
-    /// to come alive. AppWindow.Hide() defeats that, so instead we mark
-    /// the window as a tool window (no taskbar / alt-tab entry) and shove
-    /// it offscreen with a 1x1 size. The caller is expected to invoke
-    /// Activate() once after construction.
-    /// </summary>
-    private void HideAsTrayHost()
-    {
-        const int GWL_EXSTYLE = -20;
-        const int WS_EX_TOOLWINDOW = 0x00000080;
-        const int WS_EX_NOACTIVATE = 0x08000000;
-        var ex = GetWindowLong(Hwnd, GWL_EXSTYLE);
-        SetWindowLong(Hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
-        AppWindow.MoveAndResize(new RectInt32(-32000, -32000, 1, 1));
-    }
-
-    [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-    [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
     public TaskbarIcon TrayIconControl => TrayIcon;
+
+    private void WireTrayCommands()
+    {
+        TrayIcon.LeftClickCommand = CaptureCommand;
+        TrayIcon.RightClickCommand = TrayRightClickCommand;
+        TrayIcon.ForceCreate();
+    }
 
     private void ApplyLocalization()
     {
         TrayIcon.ToolTipText = Strings.Get("TrayTooltip");
-        MenuCapture.Text = Strings.Get("TrayCapture");
-        MenuSettings.Text = Strings.Get("TraySettings");
-        MenuExit.Text = Strings.Get("TrayExit");
     }
 
     private void TrySetTrayIcon()
@@ -78,9 +64,69 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnCaptureClick(object sender, RoutedEventArgs e) => CaptureRequested?.Invoke();
-    private void OnSettingsClick(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke();
-    private void OnExitClick(object sender, RoutedEventArgs e) => ExitRequested?.Invoke();
+    /// <summary>
+    /// Build the tray context menu via native TrackPopupMenu so we don't
+    /// depend on XAML MenuFlyout/SecondWindow re-parenting. Items go
+    /// straight to the corresponding event raisers.
+    /// </summary>
+    private void ShowTrayMenu()
+    {
+        const uint MF_STRING = 0x00000000;
+        const uint MF_SEPARATOR = 0x00000800;
+        const uint TPM_RETURNCMD = 0x0100;
+        const uint TPM_RIGHTBUTTON = 0x0002;
+        const uint TPM_NONOTIFY = 0x0080;
+
+        if (!GetCursorPos(out var pt)) return;
+        var menu = CreatePopupMenu();
+        if (menu == IntPtr.Zero) return;
+        try
+        {
+            AppendMenuW(menu, MF_STRING, 1, Strings.Get("TrayCapture"));
+            AppendMenuW(menu, MF_STRING, 2, Strings.Get("TraySettings"));
+            AppendMenuW(menu, MF_SEPARATOR, 0, null);
+            AppendMenuW(menu, MF_STRING, 3, Strings.Get("TrayExit"));
+
+            SetForegroundWindow(Hwnd);
+            uint cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
+                pt.X, pt.Y, 0, Hwnd, IntPtr.Zero);
+            switch (cmd)
+            {
+                case 1: CaptureRequested?.Invoke(); break;
+                case 2: SettingsRequested?.Invoke(); break;
+                case 3: ExitRequested?.Invoke(); break;
+            }
+        }
+        finally
+        {
+            DestroyMenu(menu);
+            // Quirk: WM_NULL post is the canonical way to dismiss the menu
+            // properly when TrackPopupMenu returns synchronously.
+            PostMessageW(Hwnd, 0x0000, IntPtr.Zero, IntPtr.Zero);
+        }
+    }
+
+    private void HideAsTrayHost()
+    {
+        const int GWL_EXSTYLE = -20;
+        const int WS_EX_TOOLWINDOW = 0x00000080;
+        var ex = GetWindowLong(Hwnd, GWL_EXSTYLE);
+        SetWindowLong(Hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW);
+        AppWindow.MoveAndResize(new RectInt32(-32000, -32000, 1, 1));
+    }
+
+    // ---------- Win32 ----------
+
+    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X; public int Y; }
+    [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
+    [DllImport("user32.dll")] private static extern IntPtr CreatePopupMenu();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool AppendMenuW(IntPtr hMenu, uint uFlags, uint uIDNewItem, string? lpNewItem);
+    [DllImport("user32.dll")] private static extern bool DestroyMenu(IntPtr hMenu);
+    [DllImport("user32.dll")] private static extern uint TrackPopupMenu(IntPtr hMenu, uint uFlags, int x, int y, int nReserved, IntPtr hWnd, IntPtr prcRect);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool PostMessageW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 }
 
 internal sealed class RelayCommand : ICommand

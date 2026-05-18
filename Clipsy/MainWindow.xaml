@@ -8,17 +8,6 @@
         <tb:TaskbarIcon
             x:Name="TrayIcon"
             ToolTipText="Clipsy"
-            NoLeftClickDelay="True"
-            ContextMenuMode="SecondWindow"
-            LeftClickCommand="{x:Bind CaptureCommand}">
-            <tb:TaskbarIcon.ContextFlyout>
-                <MenuFlyout Placement="Top">
-                    <MenuFlyoutItem x:Name="MenuCapture" Text="Capture Screen" Click="OnCaptureClick" />
-                    <MenuFlyoutItem x:Name="MenuSettings" Text="Settings" Click="OnSettingsClick" />
-                    <MenuFlyoutSeparator />
-                    <MenuFlyoutItem x:Name="MenuExit" Text="Exit" Click="OnExitClick" />
-                </MenuFlyout>
-            </tb:TaskbarIcon.ContextFlyout>
-        </tb:TaskbarIcon>
+            NoLeftClickDelay="True" />
     </Grid>
 </Window>

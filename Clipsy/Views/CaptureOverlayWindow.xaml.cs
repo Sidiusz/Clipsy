@@ -426,8 +426,12 @@ public sealed partial class CaptureOverlayWindow : Window
         }
 
         SelectionLayer.Visibility = Visibility.Visible;
-        Canvas.SetLeft(SelectionLayer, _selectionRect.X);
-        Canvas.SetTop(SelectionLayer, _selectionRect.Y);
+        // SelectionLayer is a Canvas child of a Grid. Canvas attached
+        // properties only work when the parent is a Canvas - so on a Grid
+        // they're silently ignored and the layer collapses to (0,0) of the
+        // root, which on a multi-monitor setup with a negative virtual-X
+        // primary lands on the wrong monitor. Use Margin instead.
+        SelectionLayer.Margin = new Thickness(_selectionRect.X, _selectionRect.Y, 0, 0);
         SelectionLayer.Width = _selectionRect.Width;
         SelectionLayer.Height = _selectionRect.Height;
 
