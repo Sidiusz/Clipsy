@@ -1,10 +1,12 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows.Input;
 using Clipsy.Localization;
 using H.NotifyIcon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Graphics;
 using WinRT.Interop;
 
 namespace Clipsy;
@@ -26,8 +28,29 @@ public sealed partial class MainWindow : Window
         Hwnd = WindowNative.GetWindowHandle(this);
         TrySetTrayIcon();
         ApplyLocalization();
-        AppWindow.Hide();
+        HideAsTrayHost();
     }
+
+    /// <summary>
+    /// The host window must be a real, activated window for the WinUI 3
+    /// XAML island (and therefore TaskbarIcon's commands and ContextFlyout)
+    /// to come alive. AppWindow.Hide() defeats that, so instead we mark
+    /// the window as a tool window (no taskbar / alt-tab entry) and shove
+    /// it offscreen with a 1x1 size. The caller is expected to invoke
+    /// Activate() once after construction.
+    /// </summary>
+    private void HideAsTrayHost()
+    {
+        const int GWL_EXSTYLE = -20;
+        const int WS_EX_TOOLWINDOW = 0x00000080;
+        const int WS_EX_NOACTIVATE = 0x08000000;
+        var ex = GetWindowLong(Hwnd, GWL_EXSTYLE);
+        SetWindowLong(Hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+        AppWindow.MoveAndResize(new RectInt32(-32000, -32000, 1, 1));
+    }
+
+    [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
     public TaskbarIcon TrayIconControl => TrayIcon;
 

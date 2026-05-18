@@ -9,6 +9,7 @@
             x:Name="TrayIcon"
             ToolTipText="Clipsy"
             NoLeftClickDelay="True"
+            ContextMenuMode="SecondWindow"
             LeftClickCommand="{x:Bind CaptureCommand}">
             <tb:TaskbarIcon.ContextFlyout>
                 <MenuFlyout Placement="Top">

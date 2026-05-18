@@ -32,8 +32,17 @@ public partial class App : Application
         HostWindow.SettingsRequested += OnSettingsRequested;
         HostWindow.ExitRequested += OnExitRequested;
 
-        Hotkey = new HotkeyService(HostWindow.Hwnd);
-        Hotkey.RegisterDefault(OnCaptureRequested);
+        // Activate the host so the WinUI 3 XAML island starts. The window
+        // is offscreen + tool-window so it's invisible, but it must be
+        // active or the TaskbarIcon's commands and ContextFlyout never wire.
+        HostWindow.Activate();
+
+        Hotkey = new HotkeyService(HostWindow.DispatcherQueue);
+        bool ok = Hotkey.RegisterDefault(OnCaptureRequested);
+        if (!ok)
+        {
+            System.Diagnostics.Debug.WriteLine("[Clipsy] PrintScreen hotkey not registered. Likely Windows is intercepting it (Snipping Tool override).");
+        }
 
         _ = CheckUpdatesIfDueAsync();
     }
