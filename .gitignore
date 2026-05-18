@@ -1,0 +1,48 @@
+# Build outputs
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+ARM64/
+[Bb]uild/
+[Pp]ublish/
+*.user
+*.suo
+.vs/
+
+# WinUI / AppPackages
+AppPackages/
+BundleArtifacts/
+*.appx
+*.appxbundle
+*.appxupload
+*.msix
+*.msixbundle
+GeneratedArtifacts/
+ipch/
+*.aps
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+
+# Rider / VS
+.idea/
+*.DotSettings.user
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local secrets
+*.local.json
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+
+# Tools cache
+.tools/

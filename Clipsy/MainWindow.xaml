@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Clipsy.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:tb="using:H.NotifyIcon">
+    <Grid>
+        <tb:TaskbarIcon
+            x:Name="TrayIcon"
+            ToolTipText="Clipsy"
+            NoLeftClickDelay="True"
+            LeftClickCommand="{x:Bind CaptureCommand}">
+            <tb:TaskbarIcon.ContextFlyout>
+                <MenuFlyout Placement="Top">
+                    <MenuFlyoutItem Text="Capture Screen" Click="OnCaptureClick" />
+                    <MenuFlyoutItem Text="Settings" Click="OnSettingsClick" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Text="Exit" Click="OnExitClick" />
+                </MenuFlyout>
+            </tb:TaskbarIcon.ContextFlyout>
+        </tb:TaskbarIcon>
+    </Grid>
+</Window>
