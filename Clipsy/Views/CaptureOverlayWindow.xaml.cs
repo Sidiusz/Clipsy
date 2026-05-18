@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
+using IOPath = System.IO.Path;
 using Clipsy.Drawing;
 using Clipsy.Services;
 using Microsoft.UI.Input;
@@ -96,8 +99,6 @@ public sealed partial class CaptureOverlayWindow : Window
         }
         var b = _frame.VirtualBounds;
         _appWindow.MoveAndResize(new RectInt32(b.X, b.Y, b.Width, b.Height));
-        FrozenImage.Width = b.Width;
-        FrozenImage.Height = b.Height;
         UpdateDimGeometry(null);
     }
 
@@ -678,6 +679,14 @@ public sealed partial class CaptureOverlayWindow : Window
                 e.Handled = true;
                 _drawing.Redo();
                 return;
+            case VirtualKey.S when ctrl:
+                e.Handled = true;
+                _ = SaveSilentAsync();
+                return;
+            case VirtualKey.C when ctrl:
+                e.Handled = true;
+                _ = CopyAsync();
+                return;
         }
     }
 
@@ -770,10 +779,75 @@ public sealed partial class CaptureOverlayWindow : Window
     // ---------- Bottom toolbar actions ----------
 
     private void OnRecordClick(object sender, RoutedEventArgs e) { /* phase 5 */ }
-    private void OnScreenshotClick(object sender, RoutedEventArgs e) { /* phase 3 */ }
-    private void OnCopyClick(object sender, RoutedEventArgs e) { /* phase 3 */ }
+    private void OnScreenshotClick(object sender, RoutedEventArgs e) => _ = SaveAsAsync();
+    private void OnCopyClick(object sender, RoutedEventArgs e) => _ = CopyAsync();
     private void OnCancelClick(object sender, RoutedEventArgs e) => Close();
     private void OnOcrClick(object sender, RoutedEventArgs e) { /* phase 4 */ }
+
+    // ---------- Screenshot save / copy ----------
+
+    private double DpiScale => Content?.XamlRoot?.RasterizationScale ?? 1.0;
+
+    private async Task SaveSilentAsync()
+    {
+        if (!_hasSelection) return;
+        try
+        {
+            var settings = SettingsService.Instance;
+            var folder = settings.GetEffectiveScreenshotFolder();
+            Directory.CreateDirectory(folder);
+            var name = SaveDialogService.MakeTimestampName("Clipsy", "png");
+            var fullPath = IOPath.Combine(folder, name);
+            var png = ScreenshotRenderer.RenderPng(_frame, _selectionRect, _drawing.Elements, DpiScale);
+            await File.WriteAllBytesAsync(fullPath, png);
+            Close();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Silent save failed: {ex.Message}");
+        }
+    }
+
+    private async Task SaveAsAsync()
+    {
+        if (!_hasSelection) return;
+        try
+        {
+            var settings = SettingsService.Instance;
+            var suggestedFolder = settings.GetEffectiveScreenshotFolder();
+            var name = SaveDialogService.MakeTimestampName("Clipsy", "png");
+            var file = await SaveDialogService.PickPngSaveAsync(_hwnd, suggestedFolder, name);
+            if (file == null) return;
+            var png = ScreenshotRenderer.RenderPng(_frame, _selectionRect, _drawing.Elements, DpiScale);
+            await Windows.Storage.FileIO.WriteBytesAsync(file, png);
+            var dir = IOPath.GetDirectoryName(file.Path);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                settings.Settings.LastScreenshotFolder = dir;
+                settings.Save();
+            }
+            Close();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Save As failed: {ex.Message}");
+        }
+    }
+
+    private async Task CopyAsync()
+    {
+        if (!_hasSelection) return;
+        try
+        {
+            var png = ScreenshotRenderer.RenderPng(_frame, _selectionRect, _drawing.Elements, DpiScale);
+            await ClipboardService.SetImageAsync(png);
+            Close();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Copy failed: {ex.Message}");
+        }
+    }
 
     // ---------- Context menu ----------
 
@@ -816,9 +890,9 @@ public sealed partial class CaptureOverlayWindow : Window
     }
 
     private void OnMenuSelectAll(object sender, RoutedEventArgs e) => SelectAll();
-    private void OnMenuCopy(object sender, RoutedEventArgs e) { /* phase 3 */ }
-    private void OnMenuSave(object sender, RoutedEventArgs e) { /* phase 3 */ }
-    private void OnMenuSaveAs(object sender, RoutedEventArgs e) { /* phase 3 */ }
+    private void OnMenuCopy(object sender, RoutedEventArgs e) => _ = CopyAsync();
+    private void OnMenuSave(object sender, RoutedEventArgs e) => _ = SaveSilentAsync();
+    private void OnMenuSaveAs(object sender, RoutedEventArgs e) => _ = SaveAsAsync();
     private void OnMenuClear(object sender, RoutedEventArgs e)
     {
         _drawing.ClearAll();

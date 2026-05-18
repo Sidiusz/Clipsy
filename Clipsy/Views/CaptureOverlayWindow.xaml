@@ -39,9 +39,7 @@
         </Grid.Resources>
 
         <Image x:Name="FrozenImage"
-               Stretch="None"
-               HorizontalAlignment="Left"
-               VerticalAlignment="Top"
+               Stretch="Fill"
                IsHitTestVisible="False" />
 
         <Path x:Name="DimPath"
