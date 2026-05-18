@@ -58,8 +58,17 @@ public sealed partial class SettingsWindow : Window
             try { _current.Activate(); } catch { }
             return;
         }
-        _current = new SettingsWindow();
-        _current.Activate();
+        try
+        {
+            _current = new SettingsWindow();
+            _current.Activate();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Clipsy] SettingsWindow open failed: {ex}");
+            _current = null;
+            NotificationService.InfoText("Clipsy", "Could not open settings: " + ex.Message);
+        }
     }
 
     private static string GetVersion()

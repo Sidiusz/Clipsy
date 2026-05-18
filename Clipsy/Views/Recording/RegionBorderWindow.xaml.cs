@@ -20,6 +20,8 @@ public sealed partial class RegionBorderWindow : Window
     private readonly AppWindow _appWindow;
     private int _curX, _curY, _curW, _curH;
 
+    public IntPtr Hwnd => _hwnd;
+
     public RegionBorderWindow()
     {
         InitializeComponent();

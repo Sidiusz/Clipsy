@@ -43,24 +43,33 @@
                IsHitTestVisible="False" />
 
         <Path x:Name="DimPath"
-              Fill="#99000000"
+              Fill="#B5000000"
               IsHitTestVisible="False">
             <Path.Data>
                 <GeometryGroup x:Name="DimGeometry" FillRule="EvenOdd" />
             </Path.Data>
         </Path>
 
+        <!-- Drawings live in root DIPs so they stay anchored to screen coords
+             when the selection is moved or resized. -->
+        <Canvas x:Name="DrawingCanvas"
+                Background="Transparent"
+                IsHitTestVisible="False" />
+
+        <Canvas x:Name="OcrLayer"
+                Background="Transparent"
+                IsHitTestVisible="False"
+                Visibility="Collapsed" />
+
         <Canvas x:Name="SelectionLayer"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
                 Visibility="Collapsed">
-            <Canvas x:Name="DrawingCanvas"
-                    Background="Transparent"
-                    IsHitTestVisible="False" />
-            <Canvas x:Name="OcrLayer"
-                    Background="Transparent"
-                    IsHitTestVisible="False"
-                    Visibility="Collapsed" />
+            <Rectangle x:Name="SelectionBorder"
+                       Stroke="#FF1F6FEB"
+                       StrokeThickness="1.5"
+                       IsHitTestVisible="False" />
+            <Canvas x:Name="HandlesLayer" />
             <Rectangle x:Name="ScanLine"
                        Height="2"
                        Fill="#FFFFEB3B"
@@ -71,11 +80,6 @@
                        Foreground="White"
                        FontSize="16"
                        Visibility="Collapsed" />
-            <Rectangle x:Name="SelectionBorder"
-                       Stroke="#FF1F6FEB"
-                       StrokeThickness="1.5"
-                       IsHitTestVisible="False" />
-            <Canvas x:Name="HandlesLayer" />
             <Canvas x:Name="CursorPreviewLayer" IsHitTestVisible="False" />
         </Canvas>
 
@@ -111,7 +115,7 @@
                     CornerRadius="10"
                     Padding="6">
                 <StackPanel Orientation="Horizontal" Spacing="4">
-                    <Button x:Name="OcrSelectAllBtn" Click="OnOcrSelectAll" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Select all">
+                    <Button x:Name="OcrSelectAllBtn" Click="OnOcrSelectAll" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Select all text">
                         <FontIcon Glyph="&#xE8B3;" FontSize="18" />
                     </Button>
                     <Button x:Name="OcrCopyBtn" Click="OnOcrCopy" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Copy text">
@@ -123,6 +127,30 @@
                     <Button x:Name="OcrExitBtn" Click="OnOcrExit" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Exit OCR (Esc)">
                         <FontIcon Glyph="&#xE711;" FontSize="18" />
                     </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- Selectable text panel for OCR results. -->
+            <Border x:Name="OcrTextPanel"
+                    Visibility="Collapsed"
+                    Background="#F01E1E1E"
+                    BorderBrush="#FF2E2E2E"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="10">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Recognized text" Foreground="#FFAAAAAA" FontSize="11" />
+                    <ScrollViewer MaxHeight="220" MaxWidth="480"
+                                  VerticalScrollBarVisibility="Auto">
+                        <TextBox x:Name="OcrTextBox"
+                                 IsReadOnly="True"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Foreground="White"
+                                 FontSize="13" />
+                    </ScrollViewer>
                 </StackPanel>
             </Border>
 
@@ -181,13 +209,13 @@
                             </MenuFlyout>
                         </Button.Flyout>
                     </Button>
-                    <ToggleButton x:Name="PencilBtn" Click="OnToolToggle" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Pencil — LMB draw, RMB erase">
+                    <ToggleButton x:Name="PencilBtn" Click="OnToolToggle" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Pencil. LMB draw, RMB erase">
                         <FontIcon Glyph="&#xE70F;" FontSize="18" />
                     </ToggleButton>
                     <ToggleButton x:Name="RectBtn" Click="OnToolToggle" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Rectangle">
-                        <FontIcon Glyph="&#xE7A8;" FontSize="18" />
+                        <FontIcon Glyph="&#xE739;" FontSize="18" />
                     </ToggleButton>
-                    <ToggleButton x:Name="TextBtn" Click="OnToolToggle" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Text">
+                    <ToggleButton x:Name="TextBtn" Click="OnToolToggle" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Text. Click to place">
                         <TextBlock Text="T" FontWeight="SemiBold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </ToggleButton>
                     <Button x:Name="OcrBtn" Click="OnOcrClick" Style="{StaticResource ToolButtonStyle}" ToolTipService.ToolTip="Find text">
@@ -200,10 +228,11 @@
         <TextBlock x:Name="Hint"
                    Text="Select area"
                    Foreground="White"
-                   FontSize="20"
-                   FontWeight="SemiLight"
+                   FontSize="28"
+                   FontWeight="SemiBold"
                    HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
+                   VerticalAlignment="Top"
+                   Margin="0,80,0,0"
                    IsHitTestVisible="False" />
 
         <Grid.ContextFlyout>

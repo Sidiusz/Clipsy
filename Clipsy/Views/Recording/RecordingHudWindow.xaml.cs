@@ -5,6 +5,8 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.Foundation;
 using Windows.Graphics;
 using WinRT.Interop;
 
@@ -12,10 +14,10 @@ namespace Clipsy.Views.Recording;
 
 public sealed partial class RecordingHudWindow : Window
 {
-    private const string GlyphPause = "";
-    private const string GlyphPlay = "";
-    private const string GlyphLock = "";
-    private const string GlyphUnlock = "";
+    private const string GlyphPause  = "";
+    private const string GlyphPlay   = "";
+    private const string GlyphLock   = "";
+    private const string GlyphUnlock = "";
 
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
@@ -26,12 +28,16 @@ public sealed partial class RecordingHudWindow : Window
     private bool _paused;
     private bool _locked = true;
 
+    private bool _draggingMove;
+    private Point _moveDragStart;
+
     public event Action? PauseRequested;
     public event Action? ResumeRequested;
     public event Action? StopRequested;
     public event Action? StopSaveRequested;
     public event Action<bool>? LockChanged;
     public event Action<bool>? DrawToggled;
+    public event Action<int, int>? MoveDeltaRequested; // dx, dy in screen pixels
 
     public RecordingHudWindow()
     {
@@ -55,6 +61,8 @@ public sealed partial class RecordingHudWindow : Window
         _hideTimer.Tick += OnHideTick;
     }
 
+    public IntPtr Hwnd => _hwnd;
+
     public void Start()
     {
         _startedAt = DateTime.UtcNow;
@@ -73,7 +81,7 @@ public sealed partial class RecordingHudWindow : Window
 
     public void PositionBelowRegion(int regionX, int regionY, int regionW, int regionH, int virtualScreenH)
     {
-        Root.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+        Root.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var size = Root.DesiredSize;
         int hudW = (int)System.Math.Ceiling(size.Width) + 4;
         int hudH = (int)System.Math.Ceiling(size.Height) + 4;
@@ -103,12 +111,13 @@ public sealed partial class RecordingHudWindow : Window
 
     private void OnHideTick(object? s, object e)
     {
+        if (_draggingMove) { Root.Opacity = 1.0; return; }
         if (!GetCursorPos(out POINT pt) || !GetWindowRect(_hwnd, out RECT wr)) return;
         int cx = (wr.Left + wr.Right) / 2;
         int cy = (wr.Top + wr.Bottom) / 2;
         double dist = System.Math.Sqrt((pt.X - cx) * (pt.X - cx) + (pt.Y - cy) * (pt.Y - cy));
         double half = System.Math.Max(wr.Right - wr.Left, wr.Bottom - wr.Top);
-        double target = dist < half * 1.6 ? 1.0 : 0.35;
+        double target = dist < half * 1.3 ? 1.0 : 0.25;
         if (System.Math.Abs(Root.Opacity - target) > 0.02)
         {
             Root.Opacity = target;
@@ -135,16 +144,48 @@ public sealed partial class RecordingHudWindow : Window
     private void OnStopClick(object sender, RoutedEventArgs e) => StopRequested?.Invoke();
     private void OnStopSaveClick(object sender, RoutedEventArgs e) => StopSaveRequested?.Invoke();
 
-    private void OnLockToggle(object sender, RoutedEventArgs e)
+    private void OnLockDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        _locked = LockBtn.IsChecked == true;
+        _locked = !_locked;
         LockIcon.Glyph = _locked ? GlyphLock : GlyphUnlock;
+        MoveBtn.Visibility = _locked ? Visibility.Collapsed : Visibility.Visible;
         LockChanged?.Invoke(_locked);
+        e.Handled = true;
     }
 
     private void OnDrawToggle(object sender, RoutedEventArgs e)
     {
         DrawToggled?.Invoke(DrawBtn.IsChecked == true);
+    }
+
+    // ---------- Move button drag ----------
+
+    private void OnMovePointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (_locked) return;
+        _draggingMove = true;
+        if (GetCursorPos(out POINT pt)) _moveDragStart = new Point(pt.X, pt.Y);
+        MoveBtn.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnMovePointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_draggingMove) return;
+        if (!GetCursorPos(out POINT pt)) return;
+        int dx = (int)(pt.X - _moveDragStart.X);
+        int dy = (int)(pt.Y - _moveDragStart.Y);
+        if (dx == 0 && dy == 0) return;
+        _moveDragStart = new Point(pt.X, pt.Y);
+        MoveDeltaRequested?.Invoke(dx, dy);
+    }
+
+    private void OnMovePointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_draggingMove) return;
+        _draggingMove = false;
+        MoveBtn.ReleasePointerCapture(e.Pointer);
+        e.Handled = true;
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }

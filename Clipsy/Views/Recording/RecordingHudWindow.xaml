@@ -41,12 +41,24 @@
             <Button x:Name="StopSaveBtn" Style="{StaticResource HudButtonStyle}" Click="OnStopSaveClick" ToolTipService.ToolTip="Stop and save">
                 <FontIcon Glyph="&#xE74E;" Foreground="#FF34C759" FontSize="18" />
             </Button>
-            <ToggleButton x:Name="DrawBtn" Style="{StaticResource HudToggleStyle}" Click="OnDrawToggle" ToolTipService.ToolTip="Draw (coming soon)">
+            <ToggleButton x:Name="DrawBtn" Style="{StaticResource HudToggleStyle}" Click="OnDrawToggle" ToolTipService.ToolTip="Draw">
                 <FontIcon Glyph="&#xE70F;" FontSize="18" />
             </ToggleButton>
-            <ToggleButton x:Name="LockBtn" Style="{StaticResource HudToggleStyle}" Click="OnLockToggle" ToolTipService.ToolTip="Lock region (double-click)" IsChecked="True">
+            <Button x:Name="MoveBtn"
+                    Style="{StaticResource HudButtonStyle}"
+                    Visibility="Collapsed"
+                    PointerPressed="OnMovePointerPressed"
+                    PointerMoved="OnMovePointerMoved"
+                    PointerReleased="OnMovePointerReleased"
+                    ToolTipService.ToolTip="Hold to drag region">
+                <FontIcon Glyph="&#xE7C2;" FontSize="18" />
+            </Button>
+            <Button x:Name="LockBtn"
+                    Style="{StaticResource HudButtonStyle}"
+                    DoubleTapped="OnLockDoubleTapped"
+                    ToolTipService.ToolTip="Double-click to lock/unlock region">
                 <FontIcon x:Name="LockIcon" Glyph="&#xE72E;" FontSize="18" />
-            </ToggleButton>
+            </Button>
         </StackPanel>
     </Border>
 </Window>

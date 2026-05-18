@@ -207,15 +207,9 @@ public sealed partial class CaptureOverlayWindow : Window
 
         if (_inOcrMode)
         {
-            if (lmb && IsInsideSelection(pos))
-            {
-                _mode = InteractionMode.SelectingOcrText;
-                _ocrDragStart = pos;
-                _ocrSelected.Clear();
-                UpdateOcrSelectionVisual();
-                RootGrid.CapturePointer(e.Pointer);
-                e.Handled = true;
-            }
+            // OCR mode owns the overlay. Text selection happens inside the
+            // floating OcrTextBox; clicks elsewhere are ignored so they
+            // don't paint, move the selection, or open menus.
             return;
         }
 
@@ -363,6 +357,12 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void OnRootRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
+        if (_inOcrMode)
+        {
+            // OCR mode owns right-click; never show the overlay context menu.
+            e.Handled = true;
+            return;
+        }
         if (_drawing.Settings.Tool != ToolKind.None && _hasSelection)
         {
             var pos = e.GetPosition(RootGrid);
@@ -426,17 +426,10 @@ public sealed partial class CaptureOverlayWindow : Window
         }
 
         SelectionLayer.Visibility = Visibility.Visible;
-        // SelectionLayer is a Canvas child of a Grid. Canvas attached
-        // properties only work when the parent is a Canvas - so on a Grid
-        // they're silently ignored and the layer collapses to (0,0) of the
-        // root, which on a multi-monitor setup with a negative virtual-X
-        // primary lands on the wrong monitor. Use Margin instead.
         SelectionLayer.Margin = new Thickness(_selectionRect.X, _selectionRect.Y, 0, 0);
         SelectionLayer.Width = _selectionRect.Width;
         SelectionLayer.Height = _selectionRect.Height;
 
-        DrawingCanvas.Width = _selectionRect.Width;
-        DrawingCanvas.Height = _selectionRect.Height;
         SelectionBorder.Width = _selectionRect.Width;
         SelectionBorder.Height = _selectionRect.Height;
         HandlesLayer.Width = _selectionRect.Width;
@@ -512,7 +505,8 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void StartToolPress(Point pos, Pointer pointer)
     {
-        var local = ToCanvas(pos);
+        // Drawings live in root DIPs so they stay fixed on screen when the
+        // selection rectangle moves or resizes.
         switch (_drawing.Settings.Tool)
         {
             case ToolKind.Pencil:
@@ -525,11 +519,11 @@ public sealed partial class CaptureOverlayWindow : Window
                     StrokeEndLineCap = PenLineCap.Round,
                     StrokeLineJoin = PenLineJoin.Round,
                 };
-                _activeStrokeVisual.Points.Add(local);
+                _activeStrokeVisual.Points.Add(pos);
                 _activeStroke = new StrokeElement
                 {
                     Visual = _activeStrokeVisual,
-                    Points = new List<Point> { local },
+                    Points = new List<Point> { pos },
                     Thickness = _drawing.Settings.PencilThickness,
                 };
                 DrawingCanvas.Children.Add(_activeStrokeVisual);
@@ -537,7 +531,7 @@ public sealed partial class CaptureOverlayWindow : Window
                 break;
             case ToolKind.Rectangle:
                 _mode = InteractionMode.DrawingRect;
-                _activeRectAnchor = local;
+                _activeRectAnchor = pos;
                 _activeRectVisual = new Microsoft.UI.Xaml.Shapes.Rectangle
                 {
                     Stroke = new SolidColorBrush(_drawing.Settings.Color),
@@ -545,14 +539,16 @@ public sealed partial class CaptureOverlayWindow : Window
                     Width = 0,
                     Height = 0,
                 };
-                Canvas.SetLeft(_activeRectVisual, local.X);
-                Canvas.SetTop(_activeRectVisual, local.Y);
+                Canvas.SetLeft(_activeRectVisual, pos.X);
+                Canvas.SetTop(_activeRectVisual, pos.Y);
                 DrawingCanvas.Children.Add(_activeRectVisual);
                 RootGrid.CapturePointer(pointer);
                 break;
             case ToolKind.Text:
-                _mode = InteractionMode.PlacingText;
-                StartTextEntry(local);
+                // Click-to-place: do not enter a drag mode and do not capture
+                // the pointer. PointerReleased resets _mode to Idle, and the
+                // TextBox keeps focus until LostFocus / Enter / Esc.
+                StartTextEntry(pos);
                 break;
         }
     }
@@ -560,9 +556,8 @@ public sealed partial class CaptureOverlayWindow : Window
     private void ExtendStroke(Point pos)
     {
         if (_activeStroke == null || _activeStrokeVisual == null) return;
-        var local = ToCanvas(pos);
-        _activeStroke.Points.Add(local);
-        _activeStrokeVisual.Points.Add(local);
+        _activeStroke.Points.Add(pos);
+        _activeStrokeVisual.Points.Add(pos);
     }
 
     private void FinishStroke()
@@ -577,11 +572,10 @@ public sealed partial class CaptureOverlayWindow : Window
     private void UpdateActiveRect(Point pos)
     {
         if (_activeRectVisual == null) return;
-        var local = ToCanvas(pos);
-        double x = System.Math.Min(_activeRectAnchor.X, local.X);
-        double y = System.Math.Min(_activeRectAnchor.Y, local.Y);
-        double w = System.Math.Abs(local.X - _activeRectAnchor.X);
-        double h = System.Math.Abs(local.Y - _activeRectAnchor.Y);
+        double x = System.Math.Min(_activeRectAnchor.X, pos.X);
+        double y = System.Math.Min(_activeRectAnchor.Y, pos.Y);
+        double w = System.Math.Abs(pos.X - _activeRectAnchor.X);
+        double h = System.Math.Abs(pos.Y - _activeRectAnchor.Y);
         Canvas.SetLeft(_activeRectVisual, x);
         Canvas.SetTop(_activeRectVisual, y);
         _activeRectVisual.Width = w;
@@ -616,11 +610,14 @@ public sealed partial class CaptureOverlayWindow : Window
         _activeRectVisual = null;
     }
 
-    private void StartTextEntry(Point local)
+    private void StartTextEntry(Point pos)
     {
+        // Commit any prior entry before opening a new one.
+        if (_activeTextBox != null) CommitText();
+
         var tb = new TextBox
         {
-            MinWidth = 60,
+            MinWidth = 80,
             AcceptsReturn = false,
             Background = new SolidColorBrush(Color.FromArgb(160, 0, 0, 0)),
             Foreground = new SolidColorBrush(_drawing.Settings.Color),
@@ -629,8 +626,8 @@ public sealed partial class CaptureOverlayWindow : Window
             FontSize = _drawing.Settings.TextSize,
             Padding = new Thickness(4, 2, 4, 2),
         };
-        Canvas.SetLeft(tb, local.X);
-        Canvas.SetTop(tb, local.Y);
+        Canvas.SetLeft(tb, pos.X);
+        Canvas.SetTop(tb, pos.Y);
         DrawingCanvas.Children.Add(tb);
         _activeTextBox = tb;
         tb.LostFocus += (_, _) => CommitText();
@@ -639,7 +636,11 @@ public sealed partial class CaptureOverlayWindow : Window
             if (ke.Key == VirtualKey.Enter) { ke.Handled = true; CommitText(); }
             else if (ke.Key == VirtualKey.Escape) { ke.Handled = true; CancelText(); }
         };
-        DrawingCanvas.IsHitTestVisible = true; // so the textbox can receive input
+        // Eat pointer events so RootGrid handlers don't re-trigger StartToolPress
+        // when the user clicks inside the active text box.
+        tb.PointerPressed += (_, ev) => ev.Handled = true;
+        tb.PointerReleased += (_, ev) => ev.Handled = true;
+        DrawingCanvas.IsHitTestVisible = true;
         tb.Focus(FocusState.Programmatic);
     }
 
@@ -653,7 +654,6 @@ public sealed partial class CaptureOverlayWindow : Window
         _activeTextBox = null;
         DrawingCanvas.Children.Remove(owning);
         DrawingCanvas.IsHitTestVisible = false;
-        _mode = InteractionMode.Idle;
         if (string.IsNullOrWhiteSpace(text)) return;
         var tb = new TextBlock
         {
@@ -684,13 +684,11 @@ public sealed partial class CaptureOverlayWindow : Window
         DrawingCanvas.Children.Remove(_activeTextBox);
         _activeTextBox = null;
         DrawingCanvas.IsHitTestVisible = false;
-        _mode = InteractionMode.Idle;
     }
 
     private void TryEraseAt(Point rootPos)
     {
-        var local = ToCanvas(rootPos);
-        var hit = _drawing.HitTestTopmost(local, EraserRadius);
+        var hit = _drawing.HitTestTopmost(rootPos, EraserRadius);
         if (hit != null) _drawing.Remove(hit);
     }
 
@@ -720,11 +718,13 @@ public sealed partial class CaptureOverlayWindow : Window
                 _drawing.Redo();
                 return;
             case VirtualKey.S when ctrl:
+                if (_inOcrMode) return; // do not steal save during OCR
                 e.Handled = true;
                 _ = SaveSilentAsync();
                 return;
             case VirtualKey.C when ctrl:
                 e.Handled = true;
+                if (_inOcrMode) { _ = CopyOcrTextAsync(); return; }
                 _ = CopyAsync();
                 return;
         }
@@ -974,12 +974,16 @@ public sealed partial class CaptureOverlayWindow : Window
         _inOcrMode = true;
         SetTool(ToolKind.None);
         BottomToolbar.Visibility = Visibility.Collapsed;
-        RightToolbar.Visibility = Visibility.Collapsed;
+        // Right toolbar stays visible during scan but its tools become
+        // unusable so the user can't paint on top of the OCR overlay.
+        SetRightToolbarEnabled(false);
         TranslatePanel.Visibility = Visibility.Collapsed;
+        OcrTextPanel.Visibility = Visibility.Collapsed;
         ClearOcrVisuals();
         OcrStatusLabel.Visibility = Visibility.Collapsed;
         OcrLayer.Visibility = Visibility.Visible;
         OcrToolbar.Visibility = Visibility.Visible;
+        SetOcrButtonsEnabled(false); // disabled until results come back
         PositionOcrToolbar();
         StartScanAnimation();
 
@@ -1010,7 +1014,10 @@ public sealed partial class CaptureOverlayWindow : Window
         ClearOcrVisuals();
         OcrToolbar.Visibility = Visibility.Collapsed;
         TranslatePanel.Visibility = Visibility.Collapsed;
+        OcrTextPanel.Visibility = Visibility.Collapsed;
         OcrStatusLabel.Visibility = Visibility.Collapsed;
+        OcrTextBox.Text = string.Empty;
+        SetRightToolbarEnabled(true);
         if (_hasSelection)
         {
             BottomToolbar.Visibility = Visibility.Visible;
@@ -1018,8 +1025,27 @@ public sealed partial class CaptureOverlayWindow : Window
         }
     }
 
+    private void SetRightToolbarEnabled(bool enabled)
+    {
+        PencilBtn.IsEnabled = enabled;
+        RectBtn.IsEnabled = enabled;
+        TextBtn.IsEnabled = enabled;
+        ColorBtn.IsEnabled = enabled;
+        OcrBtn.IsEnabled = enabled;
+    }
+
+    private void SetOcrButtonsEnabled(bool enabled)
+    {
+        OcrSelectAllBtn.IsEnabled = enabled;
+        OcrCopyBtn.IsEnabled = enabled;
+        OcrTranslateBtn.IsEnabled = enabled;
+        OcrExitBtn.IsEnabled = true; // always reachable
+    }
+
     private void StartScanAnimation()
     {
+        // ScanLine lives inside SelectionLayer (which Margin-positions to the
+        // selection). Width tracks the selection's local size.
         ScanLine.Visibility = Visibility.Visible;
         ScanLine.Width = _selectionRect.Width;
         Canvas.SetLeft(ScanLine, 0);
@@ -1072,17 +1098,24 @@ public sealed partial class CaptureOverlayWindow : Window
             Canvas.SetTop(OcrStatusLabel, System.Math.Max(8, _selectionRect.Height / 2 - 10));
             OcrStatusLabel.Visibility = Visibility.Visible;
             _ = FadeOutLaterAsync(OcrStatusLabel, 2500);
+            SetOcrButtonsEnabled(false);
             return;
         }
+
+        // Map word bounds from source-bitmap pixels to root DIPs:
+        //   root = selection origin + (pixel / dpiScale)
+        var scale = DpiScale;
+        var ox = _selectionRect.X;
+        var oy = _selectionRect.Y;
 
         foreach (var w in words)
         {
             _ocrWordsRaw.Add(w);
             var b = new Rect(
-                w.BoundsPixels.X / DpiScale,
-                w.BoundsPixels.Y / DpiScale,
-                w.BoundsPixels.Width / DpiScale,
-                w.BoundsPixels.Height / DpiScale);
+                ox + w.BoundsPixels.X / scale,
+                oy + w.BoundsPixels.Y / scale,
+                w.BoundsPixels.Width / scale,
+                w.BoundsPixels.Height / scale);
             _ocrWordsDip.Add(b);
 
             var rect = new Microsoft.UI.Xaml.Shapes.Rectangle
@@ -1096,20 +1129,79 @@ public sealed partial class CaptureOverlayWindow : Window
             Canvas.SetTop(rect, b.Y);
             OcrLayer.Children.Add(rect);
 
-            var glyph = new TextBlock
-            {
-                Text = w.Text,
-                Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
-                FontSize = System.Math.Max(8, b.Height * 0.78),
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                IsHitTestVisible = false,
-            };
-            Canvas.SetLeft(glyph, b.X);
-            Canvas.SetTop(glyph, b.Y);
-            OcrLayer.Children.Add(glyph);
-
-            _ocrVisuals.Add((b, rect, glyph));
+            _ocrVisuals.Add((b, rect, new TextBlock()));
         }
+
+        // Build sorted, line-grouped text for the text panel.
+        OcrTextBox.Text = BuildSortedText();
+        OcrTextPanel.Visibility = Visibility.Visible;
+        PositionOcrTextPanel();
+        SetOcrButtonsEnabled(true);
+    }
+
+    private string BuildSortedText()
+    {
+        if (_ocrWordsDip.Count == 0) return string.Empty;
+        // Estimate a typical line height to group words into rows.
+        double medianH = _ocrWordsDip.Select(r => r.Height).OrderBy(h => h)
+            .ElementAt(_ocrWordsDip.Count / 2);
+        double lineTolerance = System.Math.Max(4, medianH * 0.55);
+
+        // Pair indices with bounds and sort by Y, then X.
+        var sorted = Enumerable.Range(0, _ocrWordsDip.Count)
+            .OrderBy(i => _ocrWordsDip[i].Y)
+            .ThenBy(i => _ocrWordsDip[i].X)
+            .ToList();
+
+        var sb = new StringBuilder();
+        double currentLineY = double.NaN;
+        var lineBuffer = new List<int>();
+
+        void Flush()
+        {
+            if (lineBuffer.Count == 0) return;
+            lineBuffer.Sort((a, b) => _ocrWordsDip[a].X.CompareTo(_ocrWordsDip[b].X));
+            for (int k = 0; k < lineBuffer.Count; k++)
+            {
+                if (k > 0) sb.Append(' ');
+                sb.Append(_ocrWordsRaw[lineBuffer[k]].Text);
+            }
+            sb.AppendLine();
+            lineBuffer.Clear();
+        }
+
+        foreach (var i in sorted)
+        {
+            var y = _ocrWordsDip[i].Y;
+            if (double.IsNaN(currentLineY)) currentLineY = y;
+            if (System.Math.Abs(y - currentLineY) > lineTolerance)
+            {
+                Flush();
+                currentLineY = y;
+            }
+            lineBuffer.Add(i);
+        }
+        Flush();
+        return sb.ToString().TrimEnd();
+    }
+
+    private void PositionOcrTextPanel()
+    {
+        OcrTextPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var sz = OcrTextPanel.DesiredSize;
+        double rootW = RootGrid.ActualWidth;
+        double rootH = RootGrid.ActualHeight;
+        double tx = Canvas.GetLeft(OcrToolbar);
+        double ty = Canvas.GetTop(OcrToolbar) + OcrToolbar.DesiredSize.Height + 8;
+        if (ty + sz.Height > rootH - 8)
+        {
+            ty = _selectionRect.Y - sz.Height - 12;
+            if (ty < 8) ty = 8;
+        }
+        if (tx + sz.Width > rootW - 8) tx = rootW - sz.Width - 8;
+        if (tx < 8) tx = 8;
+        Canvas.SetLeft(OcrTextPanel, tx);
+        Canvas.SetTop(OcrTextPanel, ty);
     }
 
     private void UpdateOcrDragSelection(Point pos)
@@ -1225,24 +1317,33 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void OnOcrSelectAll(object sender, RoutedEventArgs e)
     {
-        _ocrSelected.Clear();
-        for (int i = 0; i < _ocrWordsDip.Count; i++) _ocrSelected.Add(i);
-        UpdateOcrSelectionVisual();
+        OcrTextBox.Focus(FocusState.Programmatic);
+        OcrTextBox.SelectAll();
     }
 
     private async void OnOcrCopy(object sender, RoutedEventArgs e)
     {
-        var text = GetSelectedOcrText();
-        if (string.IsNullOrEmpty(text))
+        await CopyOcrTextAsync();
+    }
+
+    private async Task CopyOcrTextAsync()
+    {
+        string text = OcrTextBox.SelectionLength > 0
+            ? OcrTextBox.SelectedText
+            : OcrTextBox.Text;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        try
         {
-            OnOcrSelectAll(sender, e);
-            text = GetSelectedOcrText();
+            var dp = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            dp.SetText(text);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
+            Windows.ApplicationModel.DataTransfer.Clipboard.Flush();
         }
-        if (string.IsNullOrEmpty(text)) return;
-        var dp = new Windows.ApplicationModel.DataTransfer.DataPackage();
-        dp.SetText(text);
-        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
-        Windows.ApplicationModel.DataTransfer.Clipboard.Flush();
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] OCR copy failed: {ex.Message}");
+            return;
+        }
         OcrStatusLabel.Text = Strings.Get("Copied");
         Canvas.SetLeft(OcrStatusLabel, System.Math.Max(8, _selectionRect.Width / 2 - 30));
         Canvas.SetTop(OcrStatusLabel, 8);
@@ -1252,15 +1353,12 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private async void OnOcrTranslate(object sender, RoutedEventArgs e)
     {
-        var text = GetSelectedOcrText();
-        if (string.IsNullOrEmpty(text))
-        {
-            OnOcrSelectAll(sender, e);
-            text = GetSelectedOcrText();
-        }
-        if (string.IsNullOrEmpty(text)) return;
+        string text = OcrTextBox.SelectionLength > 0
+            ? OcrTextBox.SelectedText
+            : OcrTextBox.Text;
+        if (string.IsNullOrWhiteSpace(text)) return;
         TranslateOriginal.Text = text;
-        TranslateTarget.Text = "…";
+        TranslateTarget.Text = "...";
         TranslatePanel.Visibility = Visibility.Visible;
         PositionTranslatePanel();
         var (from, to) = TranslationService.GuessLangPair(text);

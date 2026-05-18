@@ -56,11 +56,24 @@ public sealed class RecordingController
         _hud.StopSaveRequested += OnStopSaveRequested;
         _hud.LockChanged += OnLockChanged;
         _hud.DrawToggled += OnDrawToggled;
+        _hud.MoveDeltaRequested += OnMoveDelta;
 
         int virtualScreenH = Services.ScreenFreezeService.GetVirtualScreenBounds().Height;
         _hud.PositionBelowRegion(x, y, w, h, virtualScreenH);
         _hud.Activate();
         _hud.Start();
+
+        // Hide both Clipsy windows from the capture so the red ring and the
+        // HUD never appear in the recorded MP4.
+        try
+        {
+            if (_border != null) Recorder.SetExcludeFromCapture(_border.Hwnd, true);
+            Recorder.SetExcludeFromCapture(_hud.Hwnd, true);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Clipsy] SetExcludeFromCapture failed: {ex.Message}");
+        }
 
         _service = new RecordingService();
         _service.RecordingComplete += OnRecordingComplete;
@@ -74,6 +87,24 @@ public sealed class RecordingController
             Debug.WriteLine($"[Clipsy] Recording start failed: {ex.Message}");
             NotificationService.Error("ErrRecordFailed");
             Cleanup(discardTemp: true);
+        }
+    }
+
+    private void OnMoveDelta(int dx, int dy)
+    {
+        // Visually move the border + HUD. The recorder keeps capturing the
+        // originally registered SourceRect; dynamic rect updates during a
+        // running recording are deferred to a follow-up phase.
+        _x += dx; _y += dy;
+        try
+        {
+            _border?.MoveTo(_x, _y, _w, _h);
+            var screenH = ScreenFreezeService.GetVirtualScreenBounds().Height;
+            _hud?.PositionBelowRegion(_x, _y, _w, _h, screenH);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Clipsy] Region move failed: {ex.Message}");
         }
     }
 

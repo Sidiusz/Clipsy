@@ -58,25 +58,29 @@ public static class ScreenshotRenderer
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
             g.DrawImage(src, new System.Drawing.Rectangle(0, 0, srcRect.Width, srcRect.Height),
                 srcRect, GraphicsUnit.Pixel);
-            BurnDrawings(g, elements, dpiScale);
+            BurnDrawings(g, elements, dpiScale, selectionDip.X, selectionDip.Y);
         }
         return output;
     }
 
-    private static void BurnDrawings(Graphics g, IReadOnlyList<DrawElement> elements, double scale)
+    /// <param name="offsetDipX">Subtract this from each element's X before
+    /// applying the DPI scale. Element coordinates are stored in root-overlay
+    /// DIPs; the output bitmap is sized to the cropped selection.</param>
+    private static void BurnDrawings(Graphics g, IReadOnlyList<DrawElement> elements,
+        double scale, double offsetDipX, double offsetDipY)
     {
         foreach (var el in elements)
         {
             switch (el)
             {
-                case StrokeElement s: DrawStroke(g, s, scale); break;
-                case RectangleElement r: DrawRect(g, r, scale); break;
-                case TextElement t: DrawText(g, t, scale); break;
+                case StrokeElement s: DrawStroke(g, s, scale, offsetDipX, offsetDipY); break;
+                case RectangleElement r: DrawRect(g, r, scale, offsetDipX, offsetDipY); break;
+                case TextElement t: DrawText(g, t, scale, offsetDipX, offsetDipY); break;
             }
         }
     }
 
-    private static void DrawStroke(Graphics g, StrokeElement s, double scale)
+    private static void DrawStroke(Graphics g, StrokeElement s, double scale, double ox, double oy)
     {
         if (s.Points.Count < 2) return;
         var color = ExtractStrokeColor(s);
@@ -89,29 +93,33 @@ public static class ScreenshotRenderer
         var pts = new PointF[s.Points.Count];
         for (int i = 0; i < s.Points.Count; i++)
         {
-            pts[i] = new PointF((float)(s.Points[i].X * scale), (float)(s.Points[i].Y * scale));
+            pts[i] = new PointF(
+                (float)((s.Points[i].X - ox) * scale),
+                (float)((s.Points[i].Y - oy) * scale));
         }
         g.DrawLines(pen, pts);
     }
 
-    private static void DrawRect(Graphics g, RectangleElement r, double scale)
+    private static void DrawRect(Graphics g, RectangleElement r, double scale, double ox, double oy)
     {
         var color = ExtractStrokeColor(r);
         using var pen = new Pen(color, (float)(r.Thickness * scale));
         var rect = new RectangleF(
-            (float)(r.Bounds.X * scale),
-            (float)(r.Bounds.Y * scale),
+            (float)((r.Bounds.X - ox) * scale),
+            (float)((r.Bounds.Y - oy) * scale),
             (float)(r.Bounds.Width * scale),
             (float)(r.Bounds.Height * scale));
         g.DrawRectangle(pen, rect.X, rect.Y, rect.Width, rect.Height);
     }
 
-    private static void DrawText(Graphics g, TextElement t, double scale)
+    private static void DrawText(Graphics g, TextElement t, double scale, double ox, double oy)
     {
         var color = ExtractTextColor(t);
         using var brush = new SolidBrush(color);
         using var font = new Font("Segoe UI", (float)(t.FontSize * scale * 0.75), FontStyle.Bold, GraphicsUnit.Point);
-        var pos = new PointF((float)(t.Position.X * scale), (float)(t.Position.Y * scale));
+        var pos = new PointF(
+            (float)((t.Position.X - ox) * scale),
+            (float)((t.Position.Y - oy) * scale));
         g.DrawString(t.Text, font, brush, pos);
     }
 
