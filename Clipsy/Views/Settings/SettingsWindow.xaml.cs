@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using Clipsy.Localization;
 using Clipsy.Services;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -54,15 +55,85 @@ public sealed partial class SettingsWindow : Window
         try
         {
             var appWin = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
-            appWin.Title = "Clipsy Settings";
+            appWin.Title = Strings.Get("TraySettings");
             appWin.Resize(new SizeInt32(720, 640));
             Load();
-            VersionLabel.Text = "Version " + GetVersion();
+            ApplyLocalization();
+            VersionLabel.Text = Strings.Get("VersionPrefix") + " " + GetVersion();
         }
         catch (Exception ex)
         {
             Diagnostics.Show("SettingsWindow.OnFirstActivated", ex);
         }
+    }
+
+    private void ApplyLocalization()
+    {
+        // Tab headers
+        TabGeneral.Header = Strings.Get("TabGeneral");
+        TabVideo.Header   = Strings.Get("TabVideo");
+        TabGif.Header     = Strings.Get("TabGif");
+        TabHotkeys.Header = Strings.Get("TabHotkeys");
+        TabInfo.Header    = Strings.Get("TabInfo");
+
+        // General labels
+        LblLanguage.Text         = Strings.Get("LblLanguage");
+        LblTheme.Text            = Strings.Get("LblTheme");
+        LblOcrEngine.Text        = Strings.Get("LblOcrEngine");
+        LblScreenshotFolder.Text = Strings.Get("LblScreenshotFolder");
+        LblVideoFolder.Text      = Strings.Get("LblVideoFolder");
+        RememberFolderSwitch.Header = Strings.Get("LblRememberFolder");
+        LblScreenshotFormat.Text = Strings.Get("LblScreenshotFormat");
+        LblJpgQuality.Text       = Strings.Get("LblJpgQuality");
+        LblAfterSave.Text        = Strings.Get("LblAfterSave");
+        LblUpdates.Text          = Strings.Get("LblUpdates");
+
+        // General combos
+        LangAuto.Content   = Strings.Get("OptAuto");
+        LangEn.Content     = Strings.Get("OptEnglish");
+        LangRu.Content     = Strings.Get("OptRussian");
+        ThemeAuto.Content  = Strings.Get("OptAuto");
+        ThemeDark.Content  = Strings.Get("OptDark");
+        ThemeLight.Content = Strings.Get("OptLight");
+        OcrTesseract.Content = Strings.Get("OptTesseract");
+        OcrWinRt.Content   = Strings.Get("OptWinRtOcr");
+        FmtPng.Content     = Strings.Get("OptPngLossless");
+        FmtJpg.Content     = Strings.Get("OptJpgSmaller");
+        FmtWebp.Content    = Strings.Get("OptWebpPreview");
+        AfterNothing.Content   = Strings.Get("OptDoNothing");
+        AfterOpenFile.Content  = Strings.Get("OptOpenFile");
+        AfterOpenFolder.Content= Strings.Get("OptOpenFolder");
+        UpdHourly.Content  = Strings.Get("OptHourly");
+        UpdDaily.Content   = Strings.Get("OptDaily");
+        UpdWeekly.Content  = Strings.Get("OptWeekly");
+        UpdMonthly.Content = Strings.Get("OptMonthly");
+        UpdNever.Content   = Strings.Get("OptNever");
+
+        // Video tab
+        LblCodec.Text      = Strings.Get("LblCodec");
+        LblResolution.Text = Strings.Get("LblResolution");
+        LblBitrate.Text    = Strings.Get("LblBitrate");
+        LblRegionNote.Text = Strings.Get("LblRegionNote");
+
+        // GIF tab
+        LblGifColors.Text  = Strings.Get("LblGifColors");
+        LblGifFps.Text     = Strings.Get("LblGifFps");
+        GifDitherSwitch.Header = Strings.Get("LblGifDither");
+
+        // Hotkeys tab
+        LblHotkeyHint.Text = Strings.Get("LblHotkeyHint");
+
+        // Info tab
+        LblAuthor.Text = Strings.Get("BtnAuthor");
+        BtnCheckForUpdates.Content = Strings.Get("BtnCheckForUpdates");
+
+        // Buttons
+        ScreenshotFolderPick.Content = Strings.Get("BtnBrowse");
+        VideoFolderPick.Content      = Strings.Get("BtnBrowse");
+        BtnCheckNow.Content          = Strings.Get("BtnCheckNow");
+        BtnReset.Content             = Strings.Get("BtnReset");
+        BtnClose.Content             = Strings.Get("BtnClose");
+        BtnSave.Content              = Strings.Get("BtnSave");
     }
 
     public static void ShowOrActivate()

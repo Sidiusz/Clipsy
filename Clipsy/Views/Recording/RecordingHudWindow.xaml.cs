@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using Clipsy.Localization;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -59,6 +60,17 @@ public sealed partial class RecordingHudWindow : Window
         _timer.Tick += OnTimerTick;
         _hideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _hideTimer.Tick += OnHideTick;
+        ApplyLocalization();
+    }
+
+    private void ApplyLocalization()
+    {
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(PauseBtn,    Strings.Get("TipPause"));
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(StopBtn,     Strings.Get("TipStop"));
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(StopSaveBtn, Strings.Get("TipSaveAs"));
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(DrawBtn,     Strings.Get("TipDraw"));
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(MoveBtn,     Strings.Get("TipMove"));
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(LockBtn,     Strings.Get("TipLock"));
     }
 
     public IntPtr Hwnd => _hwnd;

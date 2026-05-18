@@ -83,7 +83,7 @@ public sealed partial class CaptureOverlayWindow : Window
         TryLoadFrozenImage();
 
         _drawing = new DrawingController(DrawingCanvas);
-        Hint.Text = Strings.Get("HintSelectArea");
+        ApplyLocalization();
         BuildHandles();
         _pencilPreview = new Ellipse
         {
@@ -99,6 +99,36 @@ public sealed partial class CaptureOverlayWindow : Window
 
         BuildScreenMenu();
         Activated += OnActivated;
+    }
+
+    private void ApplyLocalization()
+    {
+        Hint.Text = Strings.Get("HintSelectArea");
+
+        ToolTipService.SetToolTip(RecordBtn,     Strings.Get("TipRecord"));
+        ToolTipService.SetToolTip(ScreenshotBtn, Strings.Get("TipScreenshot"));
+        ToolTipService.SetToolTip(CopyBtn,       Strings.Get("TipCopy"));
+        ToolTipService.SetToolTip(CancelBtn,     Strings.Get("TipCancel"));
+
+        ToolTipService.SetToolTip(ColorBtn,  Strings.Get("TipColor"));
+        ToolTipService.SetToolTip(PencilBtn, Strings.Get("TipPencil"));
+        ToolTipService.SetToolTip(RectBtn,   Strings.Get("TipRectangle"));
+        ToolTipService.SetToolTip(TextBtn,   Strings.Get("TipText"));
+        ToolTipService.SetToolTip(OcrBtn,    Strings.Get("TipOcr"));
+        ToolTipService.SetToolTip(BrushSizeSlider, Strings.Get("TipBrushSize"));
+
+        ToolTipService.SetToolTip(OcrSelectAllBtn, Strings.Get("TipOcrSelectAll"));
+        ToolTipService.SetToolTip(OcrCopyBtn,      Strings.Get("TipOcrCopy"));
+        ToolTipService.SetToolTip(OcrTranslateBtn, Strings.Get("TipOcrTranslate"));
+        ToolTipService.SetToolTip(OcrExitBtn,      Strings.Get("TipOcrExit"));
+
+        SelectScreenMenu.Text = Strings.Get("MenuSelectScreen");
+        MenuSelectAll.Text    = Strings.Get("MenuSelectAll");
+        MenuCopy.Text         = Strings.Get("MenuCopy");
+        MenuSave.Text         = Strings.Get("MenuSave");
+        MenuSaveAs.Text       = Strings.Get("MenuSaveAs");
+        MenuClear.Text        = Strings.Get("MenuClear");
+        MenuCancel.Text       = Strings.Get("MenuCancel");
     }
 
     private AppWindow GetAppWindowForCurrentWindow()
@@ -920,6 +950,7 @@ public sealed partial class CaptureOverlayWindow : Window
             var bytes = ScreenshotRenderer.RenderEncoded(_frame, _selectionRect, _drawing.Elements,
                 DpiScale, fmt, settings.Settings.JpgQuality);
             await File.WriteAllBytesAsync(fullPath, bytes);
+            AfterSaveAction.Run(fullPath, settings.Settings.AfterSaveAction);
             Close();
         }
         catch (Exception ex)
@@ -984,6 +1015,7 @@ public sealed partial class CaptureOverlayWindow : Window
                 settings.Settings.LastScreenshotFolder = dir;
                 settings.Save();
             }
+            AfterSaveAction.Run(finalPath, settings.Settings.AfterSaveAction);
             Close();
         }
         catch (Exception ex)

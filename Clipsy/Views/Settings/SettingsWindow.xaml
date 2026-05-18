@@ -16,30 +16,30 @@
                  CanReorderTabs="False"
                  TabWidthMode="SizeToContent">
 
-            <TabViewItem Header="General" IsClosable="False">
+            <TabViewItem x:Name="TabGeneral" Header="General" IsClosable="False">
                 <ScrollViewer Padding="20">
                     <StackPanel Spacing="14" MaxWidth="520" HorizontalAlignment="Left">
-                        <TextBlock Text="Language" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblLanguage" Text="Language" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <ComboBox x:Name="LangBox" Width="240">
-                            <ComboBoxItem Content="Auto-detect" Tag="auto" />
-                            <ComboBoxItem Content="English" Tag="en" />
-                            <ComboBoxItem Content="Russian" Tag="ru" />
+                            <ComboBoxItem x:Name="LangAuto" Content="Auto-detect" Tag="auto" />
+                            <ComboBoxItem x:Name="LangEn" Content="English" Tag="en" />
+                            <ComboBoxItem x:Name="LangRu" Content="Russian" Tag="ru" />
                         </ComboBox>
 
-                        <TextBlock Text="Theme" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblTheme" Text="Theme" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <ComboBox x:Name="ThemeBox" Width="240">
-                            <ComboBoxItem Content="Auto-detect" Tag="auto" />
-                            <ComboBoxItem Content="Dark" Tag="dark" />
-                            <ComboBoxItem Content="Light" Tag="light" />
+                            <ComboBoxItem x:Name="ThemeAuto" Content="Auto-detect" Tag="auto" />
+                            <ComboBoxItem x:Name="ThemeDark" Content="Dark" Tag="dark" />
+                            <ComboBoxItem x:Name="ThemeLight" Content="Light" Tag="light" />
                         </ComboBox>
 
-                        <TextBlock Text="OCR engine" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblOcrEngine" Text="OCR engine" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <ComboBox x:Name="OcrEngineBox" Width="240">
-                            <ComboBoxItem Content="Tesseract (default)" Tag="Tesseract" />
-                            <ComboBoxItem Content="Windows OCR" Tag="WinRT" />
+                            <ComboBoxItem x:Name="OcrTesseract" Content="Tesseract (default)" Tag="Tesseract" />
+                            <ComboBoxItem x:Name="OcrWinRt" Content="Windows OCR" Tag="WinRT" />
                         </ComboBox>
 
-                        <TextBlock Text="Screenshot folder" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblScreenshotFolder" Text="Screenshot folder" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <Grid ColumnSpacing="6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -49,7 +49,7 @@
                             <Button x:Name="ScreenshotFolderPick" Grid.Column="1" Content="Browse" Click="OnScreenshotFolderPick" />
                         </Grid>
 
-                        <TextBlock Text="Video folder" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblVideoFolder" Text="Video folder" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <Grid ColumnSpacing="6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -61,11 +61,11 @@
 
                         <ToggleSwitch x:Name="RememberFolderSwitch" Header="Remember last Save As folder" />
 
-                        <TextBlock Text="Screenshot format" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblScreenshotFormat" Text="Screenshot format" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <ComboBox x:Name="ScreenshotFormatBox" Width="240" SelectionChanged="OnScreenshotFormatChanged">
-                            <ComboBoxItem Content="PNG (lossless)" Tag="png" />
-                            <ComboBoxItem Content="JPEG (smaller)" Tag="jpg" />
-                            <ComboBoxItem Content="WebP (preview - falls back to PNG)" Tag="webp" />
+                            <ComboBoxItem x:Name="FmtPng" Content="PNG (lossless)" Tag="png" />
+                            <ComboBoxItem x:Name="FmtJpg" Content="JPEG (smaller)" Tag="jpg" />
+                            <ComboBoxItem x:Name="FmtWebp" Content="WebP (preview, falls back to PNG)" Tag="webp" />
                         </ComboBox>
 
                         <Grid x:Name="JpgQualityRow" ColumnSpacing="10" Visibility="Collapsed">
@@ -74,50 +74,50 @@
                                 <ColumnDefinition Width="48" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Text="JPEG quality" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock x:Name="LblJpgQuality" Text="JPEG quality" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                 <Slider x:Name="JpgQualitySlider" Minimum="50" Maximum="100" StepFrequency="1" ValueChanged="OnJpgQualityChanged" />
                             </StackPanel>
                             <TextBlock x:Name="JpgQualityLabel" Grid.Column="1" VerticalAlignment="Bottom" Margin="0,0,0,12" />
                         </Grid>
 
-                        <TextBlock Text="After save" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblAfterSave" Text="After save" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <ComboBox x:Name="AfterSaveBox" Width="240">
-                            <ComboBoxItem Content="Do nothing" Tag="nothing" />
-                            <ComboBoxItem Content="Open file" Tag="open-file" />
-                            <ComboBoxItem Content="Open folder" Tag="open-folder" />
+                            <ComboBoxItem x:Name="AfterNothing" Content="Do nothing" Tag="nothing" />
+                            <ComboBoxItem x:Name="AfterOpenFile" Content="Open file" Tag="open-file" />
+                            <ComboBoxItem x:Name="AfterOpenFolder" Content="Open folder" Tag="open-folder" />
                         </ComboBox>
 
-                        <TextBlock Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblUpdates" Text="Updates" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="240" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <ComboBox x:Name="UpdateIntervalBox" Grid.Column="0">
-                                <ComboBoxItem Content="Hourly" Tag="hourly" />
-                                <ComboBoxItem Content="Daily" Tag="daily" />
-                                <ComboBoxItem Content="Weekly" Tag="weekly" />
-                                <ComboBoxItem Content="Monthly" Tag="monthly" />
-                                <ComboBoxItem Content="Never" Tag="never" />
+                                <ComboBoxItem x:Name="UpdHourly" Content="Hourly" Tag="hourly" />
+                                <ComboBoxItem x:Name="UpdDaily" Content="Daily" Tag="daily" />
+                                <ComboBoxItem x:Name="UpdWeekly" Content="Weekly" Tag="weekly" />
+                                <ComboBoxItem x:Name="UpdMonthly" Content="Monthly" Tag="monthly" />
+                                <ComboBoxItem x:Name="UpdNever" Content="Never" Tag="never" />
                             </ComboBox>
-                            <Button Grid.Column="1" Content="Check now" Click="OnCheckUpdates" />
+                            <Button x:Name="BtnCheckNow" Grid.Column="1" Content="Check now" Click="OnCheckUpdates" />
                         </Grid>
                     </StackPanel>
                 </ScrollViewer>
             </TabViewItem>
 
-            <TabViewItem Header="Video" IsClosable="False">
+            <TabViewItem x:Name="TabVideo" Header="Video" IsClosable="False">
                 <ScrollViewer Padding="20">
                     <StackPanel Spacing="14" MaxWidth="520" HorizontalAlignment="Left">
-                        <TextBlock Text="Codec" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblCodec" Text="Codec" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <ComboBox x:Name="CodecBox" Width="240" SelectionChanged="OnCodecChanged">
-                            <ComboBoxItem Content="H.264 — wide compatibility, good compression" Tag="H.264" />
-                            <ComboBoxItem Content="H.265 — smaller files, needs HEVC support" Tag="H.265" />
-                            <ComboBoxItem Content="VP9 — open codec, web-friendly" Tag="VP9" />
-                            <ComboBoxItem Content="AV1 — smallest files, slow encoder" Tag="AV1" />
+                            <ComboBoxItem x:Name="CodecH264Item" Content="H.264, wide compatibility" Tag="H.264" />
+                            <ComboBoxItem x:Name="CodecH265Item" Content="H.265, smaller files" Tag="H.265" />
+                            <ComboBoxItem x:Name="CodecVp9Item"  Content="VP9, web-friendly"  Tag="VP9" />
+                            <ComboBoxItem x:Name="CodecAv1Item"  Content="AV1, smallest, slow encoder" Tag="AV1" />
                         </ComboBox>
 
-                        <TextBlock Text="Resolution (full-screen recording only)" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblResolution" Text="Resolution (full screen only)" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <ComboBox x:Name="ResolutionBox" Width="240" SelectionChanged="OnResolutionChanged">
                             <ComboBoxItem Content="480p" Tag="480p" />
                             <ComboBoxItem Content="720p" Tag="720p" />
@@ -125,9 +125,9 @@
                             <ComboBoxItem Content="1440p" Tag="1440p" />
                             <ComboBoxItem Content="Original" Tag="Original" />
                         </ComboBox>
-                        <TextBlock Text="Region recordings use the selection size directly." FontSize="12" Foreground="#FFAAAAAA" />
+                        <TextBlock x:Name="LblRegionNote" Text="Region recordings use the selection size directly." FontSize="12" Foreground="#FFAAAAAA" />
 
-                        <TextBlock Text="Bitrate (Mbps)" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblBitrate" Text="Bitrate (Mbps)" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <Grid ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -142,10 +142,10 @@
                 </ScrollViewer>
             </TabViewItem>
 
-            <TabViewItem Header="GIF" IsClosable="False">
+            <TabViewItem x:Name="TabGif" Header="GIF" IsClosable="False">
                 <ScrollViewer Padding="20">
                     <StackPanel Spacing="14" MaxWidth="520" HorizontalAlignment="Left">
-                        <TextBlock Text="Color count" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblGifColors" Text="Color count" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <Grid ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -155,7 +155,7 @@
                             <TextBlock x:Name="GifColorLabel" Grid.Column="1" VerticalAlignment="Center" />
                         </Grid>
 
-                        <TextBlock Text="Frame rate (fps)" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock x:Name="LblGifFps" Text="Frame rate (fps)" Style="{StaticResource BodyStrongTextBlockStyle}" />
                         <Grid ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -170,10 +170,10 @@
                 </ScrollViewer>
             </TabViewItem>
 
-            <TabViewItem Header="Hotkeys" IsClosable="False">
+            <TabViewItem x:Name="TabHotkeys" Header="Hotkeys" IsClosable="False">
                 <ScrollViewer Padding="20">
                     <StackPanel Spacing="12" MaxWidth="520" HorizontalAlignment="Left">
-                        <TextBlock Text="Click a binding to rebind. Esc is reserved." FontSize="12" Foreground="#FFAAAAAA" />
+                        <TextBlock x:Name="LblHotkeyHint" Text="Click a binding to rebind. Esc is reserved." FontSize="12" Foreground="#FFAAAAAA" />
                         <ListView x:Name="HotkeyList" SelectionMode="None">
                             <ListView.ItemTemplate>
                                 <DataTemplate>
@@ -192,14 +192,14 @@
                 </ScrollViewer>
             </TabViewItem>
 
-            <TabViewItem Header="Info" IsClosable="False">
+            <TabViewItem x:Name="TabInfo" Header="Info" IsClosable="False">
                 <ScrollViewer Padding="20">
                     <StackPanel Spacing="10" MaxWidth="520" HorizontalAlignment="Left">
                         <TextBlock Text="Clipsy" FontSize="28" FontWeight="SemiBold" />
                         <TextBlock x:Name="VersionLabel" Foreground="#FFAAAAAA" />
-                        <TextBlock Text="Author: Sidiusz" />
+                        <TextBlock x:Name="LblAuthor" Text="Author: Sidiusz" />
                         <HyperlinkButton Content="github.com/Sidiusz/Clipsy" NavigateUri="https://github.com/Sidiusz/Clipsy" />
-                        <Button Content="Check for updates" Click="OnCheckUpdates" />
+                        <Button x:Name="BtnCheckForUpdates" Content="Check for updates" Click="OnCheckUpdates" />
                     </StackPanel>
                 </ScrollViewer>
             </TabViewItem>
@@ -210,9 +210,9 @@
                 BorderThickness="0,1,0,0"
                 Padding="16,10">
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <Button Content="Reset" Click="OnReset" />
-                <Button Content="Close" Click="OnClose" />
-                <Button Content="Save" Style="{StaticResource AccentButtonStyle}" Click="OnSave" />
+                <Button x:Name="BtnReset" Content="Reset" Click="OnReset" />
+                <Button x:Name="BtnClose" Content="Close" Click="OnClose" />
+                <Button x:Name="BtnSave" Content="Save" Style="{StaticResource AccentButtonStyle}" Click="OnSave" />
             </StackPanel>
         </Border>
     </Grid>

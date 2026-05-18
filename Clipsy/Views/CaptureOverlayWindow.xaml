@@ -244,14 +244,14 @@
         <Grid.ContextFlyout>
             <MenuFlyout x:Name="OverlayMenu">
                 <MenuFlyoutSubItem x:Name="SelectScreenMenu" Text="Select screen" />
-                <MenuFlyoutItem Text="Select all" Click="OnMenuSelectAll" />
+                <MenuFlyoutItem x:Name="MenuSelectAll" Text="Select all" Click="OnMenuSelectAll" />
                 <MenuFlyoutSeparator x:Name="SelectionMenuSeparator" Visibility="Collapsed" />
                 <MenuFlyoutItem x:Name="MenuCopy" Text="Copy" Click="OnMenuCopy" Visibility="Collapsed" />
                 <MenuFlyoutItem x:Name="MenuSave" Text="Save" Click="OnMenuSave" Visibility="Collapsed" />
                 <MenuFlyoutItem x:Name="MenuSaveAs" Text="Save As" Click="OnMenuSaveAs" Visibility="Collapsed" />
                 <MenuFlyoutItem x:Name="MenuClear" Text="Clear" Click="OnMenuClear" Visibility="Collapsed" />
                 <MenuFlyoutSeparator />
-                <MenuFlyoutItem Text="Cancel" Click="OnMenuCancel" />
+                <MenuFlyoutItem x:Name="MenuCancel" Text="Cancel" Click="OnMenuCancel" />
             </MenuFlyout>
         </Grid.ContextFlyout>
     </Grid>

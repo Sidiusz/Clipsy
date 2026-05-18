@@ -205,6 +205,7 @@ public sealed class RecordingController
             TryDelete(tempPath);
             settings.Settings.LastVideoFolder = folder;
             settings.Save();
+            AfterSaveAction.Run(dest, settings.Settings.AfterSaveAction);
         }
         catch (Exception ex)
         {
@@ -257,6 +258,7 @@ public sealed class RecordingController
                 settings.Settings.LastVideoFolder = dir;
                 settings.Save();
             }
+            AfterSaveAction.Run(dest, settings.Settings.AfterSaveAction);
         }
         catch (Exception ex)
         {
