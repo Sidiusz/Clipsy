@@ -46,3 +46,6 @@ Thumbs.db
 
 # Tools cache
 .tools/
+
+# Installer output
+installer/output/
