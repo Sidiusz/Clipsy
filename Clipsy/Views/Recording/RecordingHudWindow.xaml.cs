@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using Clipsy.Localization;
+using Clipsy.Services;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -15,10 +16,10 @@ namespace Clipsy.Views.Recording;
 
 public sealed partial class RecordingHudWindow : Window
 {
-    private const string GlyphPause  = "";
-    private const string GlyphPlay   = "";
-    private const string GlyphLock   = "";
-    private const string GlyphUnlock = "";
+    private const string GlyphPause  = "\uE769";
+    private const string GlyphPlay   = "\uE768";
+    private const string GlyphLock   = "\uE72E";
+    private const string GlyphUnlock = "\uE785";
 
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
@@ -43,6 +44,7 @@ public sealed partial class RecordingHudWindow : Window
     public RecordingHudWindow()
     {
         InitializeComponent();
+        ThemeService.Register(Content as FrameworkElement);
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
         if (_appWindow.Presenter is OverlappedPresenter op)
@@ -81,6 +83,10 @@ public sealed partial class RecordingHudWindow : Window
         _accumulated = TimeSpan.Zero;
         _paused = false;
         TimerText.Text = "00:00";
+        PauseIcon.Glyph = GlyphPause;
+        LockIcon.Glyph = _locked ? GlyphLock : GlyphUnlock;
+        MoveBtn.Visibility = _locked ? Visibility.Collapsed : Visibility.Visible;
+        Root.Opacity = 1.0;
         _timer.Start();
         _hideTimer.Start();
     }
@@ -109,7 +115,8 @@ public sealed partial class RecordingHudWindow : Window
     private void SetWindowExStyle()
     {
         var ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
-        SetWindowLong(_hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+        ex |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT;
+        SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
     }
 
     private void OnTimerTick(object? s, object e)
@@ -120,17 +127,6 @@ public sealed partial class RecordingHudWindow : Window
             ? elapsed.ToString(@"hh\:mm\:ss")
             : elapsed.ToString(@"mm\:ss");
     }
-
-    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _bgClose =
-        new(Windows.UI.Color.FromArgb(0xF0, 0x1E, 0x1E, 0x1E));
-    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _bgFar =
-        new(Windows.UI.Color.FromArgb(0x40, 0x1E, 0x1E, 0x1E));
-    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _borderClose =
-        new(Windows.UI.Color.FromArgb(0xFF, 0x2E, 0x2E, 0x2E));
-    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush _borderFar =
-        new(Windows.UI.Color.FromArgb(0x40, 0x2E, 0x2E, 0x2E));
-
-    private bool _hudFar;
 
     private void OnHideTick(object? s, object e)
     {
@@ -144,14 +140,12 @@ public sealed partial class RecordingHudWindow : Window
         if (far != _hudFar) ApplyHudFar(far);
     }
 
+    private bool _hudFar;
+
     private void ApplyHudFar(bool far)
     {
         _hudFar = far;
-        // Translucent the panel itself (background + border) but keep the
-        // buttons / timer text fully opaque so they stay readable when the
-        // cursor is away from the HUD.
-        Root.Background  = far ? _bgFar : _bgClose;
-        Root.BorderBrush = far ? _borderFar : _borderClose;
+        Root.Opacity = far ? 0.60 : 1.0;
     }
 
     private void OnPauseClick(object sender, RoutedEventArgs e)
@@ -188,8 +182,6 @@ public sealed partial class RecordingHudWindow : Window
         DrawToggled?.Invoke(DrawBtn.IsChecked == true);
     }
 
-    // ---------- Move button drag ----------
-
     private void OnMovePointerPressed(object sender, PointerRoutedEventArgs e)
     {
         if (_locked) return;
@@ -223,9 +215,13 @@ public sealed partial class RecordingHudWindow : Window
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int WS_EX_LAYERED = 0x00080000;
+    private const int WS_EX_TRANSPARENT = 0x00000020;
+    private const int LWA_ALPHA = 0x00000002;
 
     [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT lpPoint);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
     [DllImport("user32.dll", SetLastError = true)] static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll", SetLastError = true)] static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [DllImport("user32.dll", SetLastError = true)] static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, int dwFlags);
 }

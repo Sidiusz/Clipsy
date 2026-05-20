@@ -42,12 +42,24 @@ public sealed class RecordingController
         return true;
     }
 
+    public void StopFromHotkey()
+    {
+        if (_stopping) return;
+        _stopping = true;
+        _stopAndSave = true;
+        _saveAsDialog = false;
+        _hud?.Shutdown();
+        _service?.Stop();
+    }
+
     private void Start(int x, int y, int w, int h)
     {
         _x = x; _y = y; _w = w; _h = h;
 
         _border = new RegionBorderWindow();
+        _border.RegionChanged += OnRegionChanged;
         _border.MoveTo(x, y, w, h);
+        _border.SetInteractive(false);
         _border.Activate();
 
         _hud = new RecordingHudWindow();
@@ -93,21 +105,8 @@ public sealed class RecordingController
 
     private void OnMoveDelta(int dx, int dy)
     {
-        // Visually move the border + HUD. The recorder keeps capturing the
-        // originally registered SourceRect; dynamic rect updates during a
-        // running recording are deferred to a follow-up phase.
         _x += dx; _y += dy;
-        try
-        {
-            _border?.MoveTo(_x, _y, _w, _h);
-            var screenH = ScreenFreezeService.GetVirtualScreenBounds().Height;
-            _hud?.PositionBelowRegion(_x, _y, _w, _h, screenH);
-            _drawWin?.MoveTo(_x, _y, _w, _h);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Clipsy] Region move failed: {ex.Message}");
-        }
+        ApplyRegionChange(_x, _y, _w, _h);
     }
 
     private void OnPauseRequested() => _service?.Pause();
@@ -122,6 +121,7 @@ public sealed class RecordingController
         _stopping = true;
         _stopAndSave = true;
         _saveAsDialog = false;
+        _hud?.Shutdown();
         _service?.Stop();
     }
 
@@ -132,10 +132,46 @@ public sealed class RecordingController
         _stopping = true;
         _stopAndSave = true;
         _saveAsDialog = true;
+        _hud?.Shutdown();
         _service?.Stop();
     }
 
-    private void OnLockChanged(bool locked) { /* phase 5: visual only */ }
+    private void OnLockChanged(bool locked)
+    {
+        try
+        {
+            _border?.SetInteractive(!locked);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Clipsy] Region lock toggle failed: {ex.Message}");
+        }
+    }
+
+    private void OnRegionChanged(int x, int y, int w, int h)
+    {
+        ApplyRegionChange(x, y, w, h);
+    }
+
+    private void ApplyRegionChange(int x, int y, int w, int h)
+    {
+        _x = x;
+        _y = y;
+        _w = w;
+        _h = h;
+        try
+        {
+            _border?.MoveTo(_x, _y, _w, _h);
+            var screenH = ScreenFreezeService.GetVirtualScreenBounds().Height;
+            _hud?.PositionBelowRegion(_x, _y, _w, _h, screenH);
+            _drawWin?.MoveTo(_x, _y, _w, _h);
+            _service?.UpdateRegion(_x, _y, _w, _h);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Clipsy] Region update failed: {ex.Message}");
+        }
+    }
 
     private void OnDrawToggled(bool on)
     {
@@ -148,9 +184,6 @@ public sealed class RecordingController
                     _drawWin = new RecordingDrawingWindow();
                     _drawWin.MoveTo(_x, _y, _w, _h);
                     _drawWin.Activate();
-                    // Match the main capture overlay's pencil defaults so users
-                    // get the same color and thickness they were drawing with.
-                    var s = SettingsService.Instance;
                     _drawWin.SetColor(Microsoft.UI.Colors.Red);
                     _drawWin.SetThickness(3.0);
                 }
