@@ -106,8 +106,8 @@ public sealed partial class CaptureOverlayWindow : Window
         BuildScreenMenu();
         Activated += OnActivated;
 
-        // Set default rectangle tool
-        SetTool(ToolKind.Rectangle);
+        // Start in region select mode (no drawing tool active)
+        SetTool(ToolKind.None);
     }
 
     private void ApplyLocalization()
