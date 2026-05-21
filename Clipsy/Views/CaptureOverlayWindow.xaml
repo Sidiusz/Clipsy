@@ -25,7 +25,7 @@
 
         <!-- Frozen desktop -->
         <Image x:Name="FrozenImage"
-               Stretch="Fill"
+               Stretch="None"
                Opacity="1.0"
                IsHitTestVisible="False" />
 

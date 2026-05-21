@@ -113,10 +113,10 @@ public static class ScreenshotRenderer
         using var srcMs = new MemoryStream(frame.PngBytes);
         using var src = new Bitmap(srcMs);
 
-        int px = (int)System.Math.Round(selectionDip.X * dpiScale);
-        int py = (int)System.Math.Round(selectionDip.Y * dpiScale);
-        int pw = System.Math.Max(1, (int)System.Math.Round(selectionDip.Width * dpiScale));
-        int ph = System.Math.Max(1, (int)System.Math.Round(selectionDip.Height * dpiScale));
+        int px = (int)System.Math.Floor(selectionDip.X * dpiScale);
+        int py = (int)System.Math.Floor(selectionDip.Y * dpiScale);
+        int pw = System.Math.Max(1, (int)System.Math.Ceiling(selectionDip.Width * dpiScale));
+        int ph = System.Math.Max(1, (int)System.Math.Ceiling(selectionDip.Height * dpiScale));
         var srcRect = new System.Drawing.Rectangle(px, py, pw, ph);
         srcRect.Intersect(new System.Drawing.Rectangle(0, 0, src.Width, src.Height));
         if (srcRect.Width == 0 || srcRect.Height == 0)
@@ -127,8 +127,10 @@ public static class ScreenshotRenderer
         var output = new Bitmap(srcRect.Width, srcRect.Height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(output))
         {
-            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
+            // Use nearest neighbor to avoid interpolation artifacts
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.SmoothingMode = SmoothingMode.None;
+            g.PixelOffsetMode = PixelOffsetMode.None;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
             g.DrawImage(src, new System.Drawing.Rectangle(0, 0, srcRect.Width, srcRect.Height),
                 srcRect, GraphicsUnit.Pixel);

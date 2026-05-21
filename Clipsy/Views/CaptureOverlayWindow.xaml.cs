@@ -209,7 +209,22 @@ public sealed partial class CaptureOverlayWindow : Window
             op.IsAlwaysOnTop = true;
         }
         var b = _frame.VirtualBounds;
-        _appWindow.MoveAndResize(new RectInt32(b.X, b.Y, b.Width, b.Height));
+
+        // Account for DPI scaling - window size should match actual pixels
+        var dpiScale = Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        var windowWidth = (int)(b.Width / dpiScale);
+        var windowHeight = (int)(b.Height / dpiScale);
+
+        _appWindow.MoveAndResize(new RectInt32(b.X, b.Y, windowWidth, windowHeight));
+
+        // Force exact window positioning using Win32 API to prevent invisible borders
+        SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, windowWidth, windowHeight,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+        // Set RootGrid and Image sizes to match frame exactly
+        RootGrid.Width = b.Width / dpiScale;
+        RootGrid.Height = b.Height / dpiScale;
+
         UpdateDimGeometry(null);
     }
 
@@ -270,6 +285,13 @@ public sealed partial class CaptureOverlayWindow : Window
             var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
             bmp.SetSource(stream);
             FrozenImage.Source = bmp;
+
+            // Set exact image dimensions accounting for DPI scaling
+            var b = _frame.VirtualBounds;
+            var dpiScale = Content?.XamlRoot?.RasterizationScale ?? 1.0;
+            FrozenImage.Width = b.Width / dpiScale;
+            FrozenImage.Height = b.Height / dpiScale;
+
             // FrozenImage opacity controlled by DimPath only
         }
         catch (Exception ex)
@@ -1812,11 +1834,18 @@ public sealed partial class CaptureOverlayWindow : Window
     [DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, uint dwNewLong);
 
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
     private const int GWL_STYLE = -16;
     private const int GWL_EXSTYLE = -20;
     private const uint WS_POPUP = 0x80000000;
     private const uint WS_EX_TOPMOST = 0x00000008;
     private const uint WS_EX_TOOLWINDOW = 0x00000080;
+
+    private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_SHOWWINDOW = 0x0040;
 
     private void UpdateOcrSelectionVisual()
     {
