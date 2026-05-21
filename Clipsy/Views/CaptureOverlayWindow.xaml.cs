@@ -679,17 +679,19 @@ public sealed partial class CaptureOverlayWindow : Window
     private void UpdateDimGeometry(Rect? hole)
     {
         DimGeometry.Children.Clear();
-        // Always add full screen dimming
-        DimGeometry.Children.Add(new RectangleGeometry { Rect = new Rect(0, 0, RootGrid.ActualWidth, RootGrid.ActualHeight) });
+        // Use frame bounds if RootGrid not yet sized
+        double w = RootGrid.ActualWidth > 0 ? RootGrid.ActualWidth : _frame.VirtualBounds.Width;
+        double h = RootGrid.ActualHeight > 0 ? RootGrid.ActualHeight : _frame.VirtualBounds.Height;
+
+        // Always add full screen dimming geometry
+        DimGeometry.Children.Add(new RectangleGeometry { Rect = new Rect(0, 0, w, h) });
 
         if (hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0)
         {
             // Add hole - EvenOdd makes selection area transparent
             DimGeometry.Children.Add(new RectangleGeometry { Rect = hole.Value });
         }
-
-        // DimPath always uses dimming brush
-        DimPath.Fill = App.Current.Resources["ClipsyOverlayDimBrush"] as SolidColorBrush;
+        // Note: DimPath.Fill is set in XAML to ClipsyOverlayDimBrush
     }
 
     private void ShowToolbars()

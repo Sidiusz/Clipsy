@@ -44,7 +44,7 @@
     <Color x:Key="ClipsyWarning">#FFF0B232</Color>
 
     <!-- Selection on capture overlay (alpha for cut-outs) -->
-    <Color x:Key="ClipsyOverlayDim">#400A0B0D</Color>
+    <Color x:Key="ClipsyOverlayDim">#800A0B0D</Color>
     <Color x:Key="ClipsyOverlayPanel">#F0232428</Color>
 
     <!-- ===== Brushes ===== -->
