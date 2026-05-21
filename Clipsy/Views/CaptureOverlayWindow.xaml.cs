@@ -242,7 +242,7 @@ public sealed partial class CaptureOverlayWindow : Window
             var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
             bmp.SetSource(stream);
             FrozenImage.Source = bmp;
-            FrozenImage.Opacity = 0.25;
+            // FrozenImage opacity controlled by DimPath only
         }
         catch (Exception ex)
         {
@@ -679,11 +679,17 @@ public sealed partial class CaptureOverlayWindow : Window
     private void UpdateDimGeometry(Rect? hole)
     {
         DimGeometry.Children.Clear();
+        // Always add full screen dimming
         DimGeometry.Children.Add(new RectangleGeometry { Rect = new Rect(0, 0, RootGrid.ActualWidth, RootGrid.ActualHeight) });
+
         if (hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0)
         {
+            // Add hole - EvenOdd makes selection area transparent
             DimGeometry.Children.Add(new RectangleGeometry { Rect = hole.Value });
         }
+
+        // DimPath always uses dimming brush
+        DimPath.Fill = App.Current.Resources["ClipsyOverlayDimBrush"] as SolidColorBrush;
     }
 
     private void ShowToolbars()

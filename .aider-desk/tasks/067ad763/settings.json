@@ -1,0 +1,19 @@
+{
+  "id": "067ad763",
+  "baseDir": "D:\\App Projects\\ClipsyCaptureApp",
+  "name": "Clipsy App",
+  "archived": false,
+  "aiderTotalCost": 0,
+  "agentTotalCost": 0,
+  "mainModel": "",
+  "currentMode": "code",
+  "weakModelLocked": false,
+  "parentId": null,
+  "autoApprove": true,
+  "agentProfileId": "c791214b-e90a-4ba6-bf07-1a31a3f6b168",
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-6",
+  "workingMode": "local",
+  "updatedAt": "2026-05-21T12:31:40.814Z",
+  "createdAt": "2026-05-21T12:31:22.511Z"
+}

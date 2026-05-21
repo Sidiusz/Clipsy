@@ -12,6 +12,7 @@ namespace Clipsy.Services;
 public sealed class RecordingService : IDisposable
 {
     private Recorder? _recorder;
+    private DisplayRecordingSource? _source;
     private string _tempPath = string.Empty;
 
     public event Action<string>? RecordingComplete;
@@ -26,7 +27,7 @@ public sealed class RecordingService : IDisposable
         Directory.CreateDirectory(tempDir);
         _tempPath = Path.Combine(tempDir, $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
 
-        var source = new DisplayRecordingSource(DisplayRecordingSource.MainMonitor)
+        _source = new DisplayRecordingSource(DisplayRecordingSource.MainMonitor)
         {
             SourceRect = new ScreenRect(x, y, width, height),
             IsCursorCaptureEnabled = true,
@@ -36,7 +37,7 @@ public sealed class RecordingService : IDisposable
         {
             SourceOptions = new SourceOptions
             {
-                RecordingSources = new List<RecordingSourceBase> { source },
+                RecordingSources = new List<RecordingSourceBase> { _source },
             },
             OutputOptions = new OutputOptions
             {
@@ -60,7 +61,11 @@ public sealed class RecordingService : IDisposable
             },
             AudioOptions = new AudioOptions
             {
-                IsAudioEnabled = false,
+                IsAudioEnabled = true,
+                IsInputDeviceEnabled = false,
+                IsOutputDeviceEnabled = true,
+                Bitrate = AudioBitrate.bitrate_128kbps,
+                Channels = AudioChannels.Stereo,
             },
             MouseOptions = new MouseOptions
             {
@@ -79,6 +84,13 @@ public sealed class RecordingService : IDisposable
     public void Pause() => _recorder?.Pause();
     public void Resume() => _recorder?.Resume();
     public void Stop() => _recorder?.Stop();
+
+
+    public void UpdateRegion(int x, int y, int width, int height)
+    {
+        if (_source == null) return;
+        _source.SourceRect = new ScreenRect(x, y, width, height);
+    }
 
     public RecorderStatus Status => _recorder?.Status ?? RecorderStatus.Idle;
 
@@ -106,6 +118,7 @@ public sealed class RecordingService : IDisposable
             _recorder.OnStatusChanged -= OnStatus;
             _recorder.Dispose();
             _recorder = null;
+            _source = null;
         }
     }
 }

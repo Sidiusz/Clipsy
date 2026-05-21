@@ -149,6 +149,8 @@ public static class ScreenshotRenderer
             {
                 case StrokeElement s: DrawStroke(g, s, scale, offsetDipX, offsetDipY); break;
                 case RectangleElement r: DrawRect(g, r, scale, offsetDipX, offsetDipY); break;
+                case EllipseElement ellipse: DrawEllipse(g, ellipse, scale, offsetDipX, offsetDipY); break;
+                case LineElement line: DrawLine(g, line, scale, offsetDipX, offsetDipY); break;
                 case TextElement t: DrawText(g, t, scale, offsetDipX, offsetDipY); break;
             }
         }
@@ -184,6 +186,32 @@ public static class ScreenshotRenderer
             (float)(r.Bounds.Width * scale),
             (float)(r.Bounds.Height * scale));
         g.DrawRectangle(pen, rect.X, rect.Y, rect.Width, rect.Height);
+    }
+
+    private static void DrawEllipse(Graphics g, EllipseElement el, double scale, double ox, double oy)
+    {
+        var color = ExtractStrokeColor(el);
+        using var pen = new Pen(color, (float)(el.Thickness * scale));
+        var rect = new RectangleF(
+            (float)((el.Bounds.X - ox) * scale),
+            (float)((el.Bounds.Y - oy) * scale),
+            (float)(el.Bounds.Width * scale),
+            (float)(el.Bounds.Height * scale));
+        g.DrawEllipse(pen, rect);
+    }
+
+    private static void DrawLine(Graphics g, LineElement line, double scale, double ox, double oy)
+    {
+        var color = ExtractStrokeColor(line);
+        using var pen = new Pen(color, (float)(line.Thickness * scale))
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round,
+        };
+        var a = new PointF((float)((line.Start.X - ox) * scale), (float)((line.Start.Y - oy) * scale));
+        var b = new PointF((float)((line.End.X - ox) * scale), (float)((line.End.Y - oy) * scale));
+        g.DrawLine(pen, a, b);
     }
 
     private static void DrawText(Graphics g, TextElement t, double scale, double ox, double oy)

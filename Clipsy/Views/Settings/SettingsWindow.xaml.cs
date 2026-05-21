@@ -12,6 +12,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using Windows.System;
@@ -21,11 +22,62 @@ namespace Clipsy.Views.Settings;
 
 public sealed partial class SettingsWindow : Window
 {
-    public sealed class HotkeyRow
+    public sealed class HotkeyRow : System.ComponentModel.INotifyPropertyChanged
     {
         public required string Key { get; init; }
         public required string Label { get; init; }
-        public string Binding { get; set; } = string.Empty;
+
+        private string _binding = string.Empty;
+        public string Binding
+        {
+            get => _binding;
+            set { if (_binding != value) { _binding = value; OnChanged(); } }
+        }
+
+        private bool _isRebinding;
+        public bool IsRebinding
+        {
+            get => _isRebinding;
+            set
+            {
+                if (_isRebinding == value) return;
+                _isRebinding = value;
+                OnChanged();
+                OnChanged(nameof(IdleVisibility));
+                OnChanged(nameof(RebindingVisibility));
+                OnChanged(nameof(RowBackground));
+                OnChanged(nameof(BindingBackground));
+                OnChanged(nameof(BindingBorderBrush));
+                OnChanged(nameof(BindingForeground));
+            }
+        }
+
+        public Visibility IdleVisibility      => IsRebinding ? Visibility.Collapsed : Visibility.Visible;
+        public Visibility RebindingVisibility => IsRebinding ? Visibility.Visible   : Visibility.Collapsed;
+
+        public Brush RowBackground =>
+            IsRebinding
+                ? (Brush)Application.Current.Resources["ClipsyAccentDimBrush"]
+                : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+
+        public Brush BindingBackground =>
+            IsRebinding
+                ? (Brush)Application.Current.Resources["ClipsyBgInputBrush"]
+                : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+
+        public Brush BindingBorderBrush =>
+            IsRebinding
+                ? (Brush)Application.Current.Resources["ClipsyAccentBrush"]
+                : (Brush)Application.Current.Resources["ClipsyBorderBrush"];
+
+        public Brush BindingForeground =>
+            IsRebinding
+                ? (Brush)Application.Current.Resources["ClipsyAccentBrush"]
+                : (Brush)Application.Current.Resources["ClipsyText2Brush"];
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        private void OnChanged([System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name ?? string.Empty));
     }
 
     private static SettingsWindow? _current;
@@ -41,6 +93,7 @@ public sealed partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
+        ThemeService.ApplyTo(Content as FrameworkElement);
         _hwnd = WindowNative.GetWindowHandle(this);
         _draft = SettingsService.Instance.Settings.Clone();
         HotkeyList.ItemsSource = _hotkeyRows;
@@ -59,6 +112,7 @@ public sealed partial class SettingsWindow : Window
             appWin.Resize(new SizeInt32(720, 640));
             Load();
             ApplyLocalization();
+            ThemeService.ApplyTo(Content as FrameworkElement);
             VersionLabel.Text = Strings.Get("VersionPrefix") + " " + GetVersion();
         }
         catch (Exception ex)
@@ -69,14 +123,12 @@ public sealed partial class SettingsWindow : Window
 
     private void ApplyLocalization()
     {
-        // Tab headers
-        TabGeneral.Header = Strings.Get("TabGeneral");
-        TabVideo.Header   = Strings.Get("TabVideo");
-        TabGif.Header     = Strings.Get("TabGif");
-        TabHotkeys.Header = Strings.Get("TabHotkeys");
-        TabInfo.Header    = Strings.Get("TabInfo");
+        NavGeneralLabel.Text  = Strings.Get("TabGeneral");
+        NavVideoLabel.Text    = Strings.Get("TabVideo");
+        NavGifLabel.Text      = Strings.Get("TabGif");
+        NavHotkeysLabel.Text  = Strings.Get("TabHotkeys");
+        NavInfoLabel.Text     = Strings.Get("TabInfo");
 
-        // General labels
         LblLanguage.Text         = Strings.Get("LblLanguage");
         LblTheme.Text            = Strings.Get("LblTheme");
         LblOcrEngine.Text        = Strings.Get("LblOcrEngine");
@@ -88,7 +140,6 @@ public sealed partial class SettingsWindow : Window
         LblAfterSave.Text        = Strings.Get("LblAfterSave");
         LblUpdates.Text          = Strings.Get("LblUpdates");
 
-        // General combos
         LangAuto.Content   = Strings.Get("OptAuto");
         LangEn.Content     = Strings.Get("OptEnglish");
         LangRu.Content     = Strings.Get("OptRussian");
@@ -109,25 +160,20 @@ public sealed partial class SettingsWindow : Window
         UpdMonthly.Content = Strings.Get("OptMonthly");
         UpdNever.Content   = Strings.Get("OptNever");
 
-        // Video tab
         LblCodec.Text      = Strings.Get("LblCodec");
         LblResolution.Text = Strings.Get("LblResolution");
         LblBitrate.Text    = Strings.Get("LblBitrate");
         LblRegionNote.Text = Strings.Get("LblRegionNote");
 
-        // GIF tab
         LblGifColors.Text  = Strings.Get("LblGifColors");
         LblGifFps.Text     = Strings.Get("LblGifFps");
         GifDitherSwitch.Header = Strings.Get("LblGifDither");
 
-        // Hotkeys tab
         LblHotkeyHint.Text = Strings.Get("LblHotkeyHint");
 
-        // Info tab
         LblAuthor.Text = Strings.Get("BtnAuthor");
         BtnCheckForUpdates.Content = Strings.Get("BtnCheckForUpdates");
 
-        // Buttons
         ScreenshotFolderPick.Content = Strings.Get("BtnBrowse");
         VideoFolderPick.Content      = Strings.Get("BtnBrowse");
         BtnCheckNow.Content          = Strings.Get("BtnCheckNow");
@@ -157,11 +203,8 @@ public sealed partial class SettingsWindow : Window
 
     private static string GetVersion()
     {
-        var v = Assembly.GetExecutingAssembly().GetName().Version;
-        return v == null ? "0.1.0" : $"{v.Major}.{v.Minor}.{v.Build}";
+        return UpdateService.CurrentVersion();
     }
-
-    // ---------- Load / Save ----------
 
     private void Load()
     {
@@ -175,10 +218,15 @@ public sealed partial class SettingsWindow : Window
             ? SettingsService.Instance.DefaultVideoFolder
             : _draft.VideoFolder!;
         RememberFolderSwitch.IsOn = _draft.RememberLastFolder;
+        
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
+        
+        JpgQualitySlider.Minimum = 50;
+        JpgQualitySlider.Maximum = 100;
         JpgQualitySlider.Value = System.Math.Clamp(_draft.JpgQuality, 50, 100);
         JpgQualityLabel.Text = ((int)JpgQualitySlider.Value).ToString();
         UpdateJpgQualityRowVisibility();
+        
         SelectComboByTag(AfterSaveBox, _draft.AfterSaveAction);
         SelectComboByTag(UpdateIntervalBox, _draft.UpdateInterval);
 
@@ -188,10 +236,16 @@ public sealed partial class SettingsWindow : Window
         BitrateSlider.Value = System.Math.Clamp(_draft.VideoBitrateMbps, (int)BitrateSlider.Minimum, (int)BitrateSlider.Maximum);
         UpdateBitrateLabel();
 
-        GifColorSlider.Value = _draft.GifColors;
+        GifColorSlider.Minimum = 16;
+        GifColorSlider.Maximum = 256;
+        GifColorSlider.Value = System.Math.Clamp(_draft.GifColors, 16, 256);
         GifColorLabel.Text = ((int)GifColorSlider.Value).ToString();
-        GifFpsSlider.Value = _draft.GifFps;
+        
+        GifFpsSlider.Minimum = 5;
+        GifFpsSlider.Maximum = 30;
+        GifFpsSlider.Value = System.Math.Clamp(_draft.GifFps, 5, 30);
         GifFpsLabel.Text = ((int)GifFpsSlider.Value).ToString();
+        
         GifDitherSwitch.IsOn = _draft.GifDither;
 
         BuildHotkeyRows();
@@ -268,8 +322,6 @@ public sealed partial class SettingsWindow : Window
         _hotkeyRows.Add(new HotkeyRow { Key = "record-save", Label = "Save recording (silent)", Binding = _draft.HotkeyRecordSilentSave });
     }
 
-    // ---------- Folder pickers ----------
-
     private async void OnScreenshotFolderPick(object sender, RoutedEventArgs e)
     {
         var path = await PickFolderAsync(ScreenshotFolderBox.Text);
@@ -312,9 +364,7 @@ public sealed partial class SettingsWindow : Window
         });
     }
 
-    // ---------- Video / GIF sliders ----------
-
-    private void OnCodecChanged(object sender, SelectionChangedEventArgs e) { /* codec change has no immediate UI dep */ }
+    private void OnCodecChanged(object sender, SelectionChangedEventArgs e) { }
 
     private void OnScreenshotFormatChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -351,6 +401,8 @@ public sealed partial class SettingsWindow : Window
             _ => 16,
         };
         BitrateSlider.Maximum = max;
+        if (BitrateSlider.Value < 1) BitrateSlider.Value = 1;
+        BitrateSlider.Minimum = 1;
         if (BitrateSlider.Value > max) BitrateSlider.Value = max;
     }
 
@@ -361,9 +413,9 @@ public sealed partial class SettingsWindow : Window
 
     private void UpdateBitrateLabel()
     {
+        if (BitrateLabel == null || EstFileSizeLabel == null || BitrateSlider == null) return;
         int mbps = (int)BitrateSlider.Value;
         BitrateLabel.Text = mbps + " Mbps";
-        // bytes/minute = mbps * 1e6 / 8 * 60
         double mbPerMin = mbps * 60.0 / 8.0;
         long rounded = (long)System.Math.Round(mbPerMin / 10.0) * 10;
         if (rounded == 0) rounded = 10;
@@ -372,15 +424,13 @@ public sealed partial class SettingsWindow : Window
 
     private void OnGifColorChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
-        GifColorLabel.Text = ((int)GifColorSlider.Value).ToString();
+        if (GifColorLabel != null) GifColorLabel.Text = ((int)GifColorSlider.Value).ToString();
     }
 
     private void OnGifFpsChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
-        GifFpsLabel.Text = ((int)GifFpsSlider.Value).ToString();
+        if (GifFpsLabel != null) GifFpsLabel.Text = ((int)GifFpsSlider.Value).ToString();
     }
-
-    // ---------- Hotkey rebind ----------
 
     private void OnHotkeyRebindClick(object sender, RoutedEventArgs e)
     {
@@ -456,20 +506,19 @@ public sealed partial class SettingsWindow : Window
         return (s & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
     }
 
-    // ---------- Footer ----------
-
     private void OnSave(object sender, RoutedEventArgs e)
     {
         try
         {
             Collect();
             SettingsService.Instance.Replace(_draft);
+            ThemeService.ApplyTo(Content as FrameworkElement);
+            NotificationService.Info("SettingsSaved");
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[Clipsy] Settings save failed: {ex.Message}");
         }
-        Close();
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
@@ -478,6 +527,7 @@ public sealed partial class SettingsWindow : Window
     {
         _draft = new AppSettings();
         Load();
+        ThemeService.ApplyTo(Content as FrameworkElement);
     }
 
     private async void OnCheckUpdates(object sender, RoutedEventArgs e)
@@ -485,8 +535,6 @@ public sealed partial class SettingsWindow : Window
         try { await Clipsy.App.Current.CheckUpdatesIfDueAsync(force: true); }
         catch (Exception ex) { Debug.WriteLine($"[Clipsy] Forced update check failed: {ex.Message}"); }
     }
-
-    // ---------- Win32 folder picker ----------
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct BROWSEINFO
@@ -507,4 +555,16 @@ public sealed partial class SettingsWindow : Window
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SHGetPathFromIDListW(IntPtr pidl, IntPtr pszPath);
+
+    private void OnNavSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (NavList?.SelectedItem is not ListViewItem item) return;
+        var key = item.Tag as string;
+
+        PaneGeneral.Visibility = key == "general" ? Visibility.Visible : Visibility.Collapsed;
+        PaneVideo.Visibility   = key == "video"   ? Visibility.Visible : Visibility.Collapsed;
+        PaneGif.Visibility     = key == "gif"     ? Visibility.Visible : Visibility.Collapsed;
+        PaneHotkeys.Visibility = key == "hotkeys" ? Visibility.Visible : Visibility.Collapsed;
+        PaneInfo.Visibility    = key == "info"    ? Visibility.Visible : Visibility.Collapsed;
+    }
 }

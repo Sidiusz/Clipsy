@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Input;
 using Clipsy.Localization;
+using Clipsy.Services;
 using H.NotifyIcon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -27,6 +28,7 @@ public sealed partial class MainWindow : Window
         CaptureCommand = new RelayCommand(() => CaptureRequested?.Invoke());
         TrayRightClickCommand = new RelayCommand(ShowTrayMenu);
         InitializeComponent();
+        ThemeService.Register(Content as Microsoft.UI.Xaml.FrameworkElement);
         Hwnd = WindowNative.GetWindowHandle(this);
         TrySetTrayIcon();
         WireTrayCommands();

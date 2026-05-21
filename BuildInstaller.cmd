@@ -20,7 +20,23 @@ if errorlevel 1 (
     exit /b 1
 )
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" %*
+set "VERSION_FILE=%REPO_DIR%version"
+if not exist "%VERSION_FILE%" set "VERSION_FILE=%REPO_DIR%installer\version.txt"
+set "CLIPSY_VERSION="
+
+echo(%* | findstr /I /C:"-Version" /C:"/Version" >nul
+if errorlevel 1 (
+    if exist "%VERSION_FILE%" (
+        for /f "usebackq delims=" %%V in (`powershell.exe -NoProfile -Command "(Get-Content -LiteralPath '%VERSION_FILE%' -Raw).Trim()"`) do set "CLIPSY_VERSION=%%V"
+    )
+    if defined CLIPSY_VERSION (
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" -Version "%CLIPSY_VERSION%" %*
+    ) else (
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" %*
+    )
+) else (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" %*
+)
 set "RC=%ERRORLEVEL%"
 
 echo.

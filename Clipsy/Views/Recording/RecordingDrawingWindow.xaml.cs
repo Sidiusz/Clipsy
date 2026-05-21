@@ -12,21 +12,21 @@ using Windows.Foundation;
 using Windows.Graphics;
 using Windows.UI;
 using WinRT.Interop;
+using Clipsy.Services;
 
 namespace Clipsy.Views.Recording;
 
 /// <summary>
 /// Transparent click-through overlay over the recording region. Magenta
-/// background (#FFFF00FF) is set as the layered window color key, so the
-/// Canvas appears fully transparent except where strokes are painted.
+/// background is used as the layered window color key, so the Canvas
+/// appears fully transparent except where strokes are painted.
 /// WS_EX_TRANSPARENT is toggled to switch between draw mode (the user can
 /// click and paint) and pass-through mode (clicks fall through to the app
 /// being recorded). The screen recorder picks up the rendered strokes
-/// naturally - we do not call SetExcludeFromCapture on this window.
+/// naturally.
 /// </summary>
 public sealed partial class RecordingDrawingWindow : Window
 {
-    private const uint ColorKeyMagenta = 0x00FF00FF; // BGR colorref for magenta
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_LAYERED     = 0x00080000;
     private const int WS_EX_TRANSPARENT = 0x00000020;
@@ -46,6 +46,7 @@ public sealed partial class RecordingDrawingWindow : Window
     public RecordingDrawingWindow()
     {
         InitializeComponent();
+        ThemeService.Register(Content as FrameworkElement);
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
         if (_appWindow.Presenter is OverlappedPresenter op)
@@ -86,7 +87,7 @@ public sealed partial class RecordingDrawingWindow : Window
     {
         var ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
         SetWindowLong(_hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
-        SetLayeredWindowAttributes(_hwnd, ColorKeyMagenta, 255, LWA_COLORKEY);
+        SetLayeredWindowAttributes(_hwnd, 0x00FF00FF, 0, LWA_COLORKEY);
     }
 
     private void SetClickThrough(bool clickThrough)
@@ -95,8 +96,7 @@ public sealed partial class RecordingDrawingWindow : Window
         var ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
         ex = clickThrough ? ex | WS_EX_TRANSPARENT : ex & ~WS_EX_TRANSPARENT;
         SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
-        // Re-assert layered attrs after style flip in case the kernel re-resolves it.
-        SetLayeredWindowAttributes(_hwnd, ColorKeyMagenta, 255, LWA_COLORKEY);
+        SetLayeredWindowAttributes(_hwnd, 0x00FF00FF, 0, LWA_COLORKEY);
     }
 
     private void OnPointerPressedHandler(object sender, PointerRoutedEventArgs e)
