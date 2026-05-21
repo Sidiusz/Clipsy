@@ -62,6 +62,9 @@ public sealed partial class CaptureOverlayWindow : Window
 
     // OCR state
     private bool _inOcrMode;
+
+    // Current shape tool for shapes button
+    private ToolKind _currentShapeTool = ToolKind.Rectangle;
     private readonly List<(Rect bounds, Microsoft.UI.Xaml.Shapes.Rectangle box, TextBlock glyph)> _ocrVisuals = new();
     private readonly List<OcrWord> _ocrWordsRaw = new();
     private readonly List<Rect> _ocrWordsDip = new();
@@ -76,6 +79,10 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         _frame = frame;
         InitializeComponent();
+
+        // Set window background to transparent to prevent white borders
+        this.SystemBackdrop = null;
+
         ThemeService.Register(RootGrid);
 
         _hwnd = WindowNative.GetWindowHandle(this);
@@ -105,6 +112,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
         BuildScreenMenu();
         Activated += OnActivated;
+        RootGrid.SizeChanged += OnRootGridSizeChanged;
 
         // Start in region select mode (no drawing tool active)
         SetTool(ToolKind.None);
@@ -209,10 +217,21 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         try
         {
+            // Disable window rounding
             int donotround = 1;
             DwmSetWindowAttribute(_hwnd, 33, ref donotround, sizeof(int));
+
+            // Disable non-client area rendering
             int ncDisabled = 1;
             DwmSetWindowAttribute(_hwnd, 2, ref ncDisabled, sizeof(int));
+
+            // Remove all window borders completely
+            int borderless = 1;
+            DwmSetWindowAttribute(_hwnd, 20, ref borderless, sizeof(int)); // DWMWA_WINDOW_CORNER_PREFERENCE
+
+            // Set window style to remove all borders
+            SetWindowLong(_hwnd, GWL_STYLE, WS_POPUP);
+            SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_TOOLWINDOW);
         }
         catch (Exception ex)
         {
@@ -224,6 +243,15 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         if (FrozenImage.Source == null) TryLoadFrozenImage();
         RootGrid.Focus(FocusState.Programmatic);
+
+        // Update dimming geometry after window is fully loaded
+        UpdateDimGeometry(null);
+    }
+
+    private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // Update dimming geometry when window size changes
+        UpdateDimGeometry(_hasSelection ? _selectionRect : null);
     }
 
     private void TryLoadFrozenImage()
@@ -252,9 +280,38 @@ public sealed partial class CaptureOverlayWindow : Window
 
     // ---------- Handles ----------
 
+    private bool _shapesClickHandled = false;
+
+    private void OnShapesClick(object sender, RoutedEventArgs e)
+    {
+        _shapesClickHandled = true;
+
+        // Cancel hover timer to prevent flyout opening after click
+        if (_hoverTimer != null)
+        {
+            _hoverTimer.Stop();
+            _hoverTimer.Tick -= OnHoverTimerTick;
+            _hoverTimer = null;
+        }
+
+        // Hide flyout if it's open
+        if (ShapesFlyout != null)
+        {
+            ShapesFlyout.Visibility = Visibility.Collapsed;
+        }
+
+        // Select current shape tool on shapes button click
+        SetTool(_currentShapeTool);
+
+        // Reset flag after short delay
+        var resetTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        resetTimer.Tick += (s, args) => { _shapesClickHandled = false; resetTimer.Stop(); };
+        resetTimer.Start();
+    }
+
     private void OnShapesPointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        if (ShapesFlyout == null || ShapesBtn == null) return;
+        if (ShapesFlyout == null || ShapesBtn == null || _shapesClickHandled) return;
 
         // Cancel any existing timer
         if (_hoverTimer != null)
@@ -265,7 +322,7 @@ public sealed partial class CaptureOverlayWindow : Window
         }
 
         // Start hover delay timer
-        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _hoverTimer.Tick += OnHoverTimerTick;
         _hoverTimer.Start();
     }
@@ -280,14 +337,36 @@ public sealed partial class CaptureOverlayWindow : Window
         }
 
         if (ShapesFlyout == null || ShapesBtn == null) return;
-        try
+
+        // Show flyout and position it next to shapes button
+        ShapesFlyout.Visibility = Visibility.Visible;
+        PositionShapesFlyout();
+    }
+
+    private void PositionShapesFlyout()
+    {
+        if (ShapesFlyout == null || ShapesBtn == null) return;
+
+        ShapesFlyout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var flyoutSize = ShapesFlyout.DesiredSize;
+
+        // Get shapes button position
+        var transform = ShapesBtn.TransformToVisual(RootGrid);
+        var buttonPos = transform.TransformPoint(new Point(0, 0));
+
+        // Position flyout to the right of shapes button
+        double x = buttonPos.X + ShapesBtn.ActualWidth + 8;
+        double y = buttonPos.Y + (ShapesBtn.ActualHeight - flyoutSize.Height) / 2;
+
+        // Keep flyout within screen bounds
+        if (x + flyoutSize.Width > RootGrid.ActualWidth - 8)
         {
-            ShapesFlyout.ShowAt(ShapesBtn);
+            x = buttonPos.X - flyoutSize.Width - 8; // Show on left side
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Shapes flyout open failed: {ex.Message}");
-        }
+        y = System.Math.Clamp(y, 8, System.Math.Max(8, RootGrid.ActualHeight - flyoutSize.Height - 8));
+
+        Canvas.SetLeft(ShapesFlyout, x);
+        Canvas.SetTop(ShapesFlyout, y);
     }
 
     private void OnShapesPointerExited(object sender, PointerRoutedEventArgs e)
@@ -300,8 +379,42 @@ public sealed partial class CaptureOverlayWindow : Window
             _hoverTimer = null;
         }
 
-        // Don't hide flyout immediately - let flyout handle its own exit
-        // This prevents flickering when cursor moves from button to flyout
+        // Start timer to hide flyout after small delay
+        // This allows cursor to move to flyout without closing it
+        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        _hoverTimer.Tick += (s, args) => {
+            if (ShapesFlyout != null)
+            {
+                ShapesFlyout.Visibility = Visibility.Collapsed;
+            }
+            _hoverTimer?.Stop();
+            if (_hoverTimer != null)
+            {
+                _hoverTimer.Tick -= OnHoverTimerTick;
+                _hoverTimer = null;
+            }
+        };
+        _hoverTimer.Start();
+    }
+
+    private void OnShapesFlyoutPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        // Cancel any hide timer when cursor enters flyout
+        if (_hoverTimer != null)
+        {
+            _hoverTimer.Stop();
+            _hoverTimer.Tick -= OnHoverTimerTick;
+            _hoverTimer = null;
+        }
+    }
+
+    private void OnShapesFlyoutPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        // Hide flyout when cursor leaves flyout area
+        if (ShapesFlyout != null)
+        {
+            ShapesFlyout.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void OnShapePick(object sender, RoutedEventArgs e)
@@ -317,10 +430,13 @@ public sealed partial class CaptureOverlayWindow : Window
             _ => ToolKind.None,
         };
         SetTool(tool);
-        if (ShapesFlyout != null)
+
+        // Update current shape tool if it's a shape
+        if (tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
         {
-            try { ShapesFlyout.Hide(); } catch { }
+            _currentShapeTool = tool;
         }
+        // Don't close flyout - let user pick multiple shapes or hover away to close
     }
 
     private void BuildHandles()
@@ -679,9 +795,14 @@ public sealed partial class CaptureOverlayWindow : Window
     private void UpdateDimGeometry(Rect? hole)
     {
         DimGeometry.Children.Clear();
-        // Use frame bounds if RootGrid not yet sized
-        double w = RootGrid.ActualWidth > 0 ? RootGrid.ActualWidth : _frame.VirtualBounds.Width;
-        double h = RootGrid.ActualHeight > 0 ? RootGrid.ActualHeight : _frame.VirtualBounds.Height;
+
+        // Use actual window client area size, not frame bounds
+        double w = RootGrid.ActualWidth;
+        double h = RootGrid.ActualHeight;
+
+        // Fallback to frame bounds only if RootGrid not measured yet
+        if (w <= 0) w = _frame.VirtualBounds.Width;
+        if (h <= 0) h = _frame.VirtualBounds.Height;
 
         // Always add full screen dimming geometry
         DimGeometry.Children.Add(new RectangleGeometry { Rect = new Rect(0, 0, w, h) });
@@ -1139,24 +1260,25 @@ public sealed partial class CaptureOverlayWindow : Window
         ShapesBtn.Background = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line ? selectedBrush : normalBrush;
 
         // Show/hide shapes in flyout - selected shape is hidden, others visible
-        RectBtn.Visibility = tool == ToolKind.Rectangle ? Visibility.Collapsed : Visibility.Visible;
-        EllipseBtn.Visibility = tool == ToolKind.Ellipse ? Visibility.Collapsed : Visibility.Visible;
-        LineBtn.Visibility = tool == ToolKind.Line ? Visibility.Collapsed : Visibility.Visible;
+        // Use _currentShapeTool to determine which shape is currently selected
+        RectBtn.Visibility = _currentShapeTool == ToolKind.Rectangle ? Visibility.Collapsed : Visibility.Visible;
+        EllipseBtn.Visibility = _currentShapeTool == ToolKind.Ellipse ? Visibility.Collapsed : Visibility.Visible;
+        LineBtn.Visibility = _currentShapeTool == ToolKind.Line ? Visibility.Collapsed : Visibility.Visible;
 
-        // Update shapes icon based on selected tool
-        if (tool == ToolKind.Rectangle)
+        // Update shapes icon based on current shape tool
+        if (_currentShapeTool == ToolKind.Rectangle)
         {
             ShapeIconRect.Visibility = Visibility.Visible;
             ShapeIconEllipse.Visibility = Visibility.Collapsed;
             ShapeIconLine.Visibility = Visibility.Collapsed;
         }
-        else if (tool == ToolKind.Ellipse)
+        else if (_currentShapeTool == ToolKind.Ellipse)
         {
             ShapeIconRect.Visibility = Visibility.Collapsed;
             ShapeIconEllipse.Visibility = Visibility.Visible;
             ShapeIconLine.Visibility = Visibility.Collapsed;
         }
-        else if (tool == ToolKind.Line)
+        else if (_currentShapeTool == ToolKind.Line)
         {
             ShapeIconRect.Visibility = Visibility.Collapsed;
             ShapeIconEllipse.Visibility = Visibility.Collapsed;
@@ -1467,7 +1589,7 @@ public sealed partial class CaptureOverlayWindow : Window
         TextBtn.IsEnabled = enabled;
         if (!enabled && ShapesFlyout != null)
         {
-            try { ShapesFlyout.Hide(); } catch { }
+            ShapesFlyout.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -1686,6 +1808,15 @@ public sealed partial class CaptureOverlayWindow : Window
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int pvAttribute, int cbAttribute);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, uint dwNewLong);
+
+    private const int GWL_STYLE = -16;
+    private const int GWL_EXSTYLE = -20;
+    private const uint WS_POPUP = 0x80000000;
+    private const uint WS_EX_TOPMOST = 0x00000008;
+    private const uint WS_EX_TOOLWINDOW = 0x00000080;
 
     private void UpdateOcrSelectionVisual()
     {

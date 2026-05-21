@@ -49,3 +49,7 @@ Thumbs.db
 
 # Installer output
 installer/output/
+
+# Clipsy project specific
+Clipsy/bin/
+Clipsy/obj/
