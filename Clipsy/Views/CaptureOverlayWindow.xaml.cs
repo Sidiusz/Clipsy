@@ -1139,8 +1139,7 @@ public sealed partial class CaptureOverlayWindow : Window
         ShapesBtn.Background = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line ? selectedBrush : normalBrush;
 
         // Show/hide shapes in flyout - selected shape is hidden, others visible
-        // Rectangle hides when selected OR when no tool selected (since it's default)
-        RectBtn.Visibility = (tool == ToolKind.Rectangle || tool == ToolKind.None) ? Visibility.Collapsed : Visibility.Visible;
+        RectBtn.Visibility = tool == ToolKind.Rectangle ? Visibility.Collapsed : Visibility.Visible;
         EllipseBtn.Visibility = tool == ToolKind.Ellipse ? Visibility.Collapsed : Visibility.Visible;
         LineBtn.Visibility = tool == ToolKind.Line ? Visibility.Collapsed : Visibility.Visible;
 
