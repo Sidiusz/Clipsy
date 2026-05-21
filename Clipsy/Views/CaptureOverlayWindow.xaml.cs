@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -166,8 +166,10 @@ public sealed partial class CaptureOverlayWindow : Window
                 var primaryCenterX = (primaryWidth / 2) - virtualX;
                 var primaryTopY = 72 - virtualY;
 
-                // Center hint on primary monitor
-                Hint.Margin = new Thickness(primaryCenterX - 100, primaryTopY, 0, 0);
+                // Center hint on primary monitor - measure actual width
+                Hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                var hintWidth = Hint.DesiredSize.Width;
+                Hint.Margin = new Thickness(primaryCenterX - (hintWidth / 2), primaryTopY, 0, 0);
             }
             else
             {
@@ -263,7 +265,7 @@ public sealed partial class CaptureOverlayWindow : Window
         }
 
         // Start hover delay timer
-        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _hoverTimer.Tick += OnHoverTimerTick;
         _hoverTimer.Start();
     }
@@ -297,6 +299,9 @@ public sealed partial class CaptureOverlayWindow : Window
             _hoverTimer.Tick -= OnHoverTimerTick;
             _hoverTimer = null;
         }
+
+        // Don't hide flyout immediately - let flyout handle its own exit
+        // This prevents flickering when cursor moves from button to flyout
     }
 
     private void OnShapePick(object sender, RoutedEventArgs e)
@@ -1126,19 +1131,36 @@ public sealed partial class CaptureOverlayWindow : Window
         ShapesBtn.Background = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line ? selectedBrush : normalBrush;
 
         // Show/hide shapes in flyout - selected shape is hidden, others visible
-        RectBtn.Visibility = tool == ToolKind.Rectangle ? Visibility.Collapsed : Visibility.Visible;
+        // Rectangle hides when selected OR when no tool selected (since it's default)
+        RectBtn.Visibility = (tool == ToolKind.Rectangle || tool == ToolKind.None) ? Visibility.Collapsed : Visibility.Visible;
         EllipseBtn.Visibility = tool == ToolKind.Ellipse ? Visibility.Collapsed : Visibility.Visible;
         LineBtn.Visibility = tool == ToolKind.Line ? Visibility.Collapsed : Visibility.Visible;
 
         // Update shapes icon based on selected tool
         if (tool == ToolKind.Rectangle)
-            ShapeIcon.Glyph = ""; // Rectangle
+        {
+            ShapeIconRect.Visibility = Visibility.Visible;
+            ShapeIconEllipse.Visibility = Visibility.Collapsed;
+            ShapeIconLine.Visibility = Visibility.Collapsed;
+        }
         else if (tool == ToolKind.Ellipse)
-            ShapeIcon.Glyph = ""; // Circle
+        {
+            ShapeIconRect.Visibility = Visibility.Collapsed;
+            ShapeIconEllipse.Visibility = Visibility.Visible;
+            ShapeIconLine.Visibility = Visibility.Collapsed;
+        }
         else if (tool == ToolKind.Line)
-            ShapeIcon.Glyph = ""; // Line
+        {
+            ShapeIconRect.Visibility = Visibility.Collapsed;
+            ShapeIconEllipse.Visibility = Visibility.Collapsed;
+            ShapeIconLine.Visibility = Visibility.Visible;
+        }
         else
-            ShapeIcon.Glyph = ""; // Default rectangle
+        {
+            ShapeIconRect.Visibility = Visibility.Visible;
+            ShapeIconEllipse.Visibility = Visibility.Collapsed;
+            ShapeIconLine.Visibility = Visibility.Collapsed;
+        }
 
         if (tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
         {
@@ -1790,3 +1812,8 @@ public sealed partial class CaptureOverlayWindow : Window
         catch { /* ignore */ }
     }
 }
+
+
+
+
+
