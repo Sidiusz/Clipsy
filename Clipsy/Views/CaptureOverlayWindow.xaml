@@ -31,7 +31,7 @@
 
         <!-- Even-odd dim cut-out for the selected region -->
         <Path x:Name="DimPath"
-              Fill="Transparent"
+              Fill="{StaticResource ClipsyOverlayDimBrush}"
               IsHitTestVisible="False">
             <Path.Data>
                 <GeometryGroup x:Name="DimGeometry" FillRule="EvenOdd" />
