@@ -283,6 +283,7 @@
                                         <TextBlock x:Name="LblJpgQuality" Text="JPEG quality"
                                                    Style="{StaticResource ClipsyBodyStrong}" />
                                         <Slider x:Name="JpgQualitySlider" StepFrequency="1"
+                                                Minimum="1" Maximum="100" Value="85"
                                                 ValueChanged="OnJpgQualityChanged"
                                                 VerticalAlignment="Center" />
                                     </StackPanel>
@@ -397,6 +398,7 @@
                                             <ColumnDefinition Width="64" />
                                         </Grid.ColumnDefinitions>
                                         <Slider x:Name="BitrateSlider" Grid.Column="0" StepFrequency="1"
+                                                Minimum="1" Maximum="50" Value="8"
                                                 ValueChanged="OnBitrateChanged" />
                                         <TextBlock x:Name="BitrateLabel" Grid.Column="1"
                                                    VerticalAlignment="Center"
@@ -448,6 +450,7 @@
                                             <ColumnDefinition Width="48" />
                                         </Grid.ColumnDefinitions>
                                         <Slider x:Name="GifColorSlider" Grid.Column="0" StepFrequency="16"
+                                                Minimum="16" Maximum="256" Value="128"
                                                 ValueChanged="OnGifColorChanged" />
                                         <TextBlock x:Name="GifColorLabel" Grid.Column="1"
                                                    VerticalAlignment="Center"
@@ -472,6 +475,7 @@
                                             <ColumnDefinition Width="48" />
                                         </Grid.ColumnDefinitions>
                                         <Slider x:Name="GifFpsSlider" Grid.Column="0" StepFrequency="1"
+                                                Minimum="1" Maximum="30" Value="12"
                                                 ValueChanged="OnGifFpsChanged" />
                                         <TextBlock x:Name="GifFpsLabel" Grid.Column="1"
                                                    VerticalAlignment="Center"
