@@ -2,28 +2,20 @@
 Date: 2026-05-21
 
 ## Done
-- Fixed capture overlay dimming behavior with proper transparency levels
-- Reduced overlay dimming opacity from 60% to 50% for better visibility
-- Removed double dimming from FrozenImage opacity settings
-- Fixed selection area to be 100% transparent without additional dimming layers
-- Ensured dimming stays consistent during selection process
-- Fixed SettingsWindow XAML parsing errors by adding Minimum, Maximum, Value properties to all sliders
-- Fixed shapes flyout visibility logic so Rectangle shows when not selected
-- Removed incorrect logic that hid Rectangle when no tool was selected
-- Updated dimming geometry initialization to use frame bounds when RootGrid not sized
+- Fixed shapes flyout to show only unselected shapes (Circle/Line when Rectangle is default)
+- Removed white border from capture overlay window using Win32 API calls
+- Added WS_POPUP and WS_EX_TOOLWINDOW styles to remove system frames
+- Updated dimming geometry to use actual window size instead of frame bounds
+- Added screen capture delay and quality settings to prevent artifacts
+- Fixed white pixel artifacts in screenshots by using Floor/Ceiling instead of Round
+- Changed screenshot rendering to use NearestNeighbor interpolation
+- Added SetWindowPos API call to force exact window positioning
+- Committed and pushed changes to GitHub repository
 - Built and tested application with all overlay behavior fixes
-- Committed changes to git repository and pushed to remote
-- Fixed shapes flyout positioning from bottom to right placement
-- Implemented custom hover behavior for shapes button with 200ms delay
-- Added manual flyout positioning with PositionShapesFlyout method
-- Fixed flyout blocking button hover events by adding proper event handling
-- Fixed flyout closing when cursor moves between button and flyout areas
-- Added PointerEntered/PointerExited handlers to Border element of shapes flyout
-- Resolved issue where flyout disappeared when hovering over background between buttons
 
 ## Todo
-- Test settings window functionality after slider fixes
-- Verify shapes flyout behavior works correctly in production
+- Test that invisible pixels at bottom and right edges are resolved
+- Verify shapes flyout behavior works correctly in all scenarios
 - Continue with remaining development tasks from previous sessions
 
 ## Issues
