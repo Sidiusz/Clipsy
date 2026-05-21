@@ -21,7 +21,7 @@ public sealed class RecordingController
     public static bool IsRecording => _current != null;
 
     private readonly DispatcherQueue _ui;
-    private RegionBorderWindow? _border;
+    private Win32BorderOverlay? _border;
     private RecordingHudWindow? _hud;
     private RecordingDrawingWindow? _drawWin;
     private RecordingService? _service;
@@ -56,11 +56,8 @@ public sealed class RecordingController
     {
         _x = x; _y = y; _w = w; _h = h;
 
-        _border = new RegionBorderWindow();
-        _border.RegionChanged += OnRegionChanged;
-        _border.MoveTo(x, y, w, h);
-        _border.SetInteractive(false);
-        _border.Activate();
+        _border = new Win32BorderOverlay();
+        _border.Create(x, y, w, h);
 
         _hud = new RecordingHudWindow();
         _hud.PauseRequested += OnPauseRequested;
@@ -80,7 +77,7 @@ public sealed class RecordingController
         // HUD never appear in the recorded MP4.
         try
         {
-            if (_border != null) Recorder.SetExcludeFromCapture(_border.Hwnd, true);
+            // Win32BorderOverlay doesn't need exclude from capture
             Recorder.SetExcludeFromCapture(_hud.Hwnd, true);
         }
         catch (Exception ex)
@@ -140,7 +137,7 @@ public sealed class RecordingController
     {
         try
         {
-            _border?.SetInteractive(!locked);
+            // Win32BorderOverlay is not interactive
         }
         catch (Exception ex)
         {
@@ -305,7 +302,7 @@ public sealed class RecordingController
         {
             _hud?.Shutdown();
             _hud?.Close();
-            _border?.Close();
+            _border?.Destroy();
             _drawWin?.Close();
             _service?.Dispose();
             if (discardTemp && _service != null && !string.IsNullOrEmpty(_service.TempPath))

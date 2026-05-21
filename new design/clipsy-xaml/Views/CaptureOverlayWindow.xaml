@@ -14,7 +14,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Grid x:Name="RootGrid"
-          Background="Transparent"
+          Background="{StaticResource ClipsyOverlayDimBrush}"
           IsTabStop="True"
           KeyDown="OnKeyDown"
           PointerPressed="OnRootPointerPressed"
@@ -26,12 +26,12 @@
         <!-- Frozen desktop -->
         <Image x:Name="FrozenImage"
                Stretch="Fill"
-               Opacity="1.0"
+               Opacity="0.30"
                IsHitTestVisible="False" />
 
         <!-- Even-odd dim cut-out for the selected region -->
         <Path x:Name="DimPath"
-              Fill="Transparent"
+              Fill="{StaticResource ClipsyOverlayDimBrush}"
               IsHitTestVisible="False">
             <Path.Data>
                 <GeometryGroup x:Name="DimGeometry" FillRule="EvenOdd" />
@@ -84,14 +84,7 @@
                             Style="{StaticResource ClipsyIconButtonDanger}"
                             Click="OnRecordClick"
                             ToolTipService.ToolTip="Record">
-                        <Grid>
-                            <Ellipse Width="18" Height="18"
-                                   Stroke="{StaticResource ClipsyDangerBrush}"
-                                   StrokeThickness="2"
-                                   Fill="Transparent" />
-                            <Ellipse Width="10" Height="10"
-                                   Fill="{StaticResource ClipsyDangerBrush}" />
-                        </Grid>
+                        <Ellipse Width="10" Height="10" Fill="{StaticResource ClipsyDangerBrush}" />
                     </Button>
                     <Button x:Name="ScreenshotBtn"
                             Style="{StaticResource ClipsyIconButton}"
@@ -265,30 +258,16 @@
                     <Button x:Name="ShapesBtn"
                             Style="{StaticResource ClipsyIconButton}"
                             PointerEntered="OnShapesPointerEntered"
-                            PointerExited="OnShapesPointerExited"
                             ToolTipService.ToolTip="Shapes">
-                        <Grid x:Name="ShapeIconContainer">
-                            <Rectangle x:Name="ShapeIconRect" Width="14" Height="14"
-                                       Stroke="{StaticResource ClipsyText2Brush}"
-                                       StrokeThickness="1.5" />
-                            <Ellipse x:Name="ShapeIconEllipse" Width="14" Height="14"
-                                     Stroke="{StaticResource ClipsyText2Brush}"
-                                     StrokeThickness="1.5"
-                                     Visibility="Collapsed" />
-                            <Line x:Name="ShapeIconLine" X1="2" Y1="14" X2="14" Y2="2"
-                                  Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5"
-                                  Visibility="Collapsed" />
-                        </Grid>
+                        <FontIcon Glyph="&#xE739;" FontSize="16" />
                         <Button.Flyout>
                             <Flyout x:Name="ShapesFlyout" Placement="Right">
-                                                <StackPanel Orientation="Horizontal" Spacing="2" Margin="4,2">
+                                <StackPanel Spacing="2">
                                     <Button x:Name="RectBtn"
                                             Style="{StaticResource ClipsyIconButton}"
                                             Click="OnShapePick" Tag="Rectangle"
                                             ToolTipService.ToolTip="Rectangle">
-                                        <Rectangle Width="14" Height="14"
-                                                   Stroke="{StaticResource ClipsyText2Brush}"
-                                                   StrokeThickness="1.5" />
+                                        <FontIcon Glyph="&#xE739;" FontSize="16" />
                                     </Button>
                                     <Button x:Name="EllipseBtn"
                                             Style="{StaticResource ClipsyIconButton}"
@@ -330,9 +309,9 @@
                 Background="{StaticResource ClipsyBg1Brush}"
                 BorderBrush="{StaticResource ClipsyBorderBrush}"
                 BorderThickness="1"
-                CornerRadius="8"
+                CornerRadius="999"
                 Padding="18,10"
-                HorizontalAlignment="Left"
+                HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 Margin="0,72,0,0"
                 IsHitTestVisible="False">

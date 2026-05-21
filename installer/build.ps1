@@ -10,6 +10,7 @@
 
 .PARAMETER Version
     Override the version that ends up in the installer file name.
+    If omitted, the script reads the repo-root version file.
 
 .PARAMETER Configuration
     Build configuration. Default Release.
@@ -26,7 +27,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = "0.1.0",
+    [string]$Version,
     [string]$Configuration = "Release",
     [switch]$SkipInnoInstall
 )
@@ -37,6 +38,33 @@ $project    = Join-Path $repoRoot "Clipsy\Clipsy.csproj"
 $publishDir = Join-Path $repoRoot "Clipsy\bin\publish\win-x64"
 $iss        = Join-Path $PSScriptRoot "Clipsy.iss"
 $outputDir  = Join-Path $PSScriptRoot "output"
+$versionFile = Join-Path $repoRoot "version"
+$legacyVersionTxt = Join-Path $PSScriptRoot "version.txt"
+$syncScript = Join-Path $PSScriptRoot "sync_version.ps1"
+
+function Resolve-Version {
+    param([string]$RequestedVersion)
+
+    if ($RequestedVersion) { return $RequestedVersion.Trim() }
+
+    if (Test-Path -LiteralPath $versionFile) {
+        $fileVersion = (Get-Content -LiteralPath $versionFile -Raw).Trim()
+        if ($fileVersion) { return $fileVersion }
+    }
+
+    if (Test-Path -LiteralPath $legacyVersionTxt) {
+        $fileVersion = (Get-Content -LiteralPath $legacyVersionTxt -Raw).Trim()
+        if ($fileVersion) { return $fileVersion }
+    }
+
+    $csprojText = Get-Content -LiteralPath $project -Raw
+    if ($csprojText -match '<Version>(.*?)</Version>') {
+        $fromProject = $Matches[1].Trim()
+        if ($fromProject) { return $fromProject }
+    }
+
+    return "1.0.0"
+}
 
 function Find-Iscc {
     $pf   = $env:ProgramFiles
@@ -100,6 +128,15 @@ function Install-InnoSetup {
     $found = Find-Iscc
     if (-not $found) { throw "Inno Setup install ran but ISCC.exe is still missing." }
     return $found
+}
+
+$Version = Resolve-Version $Version
+
+# Keep all versioned files aligned and repair app.manifest if it was corrupted by
+# an earlier script run.
+if (Test-Path -LiteralPath $syncScript) {
+    & $syncScript -Root $repoRoot -Version $Version
+    if ($LASTEXITCODE -ne 0) { throw "Version sync failed with exit $LASTEXITCODE" }
 }
 
 # ---------- Publish ----------

@@ -1,9 +1,10 @@
-; Clipsy — Inno Setup script
-; Compile with: ISCC.exe installer\Clipsy.iss
+﻿; Compile with: ISCC.exe installer\Clipsy.iss
 ; Expects publish output at: Clipsy\bin\publish\win-x64
 
 #define ClipsyName "Clipsy"
-#define ClipsyVersion "0.1.0"
+#ifndef ClipsyVersion
+#define ClipsyVersion "1.0.0"
+#endif
 #define ClipsyPublisher "Sidiusz"
 #define ClipsyURL "https://github.com/Sidiusz/Clipsy"
 #define ClipsyExeName "Clipsy.exe"
@@ -13,7 +14,7 @@
 #endif
 
 [Setup]
-AppId={{E5F4D9A0-9F4A-4B3D-9F5E-3B7C0E2B7F11}
+AppId={{E5F4D9A0-9F4A-4B3D-9F5E-3B7C0E2B7F11}}
 AppName={#ClipsyName}
 AppVersion={#ClipsyVersion}
 AppPublisher={#ClipsyPublisher}
@@ -63,3 +64,5 @@ Filename: "{app}\{#ClipsyExeName}"; Description: "{cm:LaunchProgram,{#ClipsyName
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{localappdata}\Clipsy"
+
+

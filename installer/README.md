@@ -9,6 +9,7 @@ The script is plain text — no IDE required.
 installer/
   Clipsy.iss      Inno Setup script
   build.ps1       Orchestrator: dotnet publish + ISCC compile
+  sync_version.ps1 Version sync helper used by build.bat
   output/         Generated .exe lands here
   README.md       This file
 ```

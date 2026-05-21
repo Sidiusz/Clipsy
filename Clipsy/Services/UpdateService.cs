@@ -15,7 +15,7 @@ public static class UpdateService
     static UpdateService()
     {
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("Clipsy/0.1 (+github.com/Sidiusz/Clipsy)");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd($"Clipsy/{CurrentVersion()} (+github.com/Sidiusz/Clipsy)");
         _http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
     }
 

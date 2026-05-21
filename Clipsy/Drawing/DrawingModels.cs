@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 using Windows.UI;
 
@@ -10,16 +11,64 @@ public enum ToolKind
     None,
     Pencil,
     Rectangle,
+    Ellipse,
+    Line,
     Text,
 }
 
 public sealed class DrawingSettings
 {
+    private const double MinBrushSize = 1.0;
+    private const double MaxBrushSize = 64.0;
+    private double _brushSize = 3.0;
+
     public ToolKind Tool { get; set; } = ToolKind.None;
     public Color Color { get; set; } = Microsoft.UI.Colors.Red;
-    public double PencilThickness { get; set; } = 3.0;
-    public double RectangleThickness { get; set; } = 2.0;
-    public double TextSize { get; set; } = 18.0;
+
+    /// <summary>
+    /// Single size parameter that drives all drawing tools.
+    /// Pencil/shape thickness, text size, and preview size derive from it.
+    /// </summary>
+    public double BrushSize
+    {
+        get => _brushSize;
+        set => _brushSize = ClampBrush(value);
+    }
+
+    public double PencilThickness
+    {
+        get => BrushSize;
+        set => BrushSize = value;
+    }
+
+    public double RectangleThickness
+    {
+        get => System.Math.Max(1.0, BrushSize * 0.7);
+        set => BrushSize = value / 0.7;
+    }
+
+    public double EllipseThickness
+    {
+        get => System.Math.Max(1.0, BrushSize * 0.7);
+        set => BrushSize = value / 0.7;
+    }
+
+    public double LineThickness
+    {
+        get => System.Math.Max(1.0, BrushSize * 0.7);
+        set => BrushSize = value / 0.7;
+    }
+
+    public double TextSize
+    {
+        get => System.Math.Max(8.0, BrushSize * 6.0);
+        set => BrushSize = value / 6.0;
+    }
+
+    public double PreviewDiameter => System.Math.Max(8.0, BrushSize * 2.0 + 4.0);
+
+    private static double ClampBrush(double value)
+        => System.Math.Clamp(value, MinBrushSize, MaxBrushSize);
 }
 
 public abstract class DrawElement
@@ -64,7 +113,12 @@ public sealed class StrokeElement : DrawElement
     {
         double dx = b.X - a.X, dy = b.Y - a.Y;
         double lenSq = dx * dx + dy * dy;
-        if (lenSq < 1e-6) { dx = p.X - a.X; dy = p.Y - a.Y; return System.Math.Sqrt(dx * dx + dy * dy); }
+        if (lenSq < 1e-6)
+        {
+            dx = p.X - a.X;
+            dy = p.Y - a.Y;
+            return System.Math.Sqrt(dx * dx + dy * dy);
+        }
         double t = ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lenSq;
         if (t < 0) t = 0; else if (t > 1) t = 1;
         double cx = a.X + t * dx, cy = a.Y + t * dy;
@@ -88,6 +142,75 @@ public sealed class RectangleElement : DrawElement
         bool insideInner = p.X >= b.X + radius + Thickness && p.X <= b.X + b.Width - radius - Thickness
                         && p.Y >= b.Y + radius + Thickness && p.Y <= b.Y + b.Height - radius - Thickness;
         return insideOuter && !insideInner;
+    }
+}
+
+public sealed class EllipseElement : DrawElement
+{
+    public required Rect Bounds { get; init; }
+    public double Thickness { get; init; }
+
+    public override Rect BoundingBox => Bounds;
+
+    public override bool HitTest(Point p, double radius)
+    {
+        var b = Bounds;
+        double cx = b.X + b.Width * 0.5;
+        double cy = b.Y + b.Height * 0.5;
+        double rx = b.Width * 0.5;
+        double ry = b.Height * 0.5;
+        if (rx <= 0.0 || ry <= 0.0) return false;
+
+        double nx = (p.X - cx) / rx;
+        double ny = (p.Y - cy) / ry;
+        double outer = nx * nx + ny * ny;
+        double shrinkX = System.Math.Max(1.0, rx - (radius + Thickness));
+        double shrinkY = System.Math.Max(1.0, ry - (radius + Thickness));
+        double inx = (p.X - cx) / shrinkX;
+        double iny = (p.Y - cy) / shrinkY;
+        double inner = inx * inx + iny * iny;
+        return outer <= 1.0 && inner >= 1.0;
+    }
+}
+
+public sealed class LineElement : DrawElement
+{
+    public required Point Start { get; init; }
+    public required Point End { get; init; }
+    public double Thickness { get; init; }
+
+    public override Rect BoundingBox
+    {
+        get
+        {
+            double minX = System.Math.Min(Start.X, End.X);
+            double minY = System.Math.Min(Start.Y, End.Y);
+            double maxX = System.Math.Max(Start.X, End.X);
+            double maxY = System.Math.Max(Start.Y, End.Y);
+            return new Rect(minX, minY, maxX - minX, maxY - minY);
+        }
+    }
+
+    public override bool HitTest(Point p, double radius)
+    {
+        return SegmentDistance(Start, End, p) <= radius + Thickness * 0.5;
+    }
+
+    private static double SegmentDistance(Point a, Point b, Point p)
+    {
+        double dx = b.X - a.X, dy = b.Y - a.Y;
+        double lenSq = dx * dx + dy * dy;
+        if (lenSq < 1e-6)
+        {
+            dx = p.X - a.X;
+            dy = p.Y - a.Y;
+            return System.Math.Sqrt(dx * dx + dy * dy);
+        }
+        double t = ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lenSq;
+        if (t < 0) t = 0; else if (t > 1) t = 1;
+        double cx = a.X + t * dx, cy = a.Y + t * dy;
+        double ex = p.X - cx, ey = p.Y - cy;
+        return System.Math.Sqrt(ex * ex + ey * ey);
     }
 }
 

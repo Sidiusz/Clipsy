@@ -36,7 +36,10 @@ public static class Strings
         ["TipColor"]            = New("Color", "Цвет"),
         ["TipPencil"]           = New("Pencil. LMB draw, RMB erase", "Карандаш. ЛКМ рисовать, ПКМ стирать"),
         ["TipRectangle"]        = New("Rectangle", "Прямоугольник"),
+        ["TipEllipse"]          = New("Ellipse", "Эллипс"),
+        ["TipLine"]             = New("Line", "Линия"),
         ["TipText"]             = New("Text. Click to place", "Текст. Кликните, чтобы разместить"),
+        ["TipShapes"]           = New("Shapes", "Фигуры"),
         ["TipOcr"]              = New("Find text", "Найти текст"),
         ["TipBrushSize"]        = New("Brush size", "Размер кисти"),
 
@@ -100,6 +103,7 @@ public static class Strings
         ["BtnReset"]            = New("Reset",        "Сброс"),
         ["BtnClose"]            = New("Close",        "Закрыть"),
         ["BtnSave"]             = New("Save",         "Сохранить"),
+        ["SettingsSaved"]       = New("Settings saved", "Настройки сохранены"),
         ["BtnCheckNow"]         = New("Check now",    "Проверить"),
         ["BtnCheckForUpdates"]  = New("Check for updates", "Проверить обновления"),
         ["BtnAuthor"]           = New("Author: Sidiusz", "Автор: Sidiusz"),

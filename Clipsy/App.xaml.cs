@@ -36,6 +36,7 @@ public partial class App : Application
         // is offscreen + tool-window so it's invisible, but it must be
         // active or the TaskbarIcon's commands and ContextFlyout never wire.
         HostWindow.Activate();
+        ThemeService.Register(HostWindow.Content as Microsoft.UI.Xaml.FrameworkElement);
 
         Hotkey = new HotkeyService(HostWindow.DispatcherQueue);
         bool ok = Hotkey.RegisterDefault(OnCaptureRequested);
@@ -81,6 +82,11 @@ public partial class App : Application
 
     private void OnCaptureRequested()
     {
+        if (RecordingController.IsRecording)
+        {
+            RecordingController.Current?.StopFromHotkey();
+            return;
+        }
         CaptureOverlayHost.ShowOverlay();
     }
 
