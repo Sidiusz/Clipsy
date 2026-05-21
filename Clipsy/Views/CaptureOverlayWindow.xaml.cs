@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using IOPath = System.IO.Path;
 using Clipsy.Drawing;
@@ -54,7 +55,8 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private Polyline? _activeStrokeVisual;
     private StrokeElement? _activeStroke;
-    private Microsoft.UI.Xaml.Shapes.Rectangle? _activeRectVisual;
+    private Shape? _activeRectVisual;
+    private Line? _activeLineVisual;
     private Point _activeRectAnchor;
     private TextBox? _activeTextBox;
 
@@ -65,6 +67,7 @@ public sealed partial class CaptureOverlayWindow : Window
     private readonly List<Rect> _ocrWordsDip = new();
     private readonly HashSet<int> _ocrSelected = new();
     private DispatcherTimer? _scanTimer;
+    private DispatcherTimer? _hoverTimer;
     private double _scanY;
     private int _scanDir = 1;
     private Point _ocrDragStart;
@@ -73,10 +76,12 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         _frame = frame;
         InitializeComponent();
+        ThemeService.Register(RootGrid);
 
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = GetAppWindowForCurrentWindow();
         ConfigureAsOverlay();
+        DisableDwmDecorations();
         // Load the frozen frame synchronously into the Image source so the
         // very first frame the compositor renders already shows the desktop
         // snapshot instead of black-then-desktop.
@@ -84,6 +89,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
         _drawing = new DrawingController(DrawingCanvas);
         ApplyLocalization();
+        PositionHintOnPrimaryScreen();
         BuildHandles();
         _pencilPreview = new Ellipse
         {
@@ -99,11 +105,14 @@ public sealed partial class CaptureOverlayWindow : Window
 
         BuildScreenMenu();
         Activated += OnActivated;
+
+        // Set default rectangle tool
+        SetTool(ToolKind.Rectangle);
     }
 
     private void ApplyLocalization()
     {
-        Hint.Text = Strings.Get("HintSelectArea");
+        HintText.Text = Strings.Get("HintSelectArea");
 
         ToolTipService.SetToolTip(RecordBtn,     Strings.Get("TipRecord"));
         ToolTipService.SetToolTip(ScreenshotBtn, Strings.Get("TipScreenshot"));
@@ -112,10 +121,11 @@ public sealed partial class CaptureOverlayWindow : Window
 
         ToolTipService.SetToolTip(ColorBtn,  Strings.Get("TipColor"));
         ToolTipService.SetToolTip(PencilBtn, Strings.Get("TipPencil"));
-        ToolTipService.SetToolTip(RectBtn,   Strings.Get("TipRectangle"));
-        ToolTipService.SetToolTip(TextBtn,   Strings.Get("TipText"));
-        ToolTipService.SetToolTip(OcrBtn,    Strings.Get("TipOcr"));
-        ToolTipService.SetToolTip(BrushSizeSlider, Strings.Get("TipBrushSize"));
+        ToolTipService.SetToolTip(EllipseBtn, Strings.Get("TipEllipse"));
+        ToolTipService.SetToolTip(LineBtn,    Strings.Get("TipLine"));
+        ToolTipService.SetToolTip(TextBtn,    Strings.Get("TipText"));
+        ToolTipService.SetToolTip(ShapesBtn,  Strings.Get("TipShapes"));
+        ToolTipService.SetToolTip(OcrBtn,     Strings.Get("TipOcr"));
 
         ToolTipService.SetToolTip(OcrSelectAllBtn, Strings.Get("TipOcrSelectAll"));
         ToolTipService.SetToolTip(OcrCopyBtn,      Strings.Get("TipOcrCopy"));
@@ -129,6 +139,47 @@ public sealed partial class CaptureOverlayWindow : Window
         MenuSaveAs.Text       = Strings.Get("MenuSaveAs");
         MenuClear.Text        = Strings.Get("MenuClear");
         MenuCancel.Text       = Strings.Get("MenuCancel");
+    }
+
+    private void PositionHintOnPrimaryScreen()
+    {
+        try
+        {
+            // Get primary monitor bounds using Win32 API
+            const int SM_XVIRTUALSCREEN = 76;
+            const int SM_YVIRTUALSCREEN = 77;
+            const int SM_CXSCREEN = 0;
+            const int SM_CYSCREEN = 1;
+
+            [System.Runtime.InteropServices.DllImport("user32.dll")]
+            static extern int GetSystemMetrics(int nIndex);
+
+            var primaryWidth = GetSystemMetrics(SM_CXSCREEN);
+            var primaryHeight = GetSystemMetrics(SM_CYSCREEN);
+            var virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            var virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+
+            if (primaryWidth > 0 && primaryHeight > 0)
+            {
+                // Primary monitor starts at (0,0) in screen coordinates
+                // Convert to virtual coordinates by subtracting virtual origin
+                var primaryCenterX = (primaryWidth / 2) - virtualX;
+                var primaryTopY = 72 - virtualY;
+
+                // Center hint on primary monitor
+                Hint.Margin = new Thickness(primaryCenterX - 100, primaryTopY, 0, 0);
+            }
+            else
+            {
+                // Fallback to fixed positioning
+                Hint.Margin = new Thickness(50, 72, 0, 0);
+            }
+        }
+        catch
+        {
+            // Fallback to fixed positioning on any error
+            Hint.Margin = new Thickness(50, 72, 0, 0);
+        }
     }
 
     private AppWindow GetAppWindowForCurrentWindow()
@@ -150,6 +201,21 @@ public sealed partial class CaptureOverlayWindow : Window
         var b = _frame.VirtualBounds;
         _appWindow.MoveAndResize(new RectInt32(b.X, b.Y, b.Width, b.Height));
         UpdateDimGeometry(null);
+    }
+
+    private void DisableDwmDecorations()
+    {
+        try
+        {
+            int donotround = 1;
+            DwmSetWindowAttribute(_hwnd, 33, ref donotround, sizeof(int));
+            int ncDisabled = 1;
+            DwmSetWindowAttribute(_hwnd, 2, ref ncDisabled, sizeof(int));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Overlay DWM disable failed: {ex.Message}");
+        }
     }
 
     private void OnActivated(object sender, WindowActivatedEventArgs e)
@@ -174,6 +240,7 @@ public sealed partial class CaptureOverlayWindow : Window
             var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
             bmp.SetSource(stream);
             FrozenImage.Source = bmp;
+            FrozenImage.Opacity = 0.25;
         }
         catch (Exception ex)
         {
@@ -182,6 +249,74 @@ public sealed partial class CaptureOverlayWindow : Window
     }
 
     // ---------- Handles ----------
+
+    private void OnShapesPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (ShapesFlyout == null || ShapesBtn == null) return;
+
+        // Cancel any existing timer
+        if (_hoverTimer != null)
+        {
+            _hoverTimer.Stop();
+            _hoverTimer.Tick -= OnHoverTimerTick;
+            _hoverTimer = null;
+        }
+
+        // Start hover delay timer
+        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        _hoverTimer.Tick += OnHoverTimerTick;
+        _hoverTimer.Start();
+    }
+
+    private void OnHoverTimerTick(object? sender, object e)
+    {
+        if (_hoverTimer != null)
+        {
+            _hoverTimer.Stop();
+            _hoverTimer.Tick -= OnHoverTimerTick;
+            _hoverTimer = null;
+        }
+
+        if (ShapesFlyout == null || ShapesBtn == null) return;
+        try
+        {
+            ShapesFlyout.ShowAt(ShapesBtn);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Shapes flyout open failed: {ex.Message}");
+        }
+    }
+
+    private void OnShapesPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        // Cancel hover timer when cursor leaves button
+        if (_hoverTimer != null)
+        {
+            _hoverTimer.Stop();
+            _hoverTimer.Tick -= OnHoverTimerTick;
+            _hoverTimer = null;
+        }
+    }
+
+    private void OnShapePick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement fe || fe.Tag is not string tag) return;
+        var tool = tag switch
+        {
+            "Pencil" => ToolKind.Pencil,
+            "Rectangle" => ToolKind.Rectangle,
+            "Ellipse" => ToolKind.Ellipse,
+            "Line" => ToolKind.Line,
+            "Text" => ToolKind.Text,
+            _ => ToolKind.None,
+        };
+        SetTool(tool);
+        if (ShapesFlyout != null)
+        {
+            try { ShapesFlyout.Hide(); } catch { }
+        }
+    }
 
     private void BuildHandles()
     {
@@ -344,7 +479,7 @@ public sealed partial class CaptureOverlayWindow : Window
     private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         var pos = e.GetCurrentPoint(RootGrid).Position;
-        if (_drawing.Settings.Tool == ToolKind.Pencil)
+        if (_drawing.Settings.Tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
         {
             _pencilPreview.Visibility = Visibility.Visible;
             // The preview lives inside SelectionLayer; convert from root DIPs.
@@ -383,7 +518,7 @@ public sealed partial class CaptureOverlayWindow : Window
                 ExtendStroke(pos);
                 break;
             case InteractionMode.DrawingRect:
-                UpdateActiveRect(pos);
+                UpdateActiveShape(pos);
                 break;
             case InteractionMode.Erasing:
                 TryEraseAt(pos);
@@ -420,7 +555,7 @@ public sealed partial class CaptureOverlayWindow : Window
                 FinishStroke();
                 break;
             case InteractionMode.DrawingRect:
-                FinishActiveRect();
+                FinishActiveShape();
                 break;
             case InteractionMode.SelectingOcrText:
                 FinishOcrSelection(pos);
@@ -428,6 +563,25 @@ public sealed partial class CaptureOverlayWindow : Window
         }
 
         _mode = InteractionMode.Idle;
+    }
+
+    private void OnRootPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_hasSelection || _activeTextBox != null) return;
+        int delta = e.GetCurrentPoint(RootGrid).Properties.MouseWheelDelta;
+        if (delta == 0) return;
+
+        double step = delta > 0 ? 1.0 : -1.0;
+        _drawing.Settings.BrushSize = System.Math.Clamp(_drawing.Settings.BrushSize + step, 1.0, 64.0);
+        UpdatePreviewForThickness(_drawing.Settings.BrushSize);
+        e.Handled = true;
+    }
+
+    private void UpdatePreviewForThickness(double _thickness)
+    {
+        var d = System.Math.Max(8, _drawing.Settings.PreviewDiameter);
+        _pencilPreview.Width = d;
+        _pencilPreview.Height = d;
     }
 
     private void OnRootRightTapped(object sender, RightTappedRoutedEventArgs e)
@@ -619,6 +773,38 @@ public sealed partial class CaptureOverlayWindow : Window
                 DrawingCanvas.Children.Add(_activeRectVisual);
                 RootGrid.CapturePointer(pointer);
                 break;
+            case ToolKind.Ellipse:
+                _mode = InteractionMode.DrawingRect;
+                _activeRectAnchor = pos;
+                _activeRectVisual = new Microsoft.UI.Xaml.Shapes.Ellipse
+                {
+                    Stroke = new SolidColorBrush(_drawing.Settings.Color),
+                    StrokeThickness = _drawing.Settings.EllipseThickness,
+                    Width = 0,
+                    Height = 0,
+                };
+                Canvas.SetLeft(_activeRectVisual, pos.X);
+                Canvas.SetTop(_activeRectVisual, pos.Y);
+                DrawingCanvas.Children.Add(_activeRectVisual);
+                RootGrid.CapturePointer(pointer);
+                break;
+            case ToolKind.Line:
+                _mode = InteractionMode.DrawingRect;
+                _activeLineVisual = new Line
+                {
+                    Stroke = new SolidColorBrush(_drawing.Settings.Color),
+                    StrokeThickness = _drawing.Settings.LineThickness,
+                    X1 = pos.X,
+                    Y1 = pos.Y,
+                    X2 = pos.X,
+                    Y2 = pos.Y,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
+                    StrokeLineJoin = PenLineJoin.Round,
+                };
+                DrawingCanvas.Children.Add(_activeLineVisual);
+                RootGrid.CapturePointer(pointer);
+                break;
             case ToolKind.Text:
                 // Click-to-place: do not enter a drag mode and do not capture
                 // the pointer. PointerReleased resets _mode to Idle, and the
@@ -644,8 +830,15 @@ public sealed partial class CaptureOverlayWindow : Window
         _activeStrokeVisual = null;
     }
 
-    private void UpdateActiveRect(Point pos)
+    private void UpdateActiveShape(Point pos)
     {
+        if (_activeLineVisual != null)
+        {
+            _activeLineVisual.X2 = pos.X;
+            _activeLineVisual.Y2 = pos.Y;
+            return;
+        }
+
         if (_activeRectVisual == null) return;
         double x = System.Math.Min(_activeRectAnchor.X, pos.X);
         double y = System.Math.Min(_activeRectAnchor.Y, pos.Y);
@@ -657,8 +850,44 @@ public sealed partial class CaptureOverlayWindow : Window
         _activeRectVisual.Height = h;
     }
 
-    private void FinishActiveRect()
+    private void FinishActiveShape()
     {
+        if (_activeLineVisual != null)
+        {
+            double x1 = _activeLineVisual.X1;
+            double y1 = _activeLineVisual.Y1;
+            double x2 = _activeLineVisual.X2;
+            double y2 = _activeLineVisual.Y2;
+            DrawingCanvas.Children.Remove(_activeLineVisual);
+            if (System.Math.Abs(x2 - x1) < 1 && System.Math.Abs(y2 - y1) < 1)
+            {
+                _activeLineVisual = null;
+                return;
+            }
+            var visual = new Line
+            {
+                Stroke = _activeLineVisual.Stroke,
+                StrokeThickness = _activeLineVisual.StrokeThickness,
+                X1 = x1,
+                Y1 = y1,
+                X2 = x2,
+                Y2 = y2,
+                StrokeStartLineCap = _activeLineVisual.StrokeStartLineCap,
+                StrokeEndLineCap = _activeLineVisual.StrokeEndLineCap,
+                StrokeLineJoin = _activeLineVisual.StrokeLineJoin,
+            };
+            var element = new LineElement
+            {
+                Visual = visual,
+                Start = new Point(x1, y1),
+                End = new Point(x2, y2),
+                Thickness = _activeLineVisual.StrokeThickness,
+            };
+            _drawing.Add(element);
+            _activeLineVisual = null;
+            return;
+        }
+
         if (_activeRectVisual == null) return;
         double x = Canvas.GetLeft(_activeRectVisual);
         double y = Canvas.GetTop(_activeRectVisual);
@@ -666,22 +895,45 @@ public sealed partial class CaptureOverlayWindow : Window
         double h = _activeRectVisual.Height;
         DrawingCanvas.Children.Remove(_activeRectVisual);
         if (w < 2 || h < 2) { _activeRectVisual = null; return; }
-        var visual = new Microsoft.UI.Xaml.Shapes.Rectangle
+
+        if (_activeRectVisual is Ellipse)
         {
-            Stroke = _activeRectVisual.Stroke,
-            StrokeThickness = _activeRectVisual.StrokeThickness,
-            Width = w,
-            Height = h,
-        };
-        Canvas.SetLeft(visual, x);
-        Canvas.SetTop(visual, y);
-        var element = new RectangleElement
+            var visual = new Ellipse
+            {
+                Stroke = _activeRectVisual.Stroke,
+                StrokeThickness = _activeRectVisual.StrokeThickness,
+                Width = w,
+                Height = h,
+            };
+            Canvas.SetLeft(visual, x);
+            Canvas.SetTop(visual, y);
+            var element = new EllipseElement
+            {
+                Visual = visual,
+                Bounds = new Rect(x, y, w, h),
+                Thickness = _activeRectVisual.StrokeThickness,
+            };
+            _drawing.Add(element);
+        }
+        else
         {
-            Visual = visual,
-            Bounds = new Rect(x, y, w, h),
-            Thickness = _activeRectVisual.StrokeThickness,
-        };
-        _drawing.Add(element);
+            var visual = new Microsoft.UI.Xaml.Shapes.Rectangle
+            {
+                Stroke = _activeRectVisual.Stroke,
+                StrokeThickness = _activeRectVisual.StrokeThickness,
+                Width = w,
+                Height = h,
+            };
+            Canvas.SetLeft(visual, x);
+            Canvas.SetTop(visual, y);
+            var element = new RectangleElement
+            {
+                Visual = visual,
+                Bounds = new Rect(x, y, w, h),
+                Thickness = _activeRectVisual.StrokeThickness,
+            };
+            _drawing.Add(element);
+        }
         _activeRectVisual = null;
     }
 
@@ -852,7 +1104,9 @@ public sealed partial class CaptureOverlayWindow : Window
         ToolKind tool = tb.Name switch
         {
             "PencilBtn" => ToolKind.Pencil,
-            "RectBtn" => ToolKind.Rectangle,
+            "Rectangle" => ToolKind.Rectangle,
+            "EllipseBtn" => ToolKind.Ellipse,
+            "LineBtn" => ToolKind.Line,
             "TextBtn" => ToolKind.Text,
             _ => ToolKind.None,
         };
@@ -862,23 +1116,40 @@ public sealed partial class CaptureOverlayWindow : Window
     private void SetTool(ToolKind tool)
     {
         _drawing.Settings.Tool = tool;
-        PencilBtn.IsChecked = tool == ToolKind.Pencil;
-        RectBtn.IsChecked = tool == ToolKind.Rectangle;
-        TextBtn.IsChecked = tool == ToolKind.Text;
-        if (tool != ToolKind.Pencil) _pencilPreview.Visibility = Visibility.Collapsed;
+
+        // Update button visual states by changing background
+        var selectedBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x58, 0x65, 0xF2));
+        var normalBrush = new SolidColorBrush(Color.FromArgb(0x00, 0x00, 0x00, 0x00));
+
+        PencilBtn.Background = tool == ToolKind.Pencil ? selectedBrush : normalBrush;
+        TextBtn.Background = tool == ToolKind.Text ? selectedBrush : normalBrush;
+        ShapesBtn.Background = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line ? selectedBrush : normalBrush;
+
+        // Show/hide shapes in flyout - selected shape is hidden, others visible
+        RectBtn.Visibility = tool == ToolKind.Rectangle ? Visibility.Collapsed : Visibility.Visible;
+        EllipseBtn.Visibility = tool == ToolKind.Ellipse ? Visibility.Collapsed : Visibility.Visible;
+        LineBtn.Visibility = tool == ToolKind.Line ? Visibility.Collapsed : Visibility.Visible;
+
+        // Update shapes icon based on selected tool
+        if (tool == ToolKind.Rectangle)
+            ShapeIcon.Glyph = ""; // Rectangle
+        else if (tool == ToolKind.Ellipse)
+            ShapeIcon.Glyph = ""; // Circle
+        else if (tool == ToolKind.Line)
+            ShapeIcon.Glyph = ""; // Line
+        else
+            ShapeIcon.Glyph = ""; // Default rectangle
+
+        if (tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
+        {
+            UpdatePreviewForThickness(_drawing.Settings.BrushSize);
+        }
+        else
+        {
+            _pencilPreview.Visibility = Visibility.Collapsed;
+        }
     }
 
-    private void OnBrushSizeChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-    {
-        if (_drawing == null) return;
-        double v = e.NewValue;
-        _drawing.Settings.PencilThickness = v;
-        _drawing.Settings.RectangleThickness = System.Math.Max(1, v * 0.7);
-        // Update cursor preview ring to reflect thickness.
-        var d = System.Math.Max(8, v * 2 + 4);
-        _pencilPreview.Width = d;
-        _pencilPreview.Height = d;
-    }
 
     private void OnColorPickerChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
@@ -1157,11 +1428,18 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void SetRightToolbarEnabled(bool enabled)
     {
-        PencilBtn.IsEnabled = enabled;
-        RectBtn.IsEnabled = enabled;
-        TextBtn.IsEnabled = enabled;
+        ShapesBtn.IsEnabled = enabled;
         ColorBtn.IsEnabled = enabled;
         OcrBtn.IsEnabled = enabled;
+        PencilBtn.IsEnabled = enabled;
+        EllipseBtn.IsEnabled = enabled;
+        RectBtn.IsEnabled = enabled;
+        LineBtn.IsEnabled = enabled;
+        TextBtn.IsEnabled = enabled;
+        if (!enabled && ShapesFlyout != null)
+        {
+            try { ShapesFlyout.Hide(); } catch { }
+        }
     }
 
     private void SetOcrButtonsEnabled(bool enabled)
@@ -1376,6 +1654,9 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         return !(b.X > a.X + a.Width || b.X + b.Width < a.X || b.Y > a.Y + a.Height || b.Y + b.Height < a.Y);
     }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int pvAttribute, int cbAttribute);
 
     private void UpdateOcrSelectionVisual()
     {
