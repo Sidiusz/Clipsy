@@ -264,6 +264,7 @@
                     </Button>
                     <Button x:Name="ShapesBtn"
                             Style="{StaticResource ClipsyIconButton}"
+                            Click="OnShapesClick"
                             PointerEntered="OnShapesPointerEntered"
                             PointerExited="OnShapesPointerExited"
                             ToolTipService.ToolTip="Shapes">
@@ -279,35 +280,6 @@
                                   Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5"
                                   Visibility="Collapsed" />
                         </Grid>
-                        <Button.Flyout>
-                            <Flyout x:Name="ShapesFlyout" Placement="Right">
-                                                <StackPanel Orientation="Horizontal" Spacing="2" Margin="4,2">
-                                    <Button x:Name="RectBtn"
-                                            Style="{StaticResource ClipsyIconButton}"
-                                            Click="OnShapePick" Tag="Rectangle"
-                                            ToolTipService.ToolTip="Rectangle">
-                                        <Rectangle Width="14" Height="14"
-                                                   Stroke="{StaticResource ClipsyText2Brush}"
-                                                   StrokeThickness="1.5" />
-                                    </Button>
-                                    <Button x:Name="EllipseBtn"
-                                            Style="{StaticResource ClipsyIconButton}"
-                                            Click="OnShapePick" Tag="Ellipse"
-                                            ToolTipService.ToolTip="Ellipse">
-                                        <Ellipse Width="14" Height="14"
-                                                 Stroke="{StaticResource ClipsyText2Brush}"
-                                                 StrokeThickness="1.5" />
-                                    </Button>
-                                    <Button x:Name="LineBtn"
-                                            Style="{StaticResource ClipsyIconButton}"
-                                            Click="OnShapePick" Tag="Line"
-                                            ToolTipService.ToolTip="Line">
-                                        <Line X1="2" Y1="14" X2="14" Y2="2"
-                                              Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5" />
-                                    </Button>
-                                </StackPanel>
-                            </Flyout>
-                        </Button.Flyout>
                     </Button>
                     <Border Style="{StaticResource ClipsyToolbarSeparatorHorizontal}" />
                     <Button x:Name="OcrBtn"
@@ -320,6 +292,39 @@
                                        HorizontalAlignment="Right" VerticalAlignment="Top"
                                        Margin="0,-2,-2,0" />
                         </Grid>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- ============== Shapes flyout (programmatically positioned) ============== -->
+            <Border x:Name="ShapesFlyout"
+                    Style="{StaticResource ClipsyToolbar}"
+                    Visibility="Collapsed"
+                    PointerEntered="OnShapesFlyoutPointerEntered"
+                    PointerExited="OnShapesFlyoutPointerExited">
+                <StackPanel Orientation="Horizontal" Spacing="2" Margin="4,2">
+                    <Button x:Name="RectBtn"
+                            Style="{StaticResource ClipsyIconButton}"
+                            Click="OnShapePick" Tag="Rectangle"
+                            ToolTipService.ToolTip="Rectangle">
+                        <Rectangle Width="14" Height="14"
+                                   Stroke="{StaticResource ClipsyText2Brush}"
+                                   StrokeThickness="1.5" />
+                    </Button>
+                    <Button x:Name="EllipseBtn"
+                            Style="{StaticResource ClipsyIconButton}"
+                            Click="OnShapePick" Tag="Ellipse"
+                            ToolTipService.ToolTip="Ellipse">
+                        <Ellipse Width="14" Height="14"
+                                 Stroke="{StaticResource ClipsyText2Brush}"
+                                 StrokeThickness="1.5" />
+                    </Button>
+                    <Button x:Name="LineBtn"
+                            Style="{StaticResource ClipsyIconButton}"
+                            Click="OnShapePick" Tag="Line"
+                            ToolTipService.ToolTip="Line">
+                        <Line X1="2" Y1="14" X2="14" Y2="2"
+                              Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5" />
                     </Button>
                 </StackPanel>
             </Border>
