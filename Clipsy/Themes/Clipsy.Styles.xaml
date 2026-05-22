@@ -867,19 +867,27 @@
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="CheckStates">
                                 <VisualState x:Name="Checked">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="KnobTransform"
+                                                         Storyboard.TargetProperty="X"
+                                                         To="16" Duration="0:0:0.15" />
+                                    </Storyboard>
                                     <VisualState.Setters>
                                         <Setter Target="Track.Background" Value="{StaticResource ClipsyAccentBrush}" />
                                         <Setter Target="Track.BorderBrush" Value="{StaticResource ClipsyAccentBrush}" />
                                         <Setter Target="Knob.Fill" Value="White" />
-                                        <Setter Target="KnobTransform.X" Value="16" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Unchecked">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="KnobTransform"
+                                                         Storyboard.TargetProperty="X"
+                                                         To="0" Duration="0:0:0.15" />
+                                    </Storyboard>
                                     <VisualState.Setters>
                                         <Setter Target="Track.Background" Value="{StaticResource ClipsyBg3Brush}" />
                                         <Setter Target="Track.BorderBrush" Value="{StaticResource ClipsyBorderBrush}" />
                                         <Setter Target="Knob.Fill" Value="{StaticResource ClipsyText2Brush}" />
-                                        <Setter Target="KnobTransform.X" Value="0" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Indeterminate" />

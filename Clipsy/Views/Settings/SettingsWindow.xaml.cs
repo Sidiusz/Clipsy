@@ -138,6 +138,12 @@ public sealed partial class SettingsWindow : Window
             ThemeService.ApplyTo(Content as FrameworkElement);
             VersionLabel.Text = Strings.Get("VersionPrefix") + GetVersion();
             BuildDateLabel.Text = GetBuildDate();
+
+            // Sync nav icon / pane visibility with default-checked radio
+            foreach (var rb in new[] { NavGeneral, NavVideo, NavGif, NavHotkeys, NavInfo })
+            {
+                if (rb.IsChecked == true) { OnNavChecked(rb, new RoutedEventArgs()); break; }
+            }
         }
         catch (Exception ex)
         {
