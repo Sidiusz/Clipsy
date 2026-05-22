@@ -74,6 +74,7 @@ public sealed partial class CaptureOverlayWindow : Window
     private DispatcherTimer? _scanTimer;
     private DispatcherTimer? _hoverTimer;
     private double _scanProgress;
+    private double _scanDir = 1.0;
     private Point _ocrDragStart;
 
     // Pre-allocated dim geometry — avoids GC pressure and XAML re-layout on every PointerMoved.
@@ -149,6 +150,9 @@ public sealed partial class CaptureOverlayWindow : Window
         ToolTipService.SetToolTip(OcrCopyBtn,      Strings.Get("TipOcrCopy"));
         ToolTipService.SetToolTip(OcrTranslateBtn, Strings.Get("TipOcrTranslate"));
         ToolTipService.SetToolTip(OcrExitBtn,      Strings.Get("TipOcrExit"));
+
+        OcrPanelTitle.Text       = Strings.Get("OcrRecognized").ToUpperInvariant();
+        TranslatePanelTitle.Text = Strings.Get("TrTranslation").ToUpperInvariant();
 
         SelectScreenMenu.Text = Strings.Get("MenuSelectScreen");
         MenuSelectAll.Text    = Strings.Get("MenuSelectAll");
@@ -1644,6 +1648,7 @@ public sealed partial class CaptureOverlayWindow : Window
         Canvas.SetLeft(ScanLine, 0);
         Canvas.SetTop(ScanLine, 0);
         _scanProgress = 0;
+        _scanDir = 1.0;
         _scanTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _scanTimer.Tick += OnScanTick;
         _scanTimer.Start();
@@ -1651,9 +1656,9 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void OnScanTick(object? sender, object e)
     {
-        _scanProgress += 0.018; // ~55 ticks per sweep = ~0.9 s
-        if (_scanProgress > 1.0) _scanProgress = 0;
-        // smooth ease-in-out so beam accelerates from top and decelerates at bottom
+        _scanProgress += 0.015 * _scanDir;
+        if (_scanProgress >= 1.0) { _scanProgress = 1.0; _scanDir = -1.0; }
+        else if (_scanProgress <= 0.0) { _scanProgress = 0.0; _scanDir = 1.0; }
         var t = _scanProgress;
         var eased = t * t * (3.0 - 2.0 * t);
         double maxY = System.Math.Max(0, _selectionRect.Height - ScanLine.Height);
@@ -1966,6 +1971,7 @@ public sealed partial class CaptureOverlayWindow : Window
             : OcrTextBox.Text;
         if (string.IsNullOrWhiteSpace(text)) return;
         TranslateTarget.Text = "...";
+        TranslatePanel.Width = OcrTextPanel.ActualWidth;
         TranslatePanel.Visibility = Visibility.Visible;
         var (from, to) = TranslationService.GuessLangPair(text);
         var translated = await TranslationService.TranslateAsync(text, from, to);
