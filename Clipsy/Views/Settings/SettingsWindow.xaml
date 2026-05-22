@@ -325,11 +325,9 @@
                                                        Text="Future captures default to wherever you saved last."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ToggleSwitch x:Name="RememberFolderSwitch" Grid.Column="1"
-                                                      Style="{StaticResource ClipsyToggleSwitch}"
-                                                      OnContent="" OffContent=""
-                                                      MinWidth="0" Margin="0,0,-44,0"
-                                                      Toggled="OnAnyToggleChanged"
+                                        <ToggleButton x:Name="RememberFolderSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAnyToggleChanged"
                                                       VerticalAlignment="Center" />
                                     </Grid>
 
@@ -634,11 +632,9 @@
                                                        Text="Smooths color transitions at the cost of file size."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ToggleSwitch x:Name="GifDitherSwitch" Grid.Column="1"
-                                                      Style="{StaticResource ClipsyToggleSwitch}"
-                                                      OnContent="" OffContent=""
-                                                      MinWidth="0" Margin="0,0,-44,0"
-                                                      Toggled="OnAnyToggleChanged"
+                                        <ToggleButton x:Name="GifDitherSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAnyToggleChanged"
                                                       VerticalAlignment="Center" />
                                     </Grid>
                                 </StackPanel>
