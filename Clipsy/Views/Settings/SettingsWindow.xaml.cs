@@ -12,7 +12,6 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using Windows.System;
@@ -33,47 +32,6 @@ public sealed partial class SettingsWindow : Window
             get => _binding;
             set { if (_binding != value) { _binding = value; OnChanged(); } }
         }
-
-        private bool _isRebinding;
-        public bool IsRebinding
-        {
-            get => _isRebinding;
-            set
-            {
-                if (_isRebinding == value) return;
-                _isRebinding = value;
-                OnChanged();
-                OnChanged(nameof(IdleVisibility));
-                OnChanged(nameof(RebindingVisibility));
-                OnChanged(nameof(RowBackground));
-                OnChanged(nameof(BindingBackground));
-                OnChanged(nameof(BindingBorderBrush));
-                OnChanged(nameof(BindingForeground));
-            }
-        }
-
-        public Visibility IdleVisibility      => IsRebinding ? Visibility.Collapsed : Visibility.Visible;
-        public Visibility RebindingVisibility => IsRebinding ? Visibility.Visible   : Visibility.Collapsed;
-
-        public Brush RowBackground =>
-            IsRebinding
-                ? (Brush)Application.Current.Resources["ClipsyAccentDimBrush"]
-                : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-
-        public Brush BindingBackground =>
-            IsRebinding
-                ? (Brush)Application.Current.Resources["ClipsyBgInputBrush"]
-                : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-
-        public Brush BindingBorderBrush =>
-            IsRebinding
-                ? (Brush)Application.Current.Resources["ClipsyAccentBrush"]
-                : (Brush)Application.Current.Resources["ClipsyBorderBrush"];
-
-        public Brush BindingForeground =>
-            IsRebinding
-                ? (Brush)Application.Current.Resources["ClipsyAccentBrush"]
-                : (Brush)Application.Current.Resources["ClipsyText2Brush"];
 
         public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
         private void OnChanged([System.Runtime.CompilerServices.CallerMemberName] string? name = null)
@@ -218,15 +176,15 @@ public sealed partial class SettingsWindow : Window
             ? SettingsService.Instance.DefaultVideoFolder
             : _draft.VideoFolder!;
         RememberFolderSwitch.IsOn = _draft.RememberLastFolder;
-        
+
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
-        
+
         JpgQualitySlider.Minimum = 50;
         JpgQualitySlider.Maximum = 100;
         JpgQualitySlider.Value = System.Math.Clamp(_draft.JpgQuality, 50, 100);
         JpgQualityLabel.Text = ((int)JpgQualitySlider.Value).ToString();
         UpdateJpgQualityRowVisibility();
-        
+
         SelectComboByTag(AfterSaveBox, _draft.AfterSaveAction);
         SelectComboByTag(UpdateIntervalBox, _draft.UpdateInterval);
 
@@ -240,12 +198,12 @@ public sealed partial class SettingsWindow : Window
         GifColorSlider.Maximum = 256;
         GifColorSlider.Value = System.Math.Clamp(_draft.GifColors, 16, 256);
         GifColorLabel.Text = ((int)GifColorSlider.Value).ToString();
-        
+
         GifFpsSlider.Minimum = 5;
         GifFpsSlider.Maximum = 30;
         GifFpsSlider.Value = System.Math.Clamp(_draft.GifFps, 5, 30);
         GifFpsLabel.Text = ((int)GifFpsSlider.Value).ToString();
-        
+
         GifDitherSwitch.IsOn = _draft.GifDither;
 
         BuildHotkeyRows();
@@ -559,6 +517,7 @@ public sealed partial class SettingsWindow : Window
     private void OnNavSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (NavList?.SelectedItem is not ListViewItem item) return;
+        if (PaneGeneral is null) return;
         var key = item.Tag as string;
 
         PaneGeneral.Visibility = key == "general" ? Visibility.Visible : Visibility.Collapsed;
