@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using Clipsy.Localization;
 using Clipsy.Services;
 using Microsoft.UI;
@@ -59,6 +61,10 @@ public sealed partial class SettingsWindow : Window
 
     private bool _firstActivated;
     private bool _loading;
+
+    // Tessdata language management
+    private readonly HashSet<string> _tessSelectedCodes = new();
+    private readonly Dictionary<string, CancellationTokenSource> _tessDownloadCts = new();
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _notifyTimer;
 
@@ -172,10 +178,12 @@ public sealed partial class SettingsWindow : Window
         SubVideo.Text    = Strings.Get("SubVideo");
         SubGif.Text      = Strings.Get("SubGif");
 
-        HelperLanguage.Text = Strings.Get("HelperLanguage");
-        HelperTheme.Text    = Strings.Get("HelperTheme");
-        HelperOcr.Text      = Strings.Get("HelperOcr");
-        HelperRemember.Text = Strings.Get("HelperRemember");
+        HelperLanguage.Text  = Strings.Get("HelperLanguage");
+        HelperTheme.Text     = Strings.Get("HelperTheme");
+        HelperOcr.Text       = Strings.Get("HelperOcr");
+        LblTessLang.Text     = Strings.Get("LblTessLang");
+        HelperTessLang.Text  = Strings.Get("HelperTessLang");
+        HelperRemember.Text  = Strings.Get("HelperRemember");
         HelperCodec.Text    = Strings.Get("HelperCodec");
         HelperBitrate.Text  = Strings.Get("HelperBitrate");
         HelperGifColors.Text= Strings.Get("HelperGifColors");
@@ -280,6 +288,11 @@ public sealed partial class SettingsWindow : Window
         SelectComboByTag(LangBox, _draft.Language);
         SelectSegment(_draft.Theme, ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight);
         SelectComboByTag(OcrEngineBox, _draft.OcrEngine);
+        _tessSelectedCodes.Clear();
+        foreach (var c in _draft.TesseractLanguages.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            _tessSelectedCodes.Add(c);
+        BuildTessLangRows();
+        UpdateTessLangSectionVisibility();
         ScreenshotFolderBox.Text = string.IsNullOrEmpty(_draft.ScreenshotFolder)
             ? SettingsService.Instance.DefaultScreenshotFolder
             : _draft.ScreenshotFolder!;
@@ -349,6 +362,7 @@ public sealed partial class SettingsWindow : Window
         _draft.Language = SelectedComboTag(LangBox);
         _draft.Theme = SelectedSegmentTag(ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight);
         _draft.OcrEngine = SelectedComboTag(OcrEngineBox);
+        _draft.TesseractLanguages = string.Join(",", _tessSelectedCodes);
         _draft.ScreenshotFolder = ScreenshotFolderBox.Text;
         _draft.VideoFolder = VideoFolderBox.Text;
         _draft.RememberLastFolder = RememberFolderSwitch.IsChecked == true;
@@ -674,6 +688,165 @@ public sealed partial class SettingsWindow : Window
 
     private void OnAnyControlChanged(object sender, SelectionChangedEventArgs e) => MarkChanged();
     private void OnAnyControlChanged(object sender, RoutedEventArgs e) => MarkChanged();
+
+    private void OnOcrEngineChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateTessLangSectionVisibility();
+        MarkChanged();
+    }
+
+    private void UpdateTessLangSectionVisibility()
+    {
+        if (TessLangSection == null) return;
+        var isTesseract = string.Equals(SelectedComboTag(OcrEngineBox), "Tesseract", StringComparison.OrdinalIgnoreCase);
+        TessLangSection.Visibility = isTesseract ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void BuildTessLangRows()
+    {
+        TessLangList.Children.Clear();
+        foreach (var lang in TessdataService.Catalog)
+            TessLangList.Children.Add(CreateTessLangRow(lang));
+    }
+
+    private UIElement CreateTessLangRow(TessdataLang lang)
+    {
+        var installed = TessdataService.IsInstalled(lang.Code);
+
+        var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90, GridUnitType.Pixel) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        // Language name + status
+        var namePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        var cb = new CheckBox
+        {
+            IsChecked = _tessSelectedCodes.Contains(lang.Code),
+            IsEnabled = installed,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var nameBlock = new TextBlock
+        {
+            Text = lang.DisplayName,
+            VerticalAlignment = VerticalAlignment.Center,
+            Style = (Style)Application.Current.Resources["ClipsyBody"],
+        };
+        namePanel.Children.Add(cb);
+        namePanel.Children.Add(nameBlock);
+        Grid.SetColumn(namePanel, 0);
+
+        // Size label
+        var sizeBlock = new TextBlock
+        {
+            Text = lang.ApproxSize,
+            VerticalAlignment = VerticalAlignment.Center,
+            Style = (Style)Application.Current.Resources["ClipsyHelper"],
+            Margin = new Thickness(8, 0, 8, 0),
+        };
+        Grid.SetColumn(sizeBlock, 1);
+
+        // Progress bar (hidden by default)
+        var progress = new ProgressBar
+        {
+            Minimum = 0, Maximum = 100, Value = 0,
+            Width = 80,
+            Visibility = Visibility.Collapsed,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(progress, 2);
+
+        // Action button
+        var btn = new Button
+        {
+            Content = installed ? Strings.Get("BtnDelete") : Strings.Get("BtnInstall"),
+            Style = (Style)Application.Current.Resources[installed ? "ClipsyButtonGhost" : "ClipsyButtonGhost"],
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(4, 0, 0, 0),
+        };
+        Grid.SetColumn(btn, 3);
+
+        grid.Children.Add(namePanel);
+        grid.Children.Add(sizeBlock);
+        grid.Children.Add(progress);
+        grid.Children.Add(btn);
+
+        // Checkbox handler
+        cb.Checked += (_, _) =>
+        {
+            _tessSelectedCodes.Add(lang.Code);
+            MarkChanged();
+        };
+        cb.Unchecked += (_, _) =>
+        {
+            _tessSelectedCodes.Remove(lang.Code);
+            MarkChanged();
+        };
+
+        // Button handler
+        btn.Click += (_, _) =>
+        {
+            if (TessdataService.IsInstalled(lang.Code))
+            {
+                TessdataService.Delete(lang.Code);
+                _tessSelectedCodes.Remove(lang.Code);
+                MarkChanged();
+                // Rebuild this row
+                var idx = TessLangList.Children.IndexOf(grid);
+                if (idx >= 0) TessLangList.Children[idx] = CreateTessLangRow(lang);
+            }
+            else
+            {
+                _ = DownloadTessLangAsync(lang, grid, btn, progress, cb);
+            }
+        };
+
+        return grid;
+    }
+
+    private async Task DownloadTessLangAsync(TessdataLang lang, Grid row, Button btn, ProgressBar progressBar, CheckBox cb)
+    {
+        if (_tessDownloadCts.TryGetValue(lang.Code, out var existing))
+        {
+            existing.Cancel();
+            _tessDownloadCts.Remove(lang.Code);
+        }
+
+        var cts = new CancellationTokenSource();
+        _tessDownloadCts[lang.Code] = cts;
+
+        btn.IsEnabled = false;
+        btn.Content = Strings.Get("TessInstalling");
+        progressBar.Visibility = Visibility.Visible;
+        progressBar.Value = 0;
+
+        try
+        {
+            var p = new Progress<int>(v => DispatcherQueue.TryEnqueue(() => progressBar.Value = v));
+            await TessdataService.DownloadAsync(lang.Code, p, cts.Token);
+
+            // Success — auto-select the new language
+            _tessSelectedCodes.Add(lang.Code);
+            MarkChanged();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Tessdata download failed: {ex.Message}");
+            NotificationService.Error("ErrTessDownload");
+        }
+        finally
+        {
+            _tessDownloadCts.Remove(lang.Code);
+            // Rebuild the row to reflect new state
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                var idx = TessLangList.Children.IndexOf(row);
+                if (idx >= 0) TessLangList.Children[idx] = CreateTessLangRow(lang);
+            });
+        }
+    }
     private void OnAnyTextChanged(object sender, TextChangedEventArgs e) => MarkChanged();
     private void OnAnyToggleChanged(object sender, RoutedEventArgs e) => MarkChanged();
 
@@ -696,6 +869,7 @@ public sealed partial class SettingsWindow : Window
         if (_draft.Language != _initial.Language) _dirty.Add("lang");
         if (_draft.Theme != _initial.Theme) _dirty.Add("theme");
         if (_draft.OcrEngine != _initial.OcrEngine) _dirty.Add("ocr");
+        if (_draft.TesseractLanguages != _initial.TesseractLanguages) _dirty.Add("ocr");
         if (_draft.ScreenshotFolder != _initial.ScreenshotFolder) _dirty.Add("ss-folder");
         if (_draft.VideoFolder != _initial.VideoFolder) _dirty.Add("vid-folder");
         if (_draft.RememberLastFolder != _initial.RememberLastFolder) _dirty.Add("remember");
