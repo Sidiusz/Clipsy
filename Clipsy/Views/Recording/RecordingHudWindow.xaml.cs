@@ -101,8 +101,8 @@ public sealed partial class RecordingHudWindow : Window
     {
         Root.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var size = Root.DesiredSize;
-        int hudW = (int)System.Math.Ceiling(size.Width) + 4;
-        int hudH = (int)System.Math.Ceiling(size.Height) + 4;
+        int hudW = (int)System.Math.Ceiling(size.Width);
+        int hudH = (int)System.Math.Ceiling(size.Height);
         int hudX = regionX + (regionW - hudW) / 2;
         int hudY = regionY + regionH + 8;
         if (hudY + hudH > virtualScreenH - 8)
@@ -117,7 +117,38 @@ public sealed partial class RecordingHudWindow : Window
         var ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
         ex |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT;
         SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
+
+        // Strip resizable frame + caption that WinUI window inherits. Without
+        // this, Win11 paints a 1-2px chrome border around the HUD even after
+        // SetBorderAndTitleBar(false, false).
+        var style = (uint)GetWindowLong(_hwnd, GWL_STYLE);
+        style &= ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+        style |= WS_POPUP;
+        SetWindowLong(_hwnd, GWL_STYLE, unchecked((int)style));
+        SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+
+        // Belt + suspenders: also tell DWM to skip the border color.
+        uint borderColor = DWMWA_COLOR_NONE;
+        DwmSetWindowAttribute(_hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(uint));
     }
+
+    private const int GWL_STYLE = -16;
+    private const uint WS_POPUP      = 0x80000000;
+    private const uint WS_CAPTION    = 0x00C00000;
+    private const uint WS_THICKFRAME = 0x00040000;
+    private const uint WS_MINIMIZEBOX = 0x00020000;
+    private const uint WS_MAXIMIZEBOX = 0x00010000;
+    private const uint WS_SYSMENU    = 0x00080000;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_FRAMECHANGED = 0x0020;
+    private const int DWMWA_BORDER_COLOR = 34;
+    private const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref uint value, int size);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
     private void OnTimerTick(object? s, object e)
     {

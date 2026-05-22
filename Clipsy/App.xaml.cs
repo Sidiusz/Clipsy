@@ -23,6 +23,18 @@ public partial class App : Application
             Diagnostics.Log("App.UnhandledException", e.Exception);
             e.Handled = true;
         };
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex)
+                Diagnostics.Log("AppDomain.UnhandledException", ex);
+            else
+                Diagnostics.Log($"AppDomain.UnhandledException (non-Exception): {e.ExceptionObject}");
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            Diagnostics.Log("TaskScheduler.UnobservedTaskException", e.Exception);
+            e.SetObserved();
+        };
         try
         {
             DebugSettings.IsBindingTracingEnabled = true;
