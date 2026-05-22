@@ -56,9 +56,54 @@ public sealed partial class SettingsWindow : Window
         _hwnd = WindowNative.GetWindowHandle(this);
         _draft = SettingsService.Instance.Settings.Clone();
         HotkeyList.ItemsSource = _hotkeyRows;
+
+        try
+        {
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(AppTitleBar);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("SettingsWindow.SetTitleBar", ex);
+        }
+
         Activated += OnFirstActivated;
         Closed += (_, _) => { if (_current == this) _current = null; };
     }
+
+    private void OnTitleMinimize(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var appWin = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
+            if (appWin.Presenter is OverlappedPresenter p) p.Minimize();
+        }
+        catch (Exception ex) { Diagnostics.Log("SettingsWindow.Minimize", ex); }
+    }
+
+    private void OnTitleMaximize(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var appWin = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
+            if (appWin.Presenter is OverlappedPresenter p)
+            {
+                if (p.State == OverlappedPresenterState.Maximized)
+                {
+                    p.Restore();
+                    BtnTitleMaxIcon.Glyph = "";
+                }
+                else
+                {
+                    p.Maximize();
+                    BtnTitleMaxIcon.Glyph = "";
+                }
+            }
+        }
+        catch (Exception ex) { Diagnostics.Log("SettingsWindow.Maximize", ex); }
+    }
+
+    private void OnTitleClose(object sender, RoutedEventArgs e) => Close();
 
     private void OnFirstActivated(object sender, WindowActivatedEventArgs e)
     {
@@ -68,7 +113,7 @@ public sealed partial class SettingsWindow : Window
         {
             var appWin = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
             appWin.Title = Strings.Get("TraySettings");
-            appWin.Resize(new SizeInt32(720, 640));
+            appWin.Resize(new SizeInt32(940, 640));
             Load();
             ApplyLocalization();
             ThemeService.ApplyTo(Content as FrameworkElement);
@@ -94,7 +139,6 @@ public sealed partial class SettingsWindow : Window
         LblOcrEngine.Text        = Strings.Get("LblOcrEngine");
         LblScreenshotFolder.Text = Strings.Get("LblScreenshotFolder");
         LblVideoFolder.Text      = Strings.Get("LblVideoFolder");
-        RememberFolderSwitch.Header = Strings.Get("LblRememberFolder");
         LblScreenshotFormat.Text = Strings.Get("LblScreenshotFormat");
         LblJpgQuality.Text       = Strings.Get("LblJpgQuality");
         LblAfterSave.Text        = Strings.Get("LblAfterSave");
@@ -103,9 +147,9 @@ public sealed partial class SettingsWindow : Window
         LangAuto.Content   = Strings.Get("OptAuto");
         LangEn.Content     = Strings.Get("OptEnglish");
         LangRu.Content     = Strings.Get("OptRussian");
-        ThemeBtnAuto.Content  = Strings.Get("OptAuto");
-        ThemeBtnDark.Content  = Strings.Get("OptDark");
-        ThemeBtnLight.Content = Strings.Get("OptLight");
+        ThemeBtnAutoLabel.Text  = Strings.Get("OptAuto");
+        ThemeBtnDarkLabel.Text  = Strings.Get("OptDark");
+        ThemeBtnLightLabel.Text = Strings.Get("OptLight");
         OcrTesseract.Content = Strings.Get("OptTesseract");
         OcrWinRt.Content   = Strings.Get("OptWinRtOcr");
         FmtPng.Content     = Strings.Get("OptPngLossless");
@@ -127,11 +171,11 @@ public sealed partial class SettingsWindow : Window
 
         LblGifColors.Text  = Strings.Get("LblGifColors");
         LblGifFps.Text     = Strings.Get("LblGifFps");
-        GifDitherSwitch.Header = Strings.Get("LblGifDither");
+        LblGifDither.Text = Strings.Get("LblGifDither");
 
         LblHotkeyHint.Text = Strings.Get("LblHotkeyHint");
 
-        LblAuthor.Text = Strings.Get("BtnAuthor");
+        // LblAuthor stays "Author" header; name shown separately in LblAuthorName.
         BtnCheckForUpdates.Content = Strings.Get("BtnCheckForUpdates");
 
         ScreenshotFolderPick.Content = Strings.Get("BtnBrowse");
@@ -465,6 +509,12 @@ public sealed partial class SettingsWindow : Window
         _listeningButton = b;
         _listeningKey = key;
         b.Content = "Press keys...";
+        try
+        {
+            b.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyBg2Brush"];
+            b.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentBrush"];
+        }
+        catch { }
         Content.KeyDown -= OnRebindKeyDown;
         Content.KeyDown += OnRebindKeyDown;
     }
@@ -496,6 +546,12 @@ public sealed partial class SettingsWindow : Window
             {
                 _listeningButton.Content = row.Binding;
             }
+            try
+            {
+                _listeningButton.ClearValue(Microsoft.UI.Xaml.Controls.Control.BackgroundProperty);
+                _listeningButton.ClearValue(Microsoft.UI.Xaml.Controls.Control.BorderBrushProperty);
+            }
+            catch { }
         }
         _listeningButton = null;
         _listeningKey = null;

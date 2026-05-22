@@ -30,7 +30,7 @@
     <Color x:Key="ClipsyText4">#FF5C5E66</Color>
 
     <!-- Accent (Discord blurple) -->
-    <Color x:Key="ClipsyAccent">#FF5865F2</Color>
+    <Color x:Key="ClipsyAccent">#FF6C76F4</Color>
     <Color x:Key="ClipsyAccentHover">#FF4752C4</Color>
     <Color x:Key="ClipsyAccentPressed">#FF3C45A5</Color>
     <Color x:Key="ClipsyAccentDim">#285865F2</Color>
