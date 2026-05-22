@@ -48,7 +48,24 @@ public static class Diagnostics
 
     public static void Log(string context, Exception ex)
     {
-        Log($"{context}: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"{context}: {ex.GetType().FullName}: {ex.Message}");
+        sb.AppendLine($"  HResult: 0x{ex.HResult:X8}");
+        if (ex.Data != null && ex.Data.Count > 0)
+        {
+            foreach (var key in ex.Data.Keys)
+                sb.AppendLine($"  Data[{key}]: {ex.Data[key]}");
+        }
+        sb.AppendLine(ex.StackTrace);
+        var inner = ex.InnerException;
+        int depth = 0;
+        while (inner != null && depth++ < 5)
+        {
+            sb.AppendLine($"  --- Inner({depth}): {inner.GetType().Name}: {inner.Message}");
+            sb.AppendLine(inner.StackTrace);
+            inner = inner.InnerException;
+        }
+        Log(sb.ToString());
     }
 
     public static void Show(string context, Exception ex)
