@@ -333,6 +333,27 @@
 
                                     <Border Style="{StaticResource ClipsyHairline}" />
 
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblAutostart"
+                                                       Text="Start with Windows"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperAutostart"
+                                                       Text="Launch Clipsy when you sign in."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="AutostartSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAutostartToggled"
+                                                      VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
                                     <Grid ColumnSpacing="16">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />

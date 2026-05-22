@@ -871,24 +871,62 @@
                                         <DoubleAnimation Storyboard.TargetName="KnobTransform"
                                                          Storyboard.TargetProperty="X"
                                                          To="16" Duration="0:0:0.15" />
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Track"
+                                                                        Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <SolidColorBrush Color="#FF6C76F4" />
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Track"
+                                                                        Storyboard.TargetProperty="BorderBrush">
+                                            <DiscreteObjectKeyFrame KeyTime="0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <SolidColorBrush Color="#FF6C76F4" />
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Knob"
+                                                                        Storyboard.TargetProperty="Fill">
+                                            <DiscreteObjectKeyFrame KeyTime="0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <SolidColorBrush Color="#FFF2F3F5" />
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
-                                    <VisualState.Setters>
-                                        <Setter Target="Track.Background" Value="{StaticResource ClipsyAccentBrush}" />
-                                        <Setter Target="Track.BorderBrush" Value="{StaticResource ClipsyAccentBrush}" />
-                                        <Setter Target="Knob.Fill" Value="White" />
-                                    </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Unchecked">
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="KnobTransform"
                                                          Storyboard.TargetProperty="X"
                                                          To="0" Duration="0:0:0.15" />
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Track"
+                                                                        Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <SolidColorBrush Color="#FF35373C" />
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Track"
+                                                                        Storyboard.TargetProperty="BorderBrush">
+                                            <DiscreteObjectKeyFrame KeyTime="0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <SolidColorBrush Color="#FF3F4147" />
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Knob"
+                                                                        Storyboard.TargetProperty="Fill">
+                                            <DiscreteObjectKeyFrame KeyTime="0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <SolidColorBrush Color="#FFB5BAC1" />
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
-                                    <VisualState.Setters>
-                                        <Setter Target="Track.Background" Value="{StaticResource ClipsyBg3Brush}" />
-                                        <Setter Target="Track.BorderBrush" Value="{StaticResource ClipsyBorderBrush}" />
-                                        <Setter Target="Knob.Fill" Value="{StaticResource ClipsyText2Brush}" />
-                                    </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Indeterminate" />
                             </VisualStateGroup>
