@@ -101,7 +101,7 @@
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavGeneral" Grid.Column="0"
                                           Glyph="&#xE713;" FontSize="16"
-                                          Foreground="{StaticResource ClipsyText2Brush}" />
+                                          />
                                 <TextBlock x:Name="NavGeneralLabel" Grid.Column="1"
                                            Text="General" FontSize="13" VerticalAlignment="Center" />
                             </Grid>
@@ -115,7 +115,7 @@
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavVideo" Grid.Column="0"
                                           Glyph="&#xE714;" FontSize="16"
-                                          Foreground="{StaticResource ClipsyText2Brush}" />
+                                          />
                                 <TextBlock x:Name="NavVideoLabel" Grid.Column="1"
                                            Text="Video" FontSize="13" VerticalAlignment="Center" />
                             </Grid>
@@ -129,7 +129,7 @@
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavGif" Grid.Column="0"
                                           Glyph="&#xE91B;" FontSize="16"
-                                          Foreground="{StaticResource ClipsyText2Brush}" />
+                                          />
                                 <TextBlock x:Name="NavGifLabel" Grid.Column="1"
                                            Text="GIF" FontSize="13" VerticalAlignment="Center" />
                             </Grid>
@@ -143,7 +143,7 @@
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavHotkeys" Grid.Column="0"
                                           Glyph="&#xE765;" FontSize="16"
-                                          Foreground="{StaticResource ClipsyText2Brush}" />
+                                          />
                                 <TextBlock x:Name="NavHotkeysLabel" Grid.Column="1"
                                            Text="Hotkeys" FontSize="13" VerticalAlignment="Center" />
                             </Grid>
@@ -157,7 +157,7 @@
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavInfo" Grid.Column="0"
                                           Glyph="&#xE946;" FontSize="16"
-                                          Foreground="{StaticResource ClipsyText2Brush}" />
+                                          />
                                 <TextBlock x:Name="NavInfoLabel" Grid.Column="1"
                                            Text="Info" FontSize="13" VerticalAlignment="Center" />
                             </Grid>
@@ -234,7 +234,7 @@
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <Border Grid.Column="1"
-                                                Background="{StaticResource ClipsyBg2Brush}"
+                                                Background="{StaticResource ClipsyBgInputBrush}"
                                                 BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
                                                 BorderThickness="1" CornerRadius="6" Padding="3"
                                                 VerticalAlignment="Center">
@@ -493,11 +493,11 @@
                                             <TextBlock x:Name="LblResolution" Text="Resolution"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="LblRegionNote"
-                                                       Text="Applies to full-screen recordings only. Region recordings use the selection size."
+                                                       Text="Applies to full-screen only. Region recordings use their selection size."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <Border Grid.Column="1"
-                                                Background="{StaticResource ClipsyBg2Brush}"
+                                                Background="{StaticResource ClipsyBgInputBrush}"
                                                 BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
                                                 BorderThickness="1" CornerRadius="6" Padding="3"
                                                 VerticalAlignment="Center">
@@ -668,10 +668,10 @@
                                             BorderThickness="0,0,0,1"
                                             Padding="14,8"
                                             CornerRadius="8,8,0,0">
-                                        <Grid>
+                                        <Grid ColumnSpacing="16">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="220" />
+                                                <ColumnDefinition Width="160" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" Text="ACTION" Style="{StaticResource ClipsyLabel}" />
                                             <TextBlock Grid.Column="1" Text="BINDING" Style="{StaticResource ClipsyLabel}"
@@ -683,20 +683,22 @@
                                               Grid.Row="1"
                                               SelectionMode="None"
                                               Background="Transparent"
-                                              BorderThickness="0">
+                                              BorderThickness="0"
+                                              Padding="0,6">
                                         <ListView.ItemContainerStyle>
                                             <Style TargetType="ListViewItem">
                                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                                 <Setter Property="Padding" Value="0" />
                                                 <Setter Property="MinHeight" Value="44" />
+                                                <Setter Property="Margin" Value="0,4,0,4" />
                                             </Style>
                                         </ListView.ItemContainerStyle>
                                         <ListView.ItemTemplate>
                                             <DataTemplate>
-                                                <Grid Padding="14,10">
+                                                <Grid Padding="14,4" ColumnSpacing="16">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="220" />
+                                                        <ColumnDefinition Width="160" />
                                                     </Grid.ColumnDefinitions>
                                                     <TextBlock Grid.Column="0"
                                                                Text="{Binding Label}"
@@ -707,7 +709,8 @@
                                                     <Button Grid.Column="1"
                                                             Style="{StaticResource ClipsyKeyChip}"
                                                             Click="OnHotkeyRebindClick"
-                                                            Tag="{Binding Key}">
+                                                            Tag="{Binding Key}"
+                                                            VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding Binding}" />
                                                     </Button>
                                                 </Grid>
@@ -731,7 +734,7 @@
                                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                         <Border Background="{StaticResource ClipsyBg2Brush}"
                                                 BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
-                                                BorderThickness="1" CornerRadius="999" Padding="10,2">
+                                                BorderThickness="1" CornerRadius="6" Padding="10,3">
                                             <TextBlock x:Name="VersionLabel"
                                                        Style="{StaticResource ClipsyMono}"
                                                        FontSize="11" />

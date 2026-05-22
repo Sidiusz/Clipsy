@@ -374,7 +374,7 @@
          Text input
          ============================================================ -->
     <Style x:Key="ClipsyTextBox" TargetType="TextBox">
-        <Setter Property="Background" Value="{StaticResource ClipsyBg2Brush}" />
+        <Setter Property="Background" Value="{StaticResource ClipsyBgInputBrush}" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyTextBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource ClipsyBorderSubtleBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -390,7 +390,7 @@
          Combo box
          ============================================================ -->
     <Style x:Key="ClipsyComboBox" TargetType="ComboBox">
-        <Setter Property="Background" Value="{StaticResource ClipsyBg2Brush}" />
+        <Setter Property="Background" Value="{StaticResource ClipsyBgInputBrush}" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyTextBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource ClipsyBorderSubtleBrush}" />
         <Setter Property="BorderThickness" Value="1" />
@@ -553,9 +553,27 @@
                                 </VisualState>
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="SelectionStates">
-                                <VisualState x:Name="Unselected" />
-                                <VisualState x:Name="UnselectedPointerOver" />
-                                <VisualState x:Name="UnselectedSelected" />
+                                <VisualState x:Name="Unselected">
+                                    <VisualState.Setters>
+                                        <Setter Target="AccentBar.Visibility" Value="Collapsed" />
+                                        <Setter Target="ContentPresenter.Foreground" Value="{StaticResource ClipsyText2Brush}" />
+                                        <Setter Target="RootBorder.Background" Value="Transparent" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="UnselectedPointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="AccentBar.Visibility" Value="Collapsed" />
+                                        <Setter Target="ContentPresenter.Foreground" Value="{StaticResource ClipsyText2Brush}" />
+                                        <Setter Target="RootBorder.Background" Value="{StaticResource ClipsyBg2Brush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="UnselectedPressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="AccentBar.Visibility" Value="Collapsed" />
+                                        <Setter Target="ContentPresenter.Foreground" Value="{StaticResource ClipsyText2Brush}" />
+                                        <Setter Target="RootBorder.Background" Value="{StaticResource ClipsyBg3Brush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
                                 <VisualState x:Name="Selected">
                                     <VisualState.Setters>
                                         <Setter Target="RootBorder.Background" Value="{StaticResource ClipsyBg3Brush}" />
@@ -858,7 +876,7 @@
                             <VisualStateGroup x:Name="CheckStates">
                                 <VisualState x:Name="Checked">
                                     <VisualState.Setters>
-                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyBg2Brush}" />
+                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyCodecSelectedBrush}" />
                                         <Setter Target="RootGrid.BorderBrush" Value="{StaticResource ClipsyAccentBrush}" />
                                         <Setter Target="OuterEllipse.Stroke" Value="{StaticResource ClipsyAccentBrush}" />
                                         <Setter Target="InnerEllipse.Visibility" Value="Visible" />

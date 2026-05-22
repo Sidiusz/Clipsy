@@ -93,8 +93,8 @@ public static class Strings
         ["LblGifColors"]        = New("Color count",               "Количество цветов"),
         ["LblGifFps"]           = New("Frame rate (fps)",          "Частота кадров"),
         ["LblGifDither"]        = New("Dithering",                 "Дизеринг"),
-        ["LblRegionNote"]       = New("Region recordings use the selection size directly.",
-                                      "Запись области использует размер выделения как есть."),
+        ["LblRegionNote"]       = New("Applies to full-screen only. Region recordings use their selection size.",
+                                      "Применяется только к полноэкранной записи. Запись области использует размер выделения."),
         ["LblHotkeyHint"]       = New("Click a binding to rebind. Esc is reserved.",
                                       "Кликните на сочетание для переназначения. Esc зарезервирован."),
 
@@ -102,7 +102,7 @@ public static class Strings
         ["BtnBrowse"]           = New("Browse",       "Обзор"),
         ["BtnReset"]            = New("Reset",        "Сброс"),
         ["BtnClose"]            = New("Close",        "Закрыть"),
-        ["BtnSave"]             = New("Save",         "Сохранить"),
+        ["BtnSave"]             = New("Save changes", "Сохранить"),
         ["SettingsSaved"]       = New("Settings saved", "Настройки сохранены"),
         ["BtnCheckNow"]         = New("Check now",    "Проверить"),
         ["BtnCheckForUpdates"]  = New("Check for updates", "Проверить обновления"),
@@ -129,7 +129,7 @@ public static class Strings
         ["OptNever"]            = New("Never",       "Никогда"),
 
         // Settings - Info tab
-        ["VersionPrefix"]       = New("Version", "Версия"),
+        ["VersionPrefix"]       = New("v", "v"),
 
         // Errors
         ["ErrSaveFailed"]    = New("Could not save the screenshot.", "Не удалось сохранить скриншот."),
