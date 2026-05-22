@@ -148,84 +148,88 @@
                 </StackPanel>
             </Border>
 
-            <!-- ============== OCR recognized text panel ============== -->
-            <Border x:Name="OcrTextPanel"
-                    Background="{StaticResource ClipsyBg1Brush}"
-                    BorderBrush="{StaticResource ClipsyBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Visibility="Collapsed">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <Border Grid.Row="0"
-                            Background="{StaticResource ClipsyBg2Brush}"
-                            BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
-                            BorderThickness="0,0,0,1"
-                            CornerRadius="8,8,0,0"
-                            Padding="12,8">
-                        <TextBlock Text="RECOGNIZED TEXT" Style="{StaticResource ClipsyLabel}" />
-                    </Border>
-                    <ScrollViewer Grid.Row="1" MaxHeight="220" MaxWidth="480"
-                                  VerticalScrollBarVisibility="Auto"
-                                  Padding="12,10">
-                        <TextBox x:Name="OcrTextBox"
-                                 IsReadOnly="True"
-                                 AcceptsReturn="True"
-                                 TextWrapping="Wrap"
-                                 Background="Transparent"
-                                 BorderThickness="0"
-                                 Foreground="{StaticResource ClipsyTextBrush}"
-                                 FontSize="13" />
-                    </ScrollViewer>
-                </Grid>
-            </Border>
+            <!-- ============== OCR panels (draggable, horizontal) ============== -->
+            <StackPanel x:Name="OcrPanelsContainer"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        Visibility="Collapsed">
 
-            <!-- ============== Translate panel ============== -->
-            <Border x:Name="TranslatePanel"
-                    Background="{StaticResource ClipsyBg1Brush}"
-                    BorderBrush="{StaticResource ClipsyBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="12"
-                    Visibility="Collapsed">
-                <Grid ColumnSpacing="12" RowSpacing="6">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="ORIGINAL"
-                               Style="{StaticResource ClipsyLabel}" />
-                    <TextBlock Grid.Row="0" Grid.Column="1" Text="TRANSLATION"
-                               Style="{StaticResource ClipsyLabel}" />
-                    <TextBox x:Name="TranslateOriginal"
-                             Grid.Row="1" Grid.Column="0"
-                             IsReadOnly="True"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Foreground="{StaticResource ClipsyTextBrush}"
-                             FontSize="14"
-                             MaxWidth="320" />
-                    <TextBox x:Name="TranslateTarget"
-                             Grid.Row="1" Grid.Column="1"
-                             IsReadOnly="True"
-                             AcceptsReturn="True"
-                             TextWrapping="Wrap"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Foreground="{StaticResource ClipsyTextBrush}"
-                             FontSize="14"
-                             MaxWidth="320" />
-                </Grid>
-            </Border>
+                <Border x:Name="OcrTextPanel"
+                        Background="{StaticResource ClipsyBg1Brush}"
+                        BorderBrush="{StaticResource ClipsyBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0"
+                                Background="{StaticResource ClipsyBg2Brush}"
+                                BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                BorderThickness="0,0,0,1"
+                                CornerRadius="8,8,0,0"
+                                Padding="12,8"
+                                PointerPressed="OnOcrPanelDragStart"
+                                PointerMoved="OnOcrPanelDragMove"
+                                PointerReleased="OnOcrPanelDragEnd"
+                                PointerCaptureLost="OnOcrPanelDragCancel">
+                            <TextBlock Text="RECOGNIZED TEXT" Style="{StaticResource ClipsyLabel}" />
+                        </Border>
+                        <ScrollViewer Grid.Row="1" MaxHeight="220" MaxWidth="480"
+                                      VerticalScrollBarVisibility="Auto"
+                                      Padding="12,10">
+                            <TextBox x:Name="OcrTextBox"
+                                     IsReadOnly="True"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="{StaticResource ClipsyTextBrush}"
+                                     FontSize="13" />
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="TranslatePanel"
+                        Background="{StaticResource ClipsyBg1Brush}"
+                        BorderBrush="{StaticResource ClipsyBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0"
+                                Background="{StaticResource ClipsyBg2Brush}"
+                                BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                BorderThickness="0,0,0,1"
+                                CornerRadius="8,8,0,0"
+                                Padding="12,8"
+                                PointerPressed="OnOcrPanelDragStart"
+                                PointerMoved="OnOcrPanelDragMove"
+                                PointerReleased="OnOcrPanelDragEnd"
+                                PointerCaptureLost="OnOcrPanelDragCancel">
+                            <TextBlock Text="TRANSLATION" Style="{StaticResource ClipsyLabel}" />
+                        </Border>
+                        <ScrollViewer Grid.Row="1" MaxHeight="220" MaxWidth="480"
+                                      VerticalScrollBarVisibility="Auto"
+                                      Padding="12,10">
+                            <TextBox x:Name="TranslateTarget"
+                                     IsReadOnly="True"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="{StaticResource ClipsyTextBrush}"
+                                     FontSize="13" />
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+            </StackPanel>
 
             <!-- ============== Right toolbar (annotation tools) ============== -->
             <Border x:Name="RightToolbar"
