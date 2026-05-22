@@ -119,4 +119,34 @@
     <StaticResource x:Key="AccentFillColorSecondaryBrush" ResourceKey="ClipsyAccentHoverBrush" />
     <StaticResource x:Key="AccentFillColorTertiaryBrush"  ResourceKey="ClipsyAccentPressedBrush" />
 
+    <!-- ComboBox / TextBox / NumberBox backgrounds -->
+    <StaticResource x:Key="ComboBoxBackground"            ResourceKey="ClipsyBgInputBrush" />
+    <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="ClipsyBgInputBrush" />
+    <StaticResource x:Key="ComboBoxBackgroundPressed"     ResourceKey="ClipsyBgInputBrush" />
+    <StaticResource x:Key="ComboBoxBackgroundDisabled"    ResourceKey="ClipsyBgInputBrush" />
+    <StaticResource x:Key="ComboBoxBackgroundUnfocused"   ResourceKey="ClipsyBgInputBrush" />
+    <StaticResource x:Key="ComboBoxBackgroundFocused"     ResourceKey="ClipsyBgInputBrush" />
+
+    <StaticResource x:Key="TextControlBackground"            ResourceKey="ClipsyBgInputBrush" />
+    <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ClipsyBgInputBrush" />
+    <StaticResource x:Key="TextControlBackgroundFocused"     ResourceKey="ClipsyBgInputBrush" />
+    <StaticResource x:Key="TextControlBackgroundDisabled"    ResourceKey="ClipsyBgInputBrush" />
+
+    <!-- ComboBox / TextBox border colors (subtle) -->
+    <StaticResource x:Key="ComboBoxBorderBrush"            ResourceKey="ClipsyBorderSubtleBrush" />
+    <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="ClipsyBorderBrush" />
+    <StaticResource x:Key="ComboBoxBorderBrushPressed"     ResourceKey="ClipsyBorderBrush" />
+    <StaticResource x:Key="TextControlBorderBrush"             ResourceKey="ClipsyBorderSubtleBrush" />
+    <StaticResource x:Key="TextControlBorderBrushPointerOver"  ResourceKey="ClipsyBorderBrush" />
+    <StaticResource x:Key="TextControlBorderBrushFocused"      ResourceKey="ClipsyAccentBrush" />
+
+    <!-- Surfaces used in ComboBox popup -->
+    <StaticResource x:Key="ComboBoxDropDownBackground"            ResourceKey="ClipsyBgInputBrush" />
+    <StaticResource x:Key="ComboBoxItemBackground"                ResourceKey="ClipsyBgInputBrush" />
+    <StaticResource x:Key="ComboBoxItemBackgroundPointerOver"     ResourceKey="ClipsyBg3Brush" />
+    <StaticResource x:Key="ComboBoxItemBackgroundPressed"         ResourceKey="ClipsyBgActiveBrush" />
+    <StaticResource x:Key="ComboBoxItemBackgroundSelected"        ResourceKey="ClipsyBg3Brush" />
+    <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="ClipsyBg3Brush" />
+    <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed"     ResourceKey="ClipsyBgActiveBrush" />
+
 </ResourceDictionary>

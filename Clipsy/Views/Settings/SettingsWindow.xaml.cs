@@ -71,39 +71,6 @@ public sealed partial class SettingsWindow : Window
         Closed += (_, _) => { if (_current == this) _current = null; };
     }
 
-    private void OnTitleMinimize(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var appWin = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
-            if (appWin.Presenter is OverlappedPresenter p) p.Minimize();
-        }
-        catch (Exception ex) { Diagnostics.Log("SettingsWindow.Minimize", ex); }
-    }
-
-    private void OnTitleMaximize(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var appWin = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
-            if (appWin.Presenter is OverlappedPresenter p)
-            {
-                if (p.State == OverlappedPresenterState.Maximized)
-                {
-                    p.Restore();
-                    BtnTitleMaxIcon.Glyph = "";
-                }
-                else
-                {
-                    p.Maximize();
-                    BtnTitleMaxIcon.Glyph = "";
-                }
-            }
-        }
-        catch (Exception ex) { Diagnostics.Log("SettingsWindow.Maximize", ex); }
-    }
-
-    private void OnTitleClose(object sender, RoutedEventArgs e) => Close();
 
     private void OnFirstActivated(object sender, WindowActivatedEventArgs e)
     {
@@ -114,6 +81,24 @@ public sealed partial class SettingsWindow : Window
             var appWin = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
             appWin.Title = Strings.Get("TraySettings");
             appWin.Resize(new SizeInt32(940, 640));
+            try
+            {
+                var tb = appWin.TitleBar;
+                var transparent = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+                var fg = Windows.UI.Color.FromArgb(0xFF, 0xB5, 0xBA, 0xC1);
+                var fgHover = Windows.UI.Color.FromArgb(0xFF, 0xF2, 0xF3, 0xF5);
+                var hover = Windows.UI.Color.FromArgb(0xFF, 0x35, 0x37, 0x3C);
+                var pressed = Windows.UI.Color.FromArgb(0xFF, 0x40, 0x42, 0x49);
+                tb.ButtonBackgroundColor = transparent;
+                tb.ButtonInactiveBackgroundColor = transparent;
+                tb.ButtonForegroundColor = fg;
+                tb.ButtonInactiveForegroundColor = Windows.UI.Color.FromArgb(0xFF, 0x80, 0x84, 0x8E);
+                tb.ButtonHoverBackgroundColor = hover;
+                tb.ButtonHoverForegroundColor = fgHover;
+                tb.ButtonPressedBackgroundColor = pressed;
+                tb.ButtonPressedForegroundColor = fgHover;
+            }
+            catch (Exception ex) { Diagnostics.Log("SettingsWindow.ThemeTitleBar", ex); }
             Load();
             ApplyLocalization();
             ThemeService.ApplyTo(Content as FrameworkElement);
@@ -634,16 +619,28 @@ public sealed partial class SettingsWindow : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SHGetPathFromIDListW(IntPtr pidl, IntPtr pszPath);
 
-    private void OnNavSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnNavChecked(object sender, RoutedEventArgs e)
     {
-        if (NavList?.SelectedItem is not ListViewItem item) return;
+        if (sender is not RadioButton rb) return;
         if (PaneGeneral is null) return;
-        var key = item.Tag as string;
+        var key = rb.Tag as string;
 
         PaneGeneral.Visibility = key == "general" ? Visibility.Visible : Visibility.Collapsed;
         PaneVideo.Visibility   = key == "video"   ? Visibility.Visible : Visibility.Collapsed;
         PaneGif.Visibility     = key == "gif"     ? Visibility.Visible : Visibility.Collapsed;
         PaneHotkeys.Visibility = key == "hotkeys" ? Visibility.Visible : Visibility.Collapsed;
         PaneInfo.Visibility    = key == "info"    ? Visibility.Visible : Visibility.Collapsed;
+
+        try
+        {
+            var accent = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentBrush"];
+            var dim = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyText2Brush"];
+            IconNavGeneral.Foreground = key == "general" ? accent : dim;
+            IconNavVideo.Foreground   = key == "video"   ? accent : dim;
+            IconNavGif.Foreground     = key == "gif"     ? accent : dim;
+            IconNavHotkeys.Foreground = key == "hotkeys" ? accent : dim;
+            IconNavInfo.Foreground    = key == "info"    ? accent : dim;
+        }
+        catch { }
     }
 }
