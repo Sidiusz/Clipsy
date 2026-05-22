@@ -819,6 +819,78 @@
         </Setter>
     </Style>
 
+    <!-- Compact toggle (replaces ToggleSwitch where we only need on/off, no content column) -->
+    <Style x:Key="ClipsyMiniToggle" TargetType="ToggleButton">
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="{StaticResource ClipsyBg3Brush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource ClipsyBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="UseSystemFocusVisuals" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid>
+                        <Border x:Name="Track"
+                                CornerRadius="10"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                        <Ellipse x:Name="Knob"
+                                 Width="14" Height="14"
+                                 Fill="{StaticResource ClipsyText2Brush}"
+                                 HorizontalAlignment="Left"
+                                 VerticalAlignment="Center"
+                                 Margin="3,0,0,0">
+                            <Ellipse.RenderTransform>
+                                <TranslateTransform x:Name="KnobTransform" X="0" />
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Track.BorderBrush" Value="{StaticResource ClipsyBorderStrongBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed" />
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="Track.Opacity" Value="0.45" />
+                                        <Setter Target="Knob.Opacity" Value="0.45" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="CheckStates">
+                                <VisualState x:Name="Checked">
+                                    <VisualState.Setters>
+                                        <Setter Target="Track.Background" Value="{StaticResource ClipsyAccentBrush}" />
+                                        <Setter Target="Track.BorderBrush" Value="{StaticResource ClipsyAccentBrush}" />
+                                        <Setter Target="Knob.Fill" Value="White" />
+                                        <Setter Target="KnobTransform.X" Value="16" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Unchecked">
+                                    <VisualState.Setters>
+                                        <Setter Target="Track.Background" Value="{StaticResource ClipsyBg3Brush}" />
+                                        <Setter Target="Track.BorderBrush" Value="{StaticResource ClipsyBorderBrush}" />
+                                        <Setter Target="Knob.Fill" Value="{StaticResource ClipsyText2Brush}" />
+                                        <Setter Target="KnobTransform.X" Value="0" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Indeterminate" />
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Keyboard-cap chip -->
     <Style x:Key="ClipsyKbd" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource ClipsyBgInputBrush}" />

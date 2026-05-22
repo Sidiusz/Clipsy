@@ -278,7 +278,7 @@ public sealed partial class SettingsWindow : Window
         VideoFolderBox.Text = string.IsNullOrEmpty(_draft.VideoFolder)
             ? SettingsService.Instance.DefaultVideoFolder
             : _draft.VideoFolder!;
-        RememberFolderSwitch.IsOn = _draft.RememberLastFolder;
+        RememberFolderSwitch.IsChecked = _draft.RememberLastFolder;
 
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
 
@@ -307,7 +307,7 @@ public sealed partial class SettingsWindow : Window
         GifFpsSlider.Value = System.Math.Clamp(_draft.GifFps, 5, 30);
         GifFpsLabel.Text = ((int)GifFpsSlider.Value).ToString();
 
-        GifDitherSwitch.IsOn = _draft.GifDither;
+        GifDitherSwitch.IsChecked = _draft.GifDither;
 
         BuildHotkeyRows();
 
@@ -342,7 +342,7 @@ public sealed partial class SettingsWindow : Window
         _draft.OcrEngine = SelectedComboTag(OcrEngineBox);
         _draft.ScreenshotFolder = ScreenshotFolderBox.Text;
         _draft.VideoFolder = VideoFolderBox.Text;
-        _draft.RememberLastFolder = RememberFolderSwitch.IsOn;
+        _draft.RememberLastFolder = RememberFolderSwitch.IsChecked == true;
         _draft.ScreenshotFormat = SelectedComboTag(ScreenshotFormatBox);
         _draft.JpgQuality = (int)JpgQualitySlider.Value;
         _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
@@ -354,7 +354,7 @@ public sealed partial class SettingsWindow : Window
 
         _draft.GifColors = (int)GifColorSlider.Value;
         _draft.GifFps = (int)GifFpsSlider.Value;
-        _draft.GifDither = GifDitherSwitch.IsOn;
+        _draft.GifDither = GifDitherSwitch.IsChecked == true;
 
         foreach (var row in _hotkeyRows)
         {
