@@ -1973,8 +1973,20 @@ public sealed partial class CaptureOverlayWindow : Window
         TranslateTarget.Text = "...";
         TranslatePanel.Width = OcrTextPanel.ActualWidth;
         TranslatePanel.Visibility = Visibility.Visible;
-        var (from, to) = TranslationService.GuessLangPair(text);
-        var translated = await TranslationService.TranslateAsync(text, from, to);
+
+        var cfg = SettingsService.Instance.Settings;
+        string from = cfg.TranslateFrom;
+        string to   = cfg.TranslateTo == "ui" ? Strings.Lang : cfg.TranslateTo;
+
+        // MyMemory doesn't support sl=auto; fall back to heuristic detection
+        if (from == "auto" && !string.Equals(cfg.TranslateService, "Google", StringComparison.OrdinalIgnoreCase))
+        {
+            var guessed = TranslationService.GuessLangPair(text);
+            from = guessed.from;
+            if (cfg.TranslateTo == "ui") to = guessed.to;
+        }
+
+        var translated = await TranslationService.TranslateAsync(text, from, to, cfg.TranslateService);
         TranslateTarget.Text = translated ?? Strings.Get("TranslateUnavailable");
     }
 

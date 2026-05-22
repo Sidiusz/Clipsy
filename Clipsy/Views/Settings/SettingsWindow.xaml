@@ -291,6 +291,64 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- Translation settings card -->
+                            <Border Style="{StaticResource ClipsyGroupCard}">
+                                <StackPanel Spacing="16">
+                                    <!-- Service row -->
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblTranslateService" Text="Translation service"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperTranslation"
+                                                       Text="Service and language pair used when translating recognized text."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="TranslateServiceBox" Grid.Column="1" MinWidth="220"
+                                                  VerticalAlignment="Center"
+                                                  SelectionChanged="OnAnyControlChanged">
+                                            <ComboBoxItem Content="MyMemory (free)" Tag="MyMemory" />
+                                            <ComboBoxItem Content="Google Translate" Tag="Google" />
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <!-- From language row -->
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="LblTranslateFrom" Text="From"
+                                                   Style="{StaticResource ClipsyBodyStrong}"
+                                                   VerticalAlignment="Center" />
+                                        <ComboBox x:Name="TranslateFromBox" Grid.Column="1" MinWidth="220"
+                                                  VerticalAlignment="Center"
+                                                  SelectionChanged="OnAnyControlChanged" />
+                                    </Grid>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <!-- To language row -->
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="LblTranslateTo" Text="To"
+                                                   Style="{StaticResource ClipsyBodyStrong}"
+                                                   VerticalAlignment="Center" />
+                                        <ComboBox x:Name="TranslateToBox" Grid.Column="1" MinWidth="220"
+                                                  VerticalAlignment="Center"
+                                                  SelectionChanged="OnAnyControlChanged" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
                             <Border Style="{StaticResource ClipsyGroupCard}">
                                 <StackPanel Spacing="16">
                                     <StackPanel Spacing="10">

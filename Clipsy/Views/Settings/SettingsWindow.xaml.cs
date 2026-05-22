@@ -80,6 +80,9 @@ public sealed partial class SettingsWindow : Window
         ["jpg-q"] = "general",
         ["after-save"] = "general",
         ["update-int"] = "general",
+        ["translate-svc"]  = "general",
+        ["translate-from"] = "general",
+        ["translate-to"]   = "general",
         ["codec"] = "video",
         ["resolution"] = "video",
         ["bitrate"] = "video",
@@ -183,6 +186,11 @@ public sealed partial class SettingsWindow : Window
         HelperOcr.Text       = Strings.Get("HelperOcr");
         LblTessLang.Text     = Strings.Get("LblTessLang");
         HelperTessLang.Text  = Strings.Get("HelperTessLang");
+        LblTranslateService.Text = Strings.Get("LblTranslateService");
+        HelperTranslation.Text   = Strings.Get("HelperTranslation");
+        LblTranslateFrom.Text    = Strings.Get("LblTranslateFrom");
+        LblTranslateTo.Text      = Strings.Get("LblTranslateTo");
+        BuildTranslateLangDropdowns();
         HelperRemember.Text  = Strings.Get("HelperRemember");
         HelperCodec.Text    = Strings.Get("HelperCodec");
         HelperBitrate.Text  = Strings.Get("HelperBitrate");
@@ -293,6 +301,10 @@ public sealed partial class SettingsWindow : Window
             _tessSelectedCodes.Add(c);
         BuildTessLangRows();
         UpdateTessLangSectionVisibility();
+        BuildTranslateLangDropdowns();
+        SelectComboByTag(TranslateServiceBox, _draft.TranslateService);
+        SelectComboByTag(TranslateFromBox,    _draft.TranslateFrom);
+        SelectComboByTag(TranslateToBox,      _draft.TranslateTo);
         ScreenshotFolderBox.Text = string.IsNullOrEmpty(_draft.ScreenshotFolder)
             ? SettingsService.Instance.DefaultScreenshotFolder
             : _draft.ScreenshotFolder!;
@@ -363,6 +375,9 @@ public sealed partial class SettingsWindow : Window
         _draft.Theme = SelectedSegmentTag(ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight);
         _draft.OcrEngine = SelectedComboTag(OcrEngineBox);
         _draft.TesseractLanguages = string.Join(",", _tessSelectedCodes);
+        _draft.TranslateService = SelectedComboTag(TranslateServiceBox);
+        _draft.TranslateFrom    = SelectedComboTag(TranslateFromBox);
+        _draft.TranslateTo      = SelectedComboTag(TranslateToBox);
         _draft.ScreenshotFolder = ScreenshotFolderBox.Text;
         _draft.VideoFolder = VideoFolderBox.Text;
         _draft.RememberLastFolder = RememberFolderSwitch.IsChecked == true;
@@ -847,6 +862,41 @@ public sealed partial class SettingsWindow : Window
             });
         }
     }
+    private void BuildTranslateLangDropdowns()
+    {
+        var prevFrom = SelectedComboTag(TranslateFromBox);
+        var prevTo   = SelectedComboTag(TranslateToBox);
+
+        TranslateFromBox.Items.Clear();
+        TranslateToBox.Items.Clear();
+
+        bool ru = Strings.Lang == "ru";
+
+        // "From" dropdown: Auto-detect + all languages
+        TranslateFromBox.Items.Add(new ComboBoxItem
+        {
+            Content = Strings.Get("LangAutoDetect"),
+            Tag = "auto",
+        });
+        // "To" dropdown: Interface language (default) + all languages
+        TranslateToBox.Items.Add(new ComboBoxItem
+        {
+            Content = Strings.Get("LangUiDefault"),
+            Tag = "ui",
+        });
+
+        foreach (var lang in TranslationService.LangCatalog)
+        {
+            var name = ru ? lang.Ru : lang.En;
+            TranslateFromBox.Items.Add(new ComboBoxItem { Content = name, Tag = lang.Code });
+            TranslateToBox.Items.Add(new ComboBoxItem   { Content = name, Tag = lang.Code });
+        }
+
+        // Restore previous selection
+        SelectComboByTag(TranslateFromBox, string.IsNullOrEmpty(prevFrom) ? "auto" : prevFrom);
+        SelectComboByTag(TranslateToBox,   string.IsNullOrEmpty(prevTo)   ? "ui"   : prevTo);
+    }
+
     private void OnAnyTextChanged(object sender, TextChangedEventArgs e) => MarkChanged();
     private void OnAnyToggleChanged(object sender, RoutedEventArgs e) => MarkChanged();
 
@@ -870,6 +920,9 @@ public sealed partial class SettingsWindow : Window
         if (_draft.Theme != _initial.Theme) _dirty.Add("theme");
         if (_draft.OcrEngine != _initial.OcrEngine) _dirty.Add("ocr");
         if (_draft.TesseractLanguages != _initial.TesseractLanguages) _dirty.Add("ocr");
+        if (_draft.TranslateService != _initial.TranslateService) _dirty.Add("translate-svc");
+        if (_draft.TranslateFrom    != _initial.TranslateFrom)    _dirty.Add("translate-from");
+        if (_draft.TranslateTo      != _initial.TranslateTo)      _dirty.Add("translate-to");
         if (_draft.ScreenshotFolder != _initial.ScreenshotFolder) _dirty.Add("ss-folder");
         if (_draft.VideoFolder != _initial.VideoFolder) _dirty.Add("vid-folder");
         if (_draft.RememberLastFolder != _initial.RememberLastFolder) _dirty.Add("remember");
@@ -901,6 +954,8 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblLanguage, "LblLanguage", _dirty.Contains("lang"));
         SetLabel(LblTheme, "LblTheme", _dirty.Contains("theme"));
         SetLabel(LblOcrEngine, "LblOcrEngine", _dirty.Contains("ocr"));
+        SetLabel(LblTranslateService, "LblTranslateService",
+            _dirty.Contains("translate-svc") || _dirty.Contains("translate-from") || _dirty.Contains("translate-to"));
         SetLabel(LblScreenshotFolder, "LblScreenshotFolder", _dirty.Contains("ss-folder"));
         SetLabel(LblVideoFolder, "LblVideoFolder", _dirty.Contains("vid-folder"));
         SetLabel(LblRememberFolder, "LblRememberFolder", _dirty.Contains("remember"));
