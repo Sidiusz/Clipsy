@@ -75,6 +75,10 @@ public sealed partial class CaptureOverlayWindow : Window
     private int _scanDir = 1;
     private Point _ocrDragStart;
 
+    // Pre-allocated dim geometry — avoids GC pressure and XAML re-layout on every PointerMoved.
+    private readonly RectangleGeometry _dimFull = new();
+    private readonly RectangleGeometry _dimHole = new();
+
     public CaptureOverlayWindow(ScreenFreezeService.FrozenFrame frame)
     {
         _frame = frame;
@@ -84,6 +88,11 @@ public sealed partial class CaptureOverlayWindow : Window
         this.SystemBackdrop = null;
 
         ThemeService.Register(RootGrid);
+
+        // Wire up pre-allocated dim geometries once so UpdateDimGeometry only
+        // mutates Rect, never allocates or modifies the Children collection.
+        DimGeometry.Children.Add(_dimFull);
+        DimGeometry.Children.Add(_dimHole);
 
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = GetAppWindowForCurrentWindow();
@@ -210,18 +219,16 @@ public sealed partial class CaptureOverlayWindow : Window
         }
         var b = _frame.VirtualBounds;
 
-        // Account for DPI scaling - window size should match actual pixels
-        var dpiScale = Content?.XamlRoot?.RasterizationScale ?? 1.0;
-        var windowWidth = (int)(b.Width / dpiScale);
-        var windowHeight = (int)(b.Height / dpiScale);
-
-        _appWindow.MoveAndResize(new RectInt32(b.X, b.Y, windowWidth, windowHeight));
-
-        // Force exact window positioning using Win32 API to prevent invisible borders
-        SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, windowWidth, windowHeight,
+        // AppWindow.MoveAndResize and SetWindowPos both take physical screen pixels.
+        // Never divide b.Width/b.Height by dpiScale here — that shrinks the window.
+        _appWindow.MoveAndResize(new RectInt32(b.X, b.Y, b.Width, b.Height));
+        SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height,
             SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
-        // Set RootGrid and Image sizes to match frame exactly
+        // XAML element sizes are in DIPs, so divide by DPI scale.
+        // Use GetDpiForWindow for accuracy before XamlRoot is ready.
+        var rawDpi = GetDpiForWindow(_hwnd);
+        var dpiScale = rawDpi > 0 ? rawDpi / 96.0 : (Content?.XamlRoot?.RasterizationScale ?? 1.0);
         RootGrid.Width = b.Width / dpiScale;
         RootGrid.Height = b.Height / dpiScale;
 
@@ -247,6 +254,11 @@ public sealed partial class CaptureOverlayWindow : Window
             // Set window style to remove all borders
             SetWindowLong(_hwnd, GWL_STYLE, WS_POPUP);
             SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_TOOLWINDOW);
+
+            // Force Windows to recalculate the non-client area after style changes.
+            // Without SWP_FRAMECHANGED the old border geometry stays active and blocks hits.
+            SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
         }
         catch (Exception ex)
         {
@@ -286,9 +298,10 @@ public sealed partial class CaptureOverlayWindow : Window
             bmp.SetSource(stream);
             FrozenImage.Source = bmp;
 
-            // Set exact image dimensions accounting for DPI scaling
+            // Set exact image dimensions in DIPs
             var b = _frame.VirtualBounds;
-            var dpiScale = Content?.XamlRoot?.RasterizationScale ?? 1.0;
+            var rawDpi = GetDpiForWindow(_hwnd);
+            var dpiScale = rawDpi > 0 ? rawDpi / 96.0 : (Content?.XamlRoot?.RasterizationScale ?? 1.0);
             FrozenImage.Width = b.Width / dpiScale;
             FrozenImage.Height = b.Height / dpiScale;
 
@@ -658,7 +671,13 @@ public sealed partial class CaptureOverlayWindow : Window
                 UpdateSelectionVisual();
                 break;
             case InteractionMode.DrawingStroke:
-                ExtendStroke(pos);
+                // GetIntermediatePoints returns all high-frequency samples buffered between
+                // PointerMoved events — critical for smooth strokes at 144Hz+.
+                var pts = e.GetIntermediatePoints(RootGrid);
+                if (pts != null && pts.Count > 0)
+                    foreach (var p in pts) ExtendStroke(p.Position);
+                else
+                    ExtendStroke(pos);
                 break;
             case InteractionMode.DrawingRect:
                 UpdateActiveShape(pos);
@@ -816,25 +835,19 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void UpdateDimGeometry(Rect? hole)
     {
-        DimGeometry.Children.Clear();
-
-        // Use actual window client area size, not frame bounds
         double w = RootGrid.ActualWidth;
         double h = RootGrid.ActualHeight;
-
-        // Fallback to frame bounds only if RootGrid not measured yet
         if (w <= 0) w = _frame.VirtualBounds.Width;
         if (h <= 0) h = _frame.VirtualBounds.Height;
 
-        // Always add full screen dimming geometry
-        DimGeometry.Children.Add(new RectangleGeometry { Rect = new Rect(0, 0, w, h) });
+        _dimFull.Rect = new Rect(0, 0, w, h);
 
-        if (hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0)
-        {
-            // Add hole - EvenOdd makes selection area transparent
-            DimGeometry.Children.Add(new RectangleGeometry { Rect = hole.Value });
-        }
-        // Note: DimPath.Fill is set in XAML to ClipsyOverlayDimBrush
+        // EvenOdd: a valid hole punches through the dim; an empty rect collapses
+        // the second geometry so no hole shows (both rects identical → even fill = nothing).
+        // Zero-size rect means no hole: EvenOdd ignores 0-area geometry.
+        _dimHole.Rect = (hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0)
+            ? hole.Value
+            : new Rect(0, 0, 0, 0);
     }
 
     private void ShowToolbars()
@@ -1837,6 +1850,9 @@ public sealed partial class CaptureOverlayWindow : Window
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
+
     private const int GWL_STYLE = -16;
     private const int GWL_EXSTYLE = -20;
     private const uint WS_POPUP = 0x80000000;
@@ -1844,8 +1860,12 @@ public sealed partial class CaptureOverlayWindow : Window
     private const uint WS_EX_TOOLWINDOW = 0x00000080;
 
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-    private const uint SWP_NOACTIVATE = 0x0010;
-    private const uint SWP_SHOWWINDOW = 0x0040;
+    private const uint SWP_NOACTIVATE   = 0x0010;
+    private const uint SWP_SHOWWINDOW   = 0x0040;
+    private const uint SWP_NOMOVE       = 0x0002;
+    private const uint SWP_NOSIZE       = 0x0001;
+    private const uint SWP_NOZORDER     = 0x0004;
+    private const uint SWP_FRAMECHANGED = 0x0020;
 
     private void UpdateOcrSelectionVisual()
     {

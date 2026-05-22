@@ -12,6 +12,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using Windows.System;
@@ -51,7 +52,7 @@ public sealed partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
-        ThemeService.ApplyTo(Content as FrameworkElement);
+        ThemeService.Register(Content as FrameworkElement);
         _hwnd = WindowNative.GetWindowHandle(this);
         _draft = SettingsService.Instance.Settings.Clone();
         HotkeyList.ItemsSource = _hotkeyRows;
@@ -72,6 +73,7 @@ public sealed partial class SettingsWindow : Window
             ApplyLocalization();
             ThemeService.ApplyTo(Content as FrameworkElement);
             VersionLabel.Text = Strings.Get("VersionPrefix") + " " + GetVersion();
+            BuildDateLabel.Text = GetBuildDate();
         }
         catch (Exception ex)
         {
@@ -101,9 +103,9 @@ public sealed partial class SettingsWindow : Window
         LangAuto.Content   = Strings.Get("OptAuto");
         LangEn.Content     = Strings.Get("OptEnglish");
         LangRu.Content     = Strings.Get("OptRussian");
-        ThemeAuto.Content  = Strings.Get("OptAuto");
-        ThemeDark.Content  = Strings.Get("OptDark");
-        ThemeLight.Content = Strings.Get("OptLight");
+        ThemeBtnAuto.Content  = Strings.Get("OptAuto");
+        ThemeBtnDark.Content  = Strings.Get("OptDark");
+        ThemeBtnLight.Content = Strings.Get("OptLight");
         OcrTesseract.Content = Strings.Get("OptTesseract");
         OcrWinRt.Content   = Strings.Get("OptWinRtOcr");
         FmtPng.Content     = Strings.Get("OptPngLossless");
@@ -167,7 +169,7 @@ public sealed partial class SettingsWindow : Window
     private void Load()
     {
         SelectComboByTag(LangBox, _draft.Language);
-        SelectComboByTag(ThemeBox, _draft.Theme);
+        SelectSegment(_draft.Theme, ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight);
         SelectComboByTag(OcrEngineBox, _draft.OcrEngine);
         ScreenshotFolderBox.Text = string.IsNullOrEmpty(_draft.ScreenshotFolder)
             ? SettingsService.Instance.DefaultScreenshotFolder
@@ -188,8 +190,8 @@ public sealed partial class SettingsWindow : Window
         SelectComboByTag(AfterSaveBox, _draft.AfterSaveAction);
         SelectComboByTag(UpdateIntervalBox, _draft.UpdateInterval);
 
-        SelectComboByTag(CodecBox, _draft.VideoCodec);
-        SelectComboByTag(ResolutionBox, _draft.VideoResolution);
+        SelectRadio(_draft.VideoCodec, RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
+        SelectSegment(_draft.VideoResolution, ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal);
         UpdateBitrateBounds(_draft.VideoResolution);
         BitrateSlider.Value = System.Math.Clamp(_draft.VideoBitrateMbps, (int)BitrateSlider.Minimum, (int)BitrateSlider.Maximum);
         UpdateBitrateLabel();
@@ -230,7 +232,7 @@ public sealed partial class SettingsWindow : Window
     private void Collect()
     {
         _draft.Language = SelectedComboTag(LangBox);
-        _draft.Theme = SelectedComboTag(ThemeBox);
+        _draft.Theme = SelectedSegmentTag(ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight);
         _draft.OcrEngine = SelectedComboTag(OcrEngineBox);
         _draft.ScreenshotFolder = ScreenshotFolderBox.Text;
         _draft.VideoFolder = VideoFolderBox.Text;
@@ -240,8 +242,8 @@ public sealed partial class SettingsWindow : Window
         _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
         _draft.UpdateInterval = SelectedComboTag(UpdateIntervalBox);
 
-        _draft.VideoCodec = SelectedComboTag(CodecBox);
-        _draft.VideoResolution = SelectedComboTag(ResolutionBox);
+        _draft.VideoCodec = SelectedRadioTag(RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
+        _draft.VideoResolution = SelectedSegmentTag(ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal);
         _draft.VideoBitrateMbps = (int)BitrateSlider.Value;
 
         _draft.GifColors = (int)GifColorSlider.Value;
@@ -278,6 +280,59 @@ public sealed partial class SettingsWindow : Window
         _hotkeyRows.Add(new HotkeyRow { Key = "redo", Label = "Redo", Binding = _draft.HotkeyRedo });
         _hotkeyRows.Add(new HotkeyRow { Key = "select-all", Label = "Select all", Binding = _draft.HotkeySelectAll });
         _hotkeyRows.Add(new HotkeyRow { Key = "record-save", Label = "Save recording (silent)", Binding = _draft.HotkeyRecordSilentSave });
+    }
+
+    private static void SelectSegment(string tag, params ToggleButton[] btns)
+    {
+        bool any = false;
+        foreach (var btn in btns)
+        {
+            bool match = string.Equals(btn.Tag as string, tag, StringComparison.OrdinalIgnoreCase);
+            btn.IsChecked = match;
+            if (match) any = true;
+        }
+        if (!any && btns.Length > 0) btns[0].IsChecked = true;
+    }
+
+    private static string SelectedSegmentTag(params ToggleButton[] btns)
+    {
+        foreach (var btn in btns)
+            if (btn.IsChecked == true) return (btn.Tag as string) ?? string.Empty;
+        return btns.Length > 0 ? (btns[0].Tag as string) ?? string.Empty : string.Empty;
+    }
+
+    private static void SelectRadio(string tag, params RadioButton[] radios)
+    {
+        bool any = false;
+        foreach (var r in radios)
+        {
+            if (string.Equals(r.Tag as string, tag, StringComparison.OrdinalIgnoreCase))
+            {
+                r.IsChecked = true;
+                any = true;
+                break;
+            }
+        }
+        if (!any && radios.Length > 0) radios[0].IsChecked = true;
+    }
+
+    private static string SelectedRadioTag(params RadioButton[] radios)
+    {
+        foreach (var r in radios)
+            if (r.IsChecked == true) return (r.Tag as string) ?? string.Empty;
+        return radios.Length > 0 ? (radios[0].Tag as string) ?? string.Empty : string.Empty;
+    }
+
+    private static string GetBuildDate()
+    {
+        try
+        {
+            var loc = System.Reflection.Assembly.GetEntryAssembly()?.Location;
+            if (!string.IsNullOrEmpty(loc))
+                return "Built " + File.GetLastWriteTime(loc).ToString("d MMM yyyy");
+        }
+        catch { }
+        return string.Empty;
     }
 
     private async void OnScreenshotFolderPick(object sender, RoutedEventArgs e)
@@ -322,7 +377,21 @@ public sealed partial class SettingsWindow : Window
         });
     }
 
-    private void OnCodecChanged(object sender, SelectionChangedEventArgs e) { }
+    private void OnThemeSegmentClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton clicked) return;
+        foreach (var btn in new[] { ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight })
+            btn.IsChecked = btn == clicked;
+    }
+
+    private void OnResolutionSegmentClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton clicked) return;
+        foreach (var btn in new[] { ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal })
+            btn.IsChecked = btn == clicked;
+        UpdateBitrateBounds(clicked.Tag as string ?? string.Empty);
+        UpdateBitrateLabel();
+    }
 
     private void OnScreenshotFormatChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -339,12 +408,6 @@ public sealed partial class SettingsWindow : Window
     private void OnJpgQualityChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         if (JpgQualityLabel != null) JpgQualityLabel.Text = ((int)JpgQualitySlider.Value).ToString();
-    }
-
-    private void OnResolutionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        UpdateBitrateBounds(SelectedComboTag(ResolutionBox));
-        UpdateBitrateLabel();
     }
 
     private void UpdateBitrateBounds(string resolution)
@@ -471,6 +534,7 @@ public sealed partial class SettingsWindow : Window
             Collect();
             SettingsService.Instance.Replace(_draft);
             ThemeService.ApplyTo(Content as FrameworkElement);
+            ApplyLocalization();
             NotificationService.Info("SettingsSaved");
         }
         catch (Exception ex)

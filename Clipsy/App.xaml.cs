@@ -20,8 +20,22 @@ public partial class App : Application
         UnhandledException += (_, e) =>
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Unhandled: {e.Exception}");
+            Diagnostics.Log("App.UnhandledException", e.Exception);
             e.Handled = true;
         };
+        try
+        {
+            DebugSettings.IsBindingTracingEnabled = true;
+            DebugSettings.IsXamlResourceReferenceTracingEnabled = true;
+            DebugSettings.BindingFailed += (_, ev) =>
+                Diagnostics.Log($"BindingFailed: {ev.Message}");
+            DebugSettings.XamlResourceReferenceFailed += (_, ev) =>
+                Diagnostics.Log($"XamlResourceReferenceFailed: {ev.Message}");
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("DebugSettings setup failed", ex);
+        }
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -39,11 +53,8 @@ public partial class App : Application
         ThemeService.Register(HostWindow.Content as Microsoft.UI.Xaml.FrameworkElement);
 
         Hotkey = new HotkeyService(HostWindow.DispatcherQueue);
-        bool ok = Hotkey.RegisterDefault(OnCaptureRequested);
-        if (!ok)
-        {
-            System.Diagnostics.Debug.WriteLine("[Clipsy] PrintScreen hotkey not registered. Likely Windows is intercepting it (Snipping Tool override).");
-        }
+        RegisterHotkeys();
+        SettingsService.Instance.SettingsChanged += OnSettingsChangedRewireHotkeys;
 
         _ = CheckUpdatesIfDueAsync();
     }
@@ -92,11 +103,45 @@ public partial class App : Application
 
     private void OnSettingsRequested()
     {
-        Clipsy.Views.Settings.SettingsWindow.ShowOrActivate();
+        // Defer past tray's nested TrackPopupMenu message pump.
+        // Creating a WinUI Window directly inside that nested pump
+        // makes XBF init NRE inside LoadComponent.
+        var dq = HostWindow?.DispatcherQueue;
+        if (dq != null)
+            dq.TryEnqueue(() => Clipsy.Views.Settings.SettingsWindow.ShowOrActivate());
+        else
+            Clipsy.Views.Settings.SettingsWindow.ShowOrActivate();
+    }
+
+    private void RegisterHotkeys()
+    {
+        var s = SettingsService.Instance.Settings;
+        string capture = string.IsNullOrWhiteSpace(s.HotkeyCapture) ? "Snapshot" : s.HotkeyCapture;
+        string? record = string.IsNullOrWhiteSpace(s.HotkeyRecordSilentSave) ? null : s.HotkeyRecordSilentSave;
+        bool ok = Hotkey!.Register(OnCaptureRequested, capture, OnRecordStopRequested, record);
+        if (!ok)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Capture hotkey '{capture}' not registered. Win11 Snipping Tool may own PrintScreen.");
+        }
+    }
+
+    private void OnSettingsChangedRewireHotkeys()
+    {
+        var s = SettingsService.Instance.Settings;
+        string capture = string.IsNullOrWhiteSpace(s.HotkeyCapture) ? "Snapshot" : s.HotkeyCapture;
+        string? record = string.IsNullOrWhiteSpace(s.HotkeyRecordSilentSave) ? null : s.HotkeyRecordSilentSave;
+        Hotkey?.Reregister(capture, record);
+    }
+
+    private void OnRecordStopRequested()
+    {
+        if (RecordingController.IsRecording)
+            RecordingController.Current?.StopFromHotkey();
     }
 
     private void OnExitRequested()
     {
+        SettingsService.Instance.SettingsChanged -= OnSettingsChangedRewireHotkeys;
         Hotkey?.Dispose();
         Application.Current.Exit();
     }

@@ -33,6 +33,20 @@ public sealed class RecordingService : IDisposable
             IsCursorCaptureEnabled = true,
         };
 
+        var s = SettingsService.Instance.Settings;
+        var (outW, outH) = ResolveOutputSize(s.VideoResolution, width, height);
+        int bitrate = s.VideoBitrateMbps * 1_000_000;
+
+        IVideoEncoder encoder = s.VideoCodec switch
+        {
+            "H.265" => new H265VideoEncoder(),
+            _ => new H264VideoEncoder
+            {
+                BitrateMode = H264BitrateControlMode.Quality,
+                EncoderProfile = H264Profile.High,
+            },
+        };
+
         var options = new RecorderOptions
         {
             SourceOptions = new SourceOptions
@@ -42,17 +56,13 @@ public sealed class RecordingService : IDisposable
             OutputOptions = new OutputOptions
             {
                 RecorderMode = RecorderMode.Video,
-                OutputFrameSize = new ScreenSize(width, height),
+                OutputFrameSize = new ScreenSize(outW, outH),
             },
             VideoEncoderOptions = new VideoEncoderOptions
             {
-                Encoder = new H264VideoEncoder
-                {
-                    BitrateMode = H264BitrateControlMode.Quality,
-                    EncoderProfile = H264Profile.High,
-                },
+                Encoder = encoder,
                 Framerate = 30,
-                Bitrate = 8_000_000,
+                Bitrate = bitrate,
                 IsFixedFramerate = false,
                 IsHardwareEncodingEnabled = true,
                 IsThrottlingDisabled = false,
@@ -79,6 +89,19 @@ public sealed class RecordingService : IDisposable
         _recorder.OnRecordingFailed += OnFailed;
         _recorder.OnStatusChanged += OnStatus;
         _recorder.Record(_tempPath);
+    }
+
+    private static (int w, int h) ResolveOutputSize(string resolution, int captureW, int captureH)
+    {
+        int targetH = resolution switch
+        {
+            "480p" => 480, "720p" => 720, "1080p" => 1080, "1440p" => 1440, _ => 0
+        };
+        if (targetH == 0 || captureH <= targetH) return (captureW, captureH);
+        double scale = (double)targetH / captureH;
+        int w = Math.Max(2, (int)(captureW * scale) & ~1);
+        int h = Math.Max(2, targetH & ~1);
+        return (w, h);
     }
 
     public void Pause() => _recorder?.Pause();

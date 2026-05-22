@@ -152,6 +152,17 @@ public static class Strings
     public static void Initialize()
     {
         Lang = Resolve();
+        try
+        {
+            SettingsService.Instance.SettingsChanged -= OnSettingsChanged;
+            SettingsService.Instance.SettingsChanged += OnSettingsChanged;
+        }
+        catch { }
+    }
+
+    private static void OnSettingsChanged()
+    {
+        Lang = Resolve();
     }
 
     private static string Resolve()
