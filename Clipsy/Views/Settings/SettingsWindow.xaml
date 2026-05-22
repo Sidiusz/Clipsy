@@ -1,12 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Clipsy · Settings window
-  Discord-style sidebar nav + Blender-dense content cards.
-  Keeps the same x:Names from the previous TabView so existing
-  code-behind bindings (LangBox, BitrateSlider, RememberFolderSwitch,
-  HotkeyList, etc.) keep working. The only new wiring needed is
-  NavList_SelectionChanged — see SettingsWindow.xaml.cs.
--->
 <Window
     x:Class="Clipsy.Views.Settings.SettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -35,13 +27,11 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Section label -->
                 <TextBlock Grid.Row="0"
                            Text="SETTINGS"
                            Style="{StaticResource ClipsyLabel}"
                            Margin="18,18,18,10" />
 
-                <!-- Nav list -->
                 <ListView x:Name="NavList"
                           Grid.Row="1"
                           SelectionMode="Single"
@@ -55,10 +45,9 @@
                         <Style TargetType="ListViewItem">
                             <Setter Property="MinHeight" Value="32" />
                             <Setter Property="Padding" Value="0" />
-                            <Setter Property="Margin" Value="0,1" />
+                            <Setter Property="Margin" Value="0,1,0,1" />
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Setter Property="Background" Value="Transparent" />
-                            <Setter Property="CornerRadius" Value="4" />
                         </Style>
                     </ListView.ItemContainerStyle>
 
@@ -123,7 +112,6 @@
                     </ListViewItem>
                 </ListView>
 
-                <!-- Tip card -->
                 <Border Grid.Row="2"
                         Background="{StaticResource ClipsyBg1Brush}"
                         BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
@@ -147,7 +135,6 @@
             <ScrollViewer Padding="32,28,32,20"
                           VerticalScrollBarVisibility="Auto">
                 <Grid>
-                    <!-- All five panes are stacked at root; only the matching one is visible. -->
 
                     <!-- ===== General ===== -->
                     <StackPanel x:Name="PaneGeneral" Spacing="16" MaxWidth="640" HorizontalAlignment="Left">
@@ -159,7 +146,6 @@
                                        Style="{StaticResource ClipsyHelper}" />
                         </StackPanel>
 
-                        <!-- App + OCR -->
                         <Border Style="{StaticResource ClipsyGroupCard}">
                             <StackPanel Spacing="16">
                                 <StackPanel Spacing="10">
@@ -212,7 +198,6 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Folders + save -->
                         <Border Style="{StaticResource ClipsyGroupCard}">
                             <StackPanel Spacing="16">
                                 <StackPanel Spacing="10">
@@ -304,7 +289,6 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Updates -->
                         <Border Style="{StaticResource ClipsyGroupCard}">
                             <StackPanel Spacing="10">
                                 <StackPanel Spacing="4">
@@ -523,7 +507,6 @@
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
 
-                                <!-- Header row -->
                                 <Border Grid.Row="0"
                                         Background="{StaticResource ClipsyBg1Brush}"
                                         BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
@@ -541,7 +524,6 @@
                                     </Grid>
                                 </Border>
 
-                                <!-- List body — DataTemplate handles rebinding state inline. -->
                                 <ListView x:Name="HotkeyList"
                                           Grid.Row="1"
                                           SelectionMode="None"
@@ -556,54 +538,22 @@
                                     </ListView.ItemContainerStyle>
                                     <ListView.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid Padding="14,10"
-                                                  Background="{Binding RowBackground}">
+                                            <Grid Padding="14,10">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="220" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Label}"
                                                            Style="{StaticResource ClipsyBody}"
                                                            VerticalAlignment="Center" />
-                                                <!--
-                                                  One button. Its content swaps between the bound keys and a
-                                                  "Press a key or combination..." prompt while the user is
-                                                  rebinding. The code-behind toggles IsRebinding for the row
-                                                  it's actively listening on.
-                                                -->
                                                 <Button Grid.Column="1"
                                                         Click="OnHotkeyRebindClick"
                                                         Tag="{Binding Key}"
-                                                        HorizontalAlignment="Stretch"
-                                                        Background="{Binding BindingBackground}"
-                                                        BorderBrush="{Binding BindingBorderBrush}"
-                                                        Foreground="{Binding BindingForeground}">
-                                                    <Grid>
-                                                        <!-- Idle state -->
-                                                        <TextBlock Text="{Binding Binding}"
-                                                                   FontFamily="Cascadia Mono, Consolas, monospace"
-                                                                   FontSize="11"
-                                                                   Visibility="{Binding IdleVisibility}" />
-                                                        <!-- Rebinding prompt -->
-                                                        <StackPanel Orientation="Horizontal" Spacing="8"
-                                                                    HorizontalAlignment="Center"
-                                                                    Visibility="{Binding RebindingVisibility}">
-                                                            <Ellipse Width="7" Height="7"
-                                                                     Fill="{StaticResource ClipsyAccentBrush}"
-                                                                     VerticalAlignment="Center">
-                                                                <Ellipse.Resources>
-                                                                    <Storyboard x:Name="DotPulse" RepeatBehavior="Forever" AutoReverse="True">
-                                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                                                         From="1" To="0.3" Duration="0:0:0.6" />
-                                                                    </Storyboard>
-                                                                </Ellipse.Resources>
-                                                            </Ellipse>
-                                                            <TextBlock Text="Press a key or combination..."
-                                                                       FontSize="12"
-                                                                       Foreground="{StaticResource ClipsyAccentBrush}"
-                                                                       VerticalAlignment="Center" />
-                                                        </StackPanel>
-                                                    </Grid>
+                                                        HorizontalAlignment="Stretch">
+                                                    <TextBlock Text="{Binding Binding}"
+                                                               FontFamily="Cascadia Mono, Consolas, monospace"
+                                                               FontSize="11" />
                                                 </Button>
                                             </Grid>
                                         </DataTemplate>
@@ -623,15 +573,13 @@
                             <StackPanel Spacing="4" VerticalAlignment="Center">
                                 <TextBlock Text="Clipsy" FontSize="26" FontWeight="SemiBold"
                                            Foreground="{StaticResource ClipsyTextBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Border Background="{StaticResource ClipsyBgInputBrush}"
-                                            BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
-                                            BorderThickness="1" CornerRadius="999" Padding="8,1">
-                                        <TextBlock x:Name="VersionLabel"
-                                                   Style="{StaticResource ClipsyMono}"
-                                                   FontSize="11" />
-                                    </Border>
-                                </StackPanel>
+                                <Border Background="{StaticResource ClipsyBgInputBrush}"
+                                        BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                        BorderThickness="1" CornerRadius="999" Padding="8,1">
+                                    <TextBlock x:Name="VersionLabel"
+                                               Style="{StaticResource ClipsyMono}"
+                                               FontSize="11" />
+                                </Border>
                             </StackPanel>
                         </StackPanel>
 
@@ -694,6 +642,7 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
+
                 </Grid>
             </ScrollViewer>
         </Border>
