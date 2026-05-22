@@ -46,6 +46,11 @@ public sealed class AppSettings
     public DateTime LastUpdateCheckUtc { get; set; } = DateTime.MinValue;
     public string SkippedVersion { get; set; } = string.Empty;
 
+    // Translation
+    public string TranslateService { get; set; } = "MyMemory"; // MyMemory / Google
+    public string TranslateFrom { get; set; } = "auto";
+    public string TranslateTo { get; set; } = "ui"; // "ui" = current interface language
+
     // Pro v1 stubs
     public bool ProEnabled { get; set; } = false;
 

@@ -7,26 +7,54 @@ using System.Threading.Tasks;
 
 namespace Clipsy.Services;
 
+public sealed record TranslationLang(string Code, string En, string Ru);
+
 /// <summary>
-/// Free translation via the MyMemory public endpoint. No API key needed.
-/// MyMemory caps each request at 500 chars, so long text is split into
-/// sentence-boundary chunks that are translated and rejoined.
+/// Translation via MyMemory (free, 500-char limit per request) or
+/// Google Translate (free unofficial endpoint, ~4 000-char limit).
+/// Long text is split into sentence-boundary chunks and rejoined.
 /// </summary>
 public static class TranslationService
 {
-    private const int ChunkLimit = 480; // stay safely under the 500-char cap
+    private const int ChunkLimitMyMemory = 480;
+    private const int ChunkLimitGoogle   = 4000;
+
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
-    public static async Task<string?> TranslateAsync(string text, string from, string to)
+    public static readonly IReadOnlyList<TranslationLang> LangCatalog = new TranslationLang[]
+    {
+        new("en",    "English",              "Английский"),
+        new("ru",    "Russian",              "Русский"),
+        new("de",    "German",               "Немецкий"),
+        new("fr",    "French",               "Французский"),
+        new("es",    "Spanish",              "Испанский"),
+        new("it",    "Italian",              "Итальянский"),
+        new("pt",    "Portuguese",           "Португальский"),
+        new("pl",    "Polish",               "Польский"),
+        new("nl",    "Dutch",                "Нидерландский"),
+        new("tr",    "Turkish",              "Турецкий"),
+        new("uk",    "Ukrainian",            "Украинский"),
+        new("zh-CN", "Chinese (Simplified)", "Китайский (упрощ.)"),
+        new("ja",    "Japanese",             "Японский"),
+        new("ko",    "Korean",               "Корейский"),
+        new("ar",    "Arabic",               "Арабский"),
+    };
+
+    public static async Task<string?> TranslateAsync(string text, string from, string to,
+                                                      string service = "MyMemory")
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
         try
         {
-            var chunks = SplitIntoChunks(text.Trim(), ChunkLimit);
+            bool google = string.Equals(service, "Google", StringComparison.OrdinalIgnoreCase);
+            int limit = google ? ChunkLimitGoogle : ChunkLimitMyMemory;
+            var chunks = SplitIntoChunks(text.Trim(), limit);
             var results = new List<string>(chunks.Count);
             foreach (var chunk in chunks)
             {
-                var translated = await TranslateChunkAsync(chunk, from, to);
+                var translated = google
+                    ? await TranslateChunkGoogleAsync(chunk, from, to)
+                    : await TranslateChunkMyMemoryAsync(chunk, from, to);
                 if (translated == null) return null;
                 results.Add(translated);
             }
@@ -39,13 +67,12 @@ public static class TranslationService
         }
     }
 
-    private static async Task<string?> TranslateChunkAsync(string chunk, string from, string to)
+    private static async Task<string?> TranslateChunkMyMemoryAsync(string chunk, string from, string to)
     {
         var url = $"https://api.mymemory.translated.net/get?q={Uri.EscapeDataString(chunk)}&langpair={from}|{to}";
         var json = await _http.GetStringAsync(url);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
-        // MyMemory returns responseStatus 429 / 206 / etc. when quota hit
         if (root.TryGetProperty("responseStatus", out var status) && status.GetInt32() != 200)
         {
             var msg = root.TryGetProperty("responseDetails", out var d) ? d.GetString() : null;
@@ -53,6 +80,24 @@ public static class TranslationService
             return null;
         }
         return root.GetProperty("responseData").GetProperty("translatedText").GetString();
+    }
+
+    private static async Task<string?> TranslateChunkGoogleAsync(string chunk, string from, string to)
+    {
+        var url = $"https://translate.googleapis.com/translate_a/single?client=gtx&sl={from}&tl={to}&dt=t&q={Uri.EscapeDataString(chunk)}";
+        var json = await _http.GetStringAsync(url);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0) return null;
+        var segs = root[0];
+        var sb = new StringBuilder();
+        for (int i = 0; i < segs.GetArrayLength(); i++)
+        {
+            var seg = segs[i];
+            if (seg.GetArrayLength() > 0 && seg[0].ValueKind == JsonValueKind.String)
+                sb.Append(seg[0].GetString());
+        }
+        return sb.ToString();
     }
 
     // Split at sentence boundaries (. ! ? newline) keeping each chunk <= limit chars.
@@ -63,13 +108,11 @@ public static class TranslationService
         var chunks = new List<string>();
         var current = new StringBuilder();
 
-        // Split into sentences first
         var sentences = SplitSentences(text);
         foreach (var sentence in sentences)
         {
             if (sentence.Length > limit)
             {
-                // Sentence too long on its own — flush current and split by word boundary
                 if (current.Length > 0) { chunks.Add(current.ToString().Trim()); current.Clear(); }
                 var words = sentence.Split(' ');
                 foreach (var word in words)
