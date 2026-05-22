@@ -23,7 +23,7 @@ public sealed class RecordingController
     private readonly DispatcherQueue _ui;
     private Win32BorderOverlay? _border;
     private RecordingHudWindow? _hud;
-    private RecordingDrawingWindow? _drawWin;
+    private Win32DrawingOverlay? _drawWin;
     private RecordingService? _service;
     private int _x, _y, _w, _h;
     private bool _stopAndSave;
@@ -73,12 +73,13 @@ public sealed class RecordingController
         _hud.Activate();
         _hud.Start();
 
-        // Hide both Clipsy windows from the capture so the red ring and the
-        // HUD never appear in the recorded MP4.
+        // Exclude Clipsy overlay windows from the recorded MP4 so the HUD,
+        // region border, and any draw overlay don't appear in the output.
         try
         {
-            // Win32BorderOverlay doesn't need exclude from capture
             Recorder.SetExcludeFromCapture(_hud.Hwnd, true);
+            if (_border != null && _border.Hwnd != IntPtr.Zero)
+                Recorder.SetExcludeFromCapture(_border.Hwnd, true);
         }
         catch (Exception ex)
         {
@@ -110,27 +111,38 @@ public sealed class RecordingController
     private void OnResumeRequested() => _service?.Resume();
 
     private bool _saveAsDialog;
+    private IntPtr _hudHwnd; // captured before Shutdown so OfferSaveAsync has a valid owner
 
     /// <summary>Stop button: silent save to the last/default video folder.</summary>
     private void OnStopRequested()
     {
-        if (_stopping) return;
+        Diagnostics.Log("RecordingController.OnStopRequested ENTER");
+        if (_stopping) { Diagnostics.Log("  already _stopping, skip"); return; }
         _stopping = true;
         _stopAndSave = true;
         _saveAsDialog = false;
-        _hud?.Shutdown();
-        _service?.Stop();
+        _hudHwnd = _hud?.Hwnd ?? IntPtr.Zero;
+        Diagnostics.Log($"  captured _hudHwnd=0x{_hudHwnd.ToInt64():X}");
+        try { _hud?.Shutdown(); Diagnostics.Log("  _hud.Shutdown OK"); }
+        catch (Exception ex) { Diagnostics.Log("OnStopRequested _hud.Shutdown", ex); }
+        try { _service?.Stop(); Diagnostics.Log("  _service.Stop OK"); }
+        catch (Exception ex) { Diagnostics.Log("OnStopRequested _service.Stop", ex); }
     }
 
     /// <summary>Save button: stop then open a Save As dialog.</summary>
     private void OnStopSaveRequested()
     {
-        if (_stopping) return;
+        Diagnostics.Log("RecordingController.OnStopSaveRequested ENTER");
+        if (_stopping) { Diagnostics.Log("  already _stopping, skip"); return; }
         _stopping = true;
         _stopAndSave = true;
         _saveAsDialog = true;
-        _hud?.Shutdown();
-        _service?.Stop();
+        _hudHwnd = _hud?.Hwnd ?? IntPtr.Zero;
+        Diagnostics.Log($"  captured _hudHwnd=0x{_hudHwnd.ToInt64():X}");
+        try { _hud?.Shutdown(); Diagnostics.Log("  _hud.Shutdown OK"); }
+        catch (Exception ex) { Diagnostics.Log("OnStopSaveRequested _hud.Shutdown", ex); }
+        try { _service?.Stop(); Diagnostics.Log("  _service.Stop OK"); }
+        catch (Exception ex) { Diagnostics.Log("OnStopSaveRequested _service.Stop", ex); }
     }
 
     private void OnLockChanged(bool locked)
@@ -178,11 +190,11 @@ public sealed class RecordingController
             {
                 if (_drawWin == null)
                 {
-                    _drawWin = new RecordingDrawingWindow();
-                    _drawWin.MoveTo(_x, _y, _w, _h);
-                    _drawWin.Activate();
-                    _drawWin.SetColor(Microsoft.UI.Colors.Red);
-                    _drawWin.SetThickness(3.0);
+                    _drawWin = new Win32DrawingOverlay();
+                    _drawWin.Create(_x, _y, _w, _h);
+                    _drawWin.SetColor(0xFF, 0x00, 0x00);
+                    _drawWin.SetThickness(3);
+                    try { Recorder.SetExcludeFromCapture(_drawWin.Hwnd, false); } catch { }
                 }
                 _drawWin.SetActive(true);
             }
@@ -199,78 +211,118 @@ public sealed class RecordingController
 
     private void OnRecordingComplete(string filePath)
     {
+        Diagnostics.Log($"RecordingController.OnRecordingComplete fired: filePath='{filePath}', exists={System.IO.File.Exists(filePath)}, _stopAndSave={_stopAndSave}, _saveAsDialog={_saveAsDialog}");
         _ui.TryEnqueue(async () =>
         {
+            Diagnostics.Log("OnRecordingComplete UI continuation BEGIN");
             try
             {
                 if (_stopAndSave)
                 {
-                    if (_saveAsDialog) await OfferSaveAsync(filePath);
-                    else SilentSave(filePath);
+                    if (_saveAsDialog)
+                    {
+                        Diagnostics.Log("  → OfferSaveAsync");
+                        await OfferSaveAsync(filePath);
+                        Diagnostics.Log("  ← OfferSaveAsync returned");
+                    }
+                    else
+                    {
+                        Diagnostics.Log("  → SilentSave");
+                        SilentSave(filePath);
+                        Diagnostics.Log("  ← SilentSave returned");
+                    }
                 }
                 else
                 {
+                    Diagnostics.Log("  → discard temp");
                     TryDelete(filePath);
                 }
             }
+            catch (Exception ex)
+            {
+                Diagnostics.Log("OnRecordingComplete continuation", ex);
+            }
             finally
             {
-                Cleanup(discardTemp: false);
+                Diagnostics.Log("OnRecordingComplete → Cleanup");
+                try { Cleanup(discardTemp: false); Diagnostics.Log("Cleanup OK"); }
+                catch (Exception ex) { Diagnostics.Log("Cleanup", ex); }
             }
         });
     }
 
     private void SilentSave(string tempPath)
     {
+        Diagnostics.Log($"SilentSave ENTER tempPath='{tempPath}'");
         try
         {
             var settings = SettingsService.Instance;
             var folder = settings.Settings.RememberLastFolder && !string.IsNullOrEmpty(settings.Settings.LastVideoFolder)
                 ? settings.Settings.LastVideoFolder!
                 : (settings.Settings.VideoFolder ?? settings.DefaultVideoFolder);
+            Diagnostics.Log($"  folder='{folder}'");
             Directory.CreateDirectory(folder);
             var name = SaveDialogService.MakeTimestampName("Clipsy", "mp4");
             var dest = Path.Combine(folder, name);
+            Diagnostics.Log($"  dest='{dest}'");
             File.Copy(tempPath, dest, overwrite: true);
+            Diagnostics.Log("  File.Copy OK");
             TryDelete(tempPath);
             settings.Settings.LastVideoFolder = folder;
             settings.Save();
+            Diagnostics.Log($"  AfterSaveAction.Run action='{settings.Settings.AfterSaveAction}'");
             AfterSaveAction.Run(dest, settings.Settings.AfterSaveAction);
+            Diagnostics.Log("SilentSave EXIT OK");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Clipsy] Silent recording save failed: {ex.Message}");
+            Diagnostics.Log("SilentSave", ex);
             NotificationService.Error("ErrSaveFailed");
         }
     }
 
     private void OnRecordingFailed(string error)
     {
-        Debug.WriteLine($"[Clipsy] Recording failed: {error}");
+        Diagnostics.Log($"RecordingController.OnRecordingFailed: {error}");
         _ui.TryEnqueue(() =>
         {
             NotificationService.Error("ErrRecordRuntime");
-            Cleanup(discardTemp: true);
+            try { Cleanup(discardTemp: true); }
+            catch (Exception ex) { Diagnostics.Log("OnRecordingFailed Cleanup", ex); }
         });
     }
 
     private async Task OfferSaveAsync(string tempPath)
     {
+        Diagnostics.Log($"OfferSaveAsync ENTER tempPath='{tempPath}'");
         var settings = SettingsService.Instance;
         var initialDir = settings.Settings.RememberLastFolder && !string.IsNullOrEmpty(settings.Settings.LastVideoFolder)
             ? settings.Settings.LastVideoFolder!
             : (settings.Settings.VideoFolder ?? settings.DefaultVideoFolder);
         Directory.CreateDirectory(initialDir);
         var name = SaveDialogService.MakeTimestampName("Clipsy", "mp4");
-        var hwnd = _hud != null ? WinRT.Interop.WindowNative.GetWindowHandle(_hud) : IntPtr.Zero;
+        // Prefer HostWindow over HUD hwnd: HUD is a TOOLWINDOW + NOACTIVATE +
+        // TRANSPARENT click-through window — invalid modal owner for common dialogs.
+        var hwnd = App.Current?.HostWindow?.Hwnd ?? _hudHwnd;
         var filters = new System.Collections.Generic.List<SaveDialogService.SaveFilter>
         {
             new("MP4 video (*.mp4)", "*.mp4"),
         };
-        var pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir!, name, filters, ".mp4");
+        Diagnostics.Log($"  hwnd=0x{hwnd.ToInt64():X}, initialDir='{initialDir}', suggested='{name}'");
+        SaveDialogService.SavePickResult? pick = null;
+        try
+        {
+            pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir!, name, filters, ".mp4");
+            Diagnostics.Log($"  PickSaveAsync returned pick={(pick == null ? "null" : "'" + pick.Path + "'")}");
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("OfferSaveAsync PickSaveAsync", ex);
+        }
         if (pick == null)
         {
             TryDelete(tempPath);
+            Diagnostics.Log("OfferSaveAsync EXIT (no pick)");
             return;
         }
         var dest = pick.Path;
@@ -280,6 +332,7 @@ public sealed class RecordingController
         }
         try
         {
+            Diagnostics.Log($"  File.Copy → '{dest}'");
             File.Copy(tempPath, dest, overwrite: true);
             TryDelete(tempPath);
             var dir = Path.GetDirectoryName(dest);
@@ -288,23 +341,26 @@ public sealed class RecordingController
                 settings.Settings.LastVideoFolder = dir;
                 settings.Save();
             }
+            Diagnostics.Log($"  AfterSaveAction.Run action='{settings.Settings.AfterSaveAction}'");
             AfterSaveAction.Run(dest, settings.Settings.AfterSaveAction);
+            Diagnostics.Log("OfferSaveAsync EXIT OK");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Clipsy] Move recording failed: {ex.Message}");
+            Diagnostics.Log("OfferSaveAsync File.Copy", ex);
         }
     }
 
     private void Cleanup(bool discardTemp)
     {
+        Diagnostics.Log($"Cleanup ENTER discardTemp={discardTemp}");
         try
         {
-            _hud?.Shutdown();
-            _hud?.Close();
-            _border?.Destroy();
-            _drawWin?.Close();
-            _service?.Dispose();
+            try { _hud?.Shutdown(); Diagnostics.Log("  hud.Shutdown OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup hud.Shutdown", ex); }
+            try { _hud?.Close(); Diagnostics.Log("  hud.Close OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup hud.Close", ex); }
+            try { _border?.Destroy(); Diagnostics.Log("  border.Destroy OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup border.Destroy", ex); }
+            try { _drawWin?.Destroy(); Diagnostics.Log("  drawWin.Destroy OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup drawWin.Destroy", ex); }
+            try { _service?.Dispose(); Diagnostics.Log("  service.Dispose OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup service.Dispose", ex); }
             if (discardTemp && _service != null && !string.IsNullOrEmpty(_service.TempPath))
             {
                 TryDelete(_service.TempPath);
@@ -318,6 +374,7 @@ public sealed class RecordingController
             _service = null;
             _stopping = false;
             _current = null;
+            Diagnostics.Log("Cleanup EXIT");
         }
     }
 

@@ -17,15 +17,43 @@ public static class SaveDialogService
     public sealed record SaveFilter(string Label, string Pattern);
     public sealed record SavePickResult(string Path, int FilterIndex);
 
-    public static async Task<SavePickResult?> PickSaveAsync(
+    public static Task<SavePickResult?> PickSaveAsync(
         IntPtr hwnd,
         string initialDir,
         string suggestedName,
         IList<SaveFilter> filters,
         string defaultExt)
     {
-        return await Task.Run(() => PickSync(hwnd, initialDir, suggestedName, filters, defaultExt));
+        // GetSaveFileNameW needs an STA + OLE-initialized thread. ThreadPool
+        // workers are MTA and not OLE-init → native AV inside comdlg32.
+        var tcs = new TaskCompletionSource<SavePickResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var th = new System.Threading.Thread(() =>
+        {
+            int oleHr = OleInitialize(IntPtr.Zero);
+            try
+            {
+                var result = PickSync(hwnd, initialDir, suggestedName, filters, defaultExt);
+                tcs.TrySetResult(result);
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log("SaveDialogService STA thread", ex);
+                tcs.TrySetException(ex);
+            }
+            finally
+            {
+                if (oleHr >= 0) OleUninitialize();
+            }
+        });
+        th.SetApartmentState(System.Threading.ApartmentState.STA);
+        th.IsBackground = true;
+        th.Name = "ClipsySaveDialog";
+        th.Start();
+        return tcs.Task;
     }
+
+    [DllImport("ole32.dll")] private static extern int OleInitialize(IntPtr pvReserved);
+    [DllImport("ole32.dll")] private static extern void OleUninitialize();
 
     // Convenience for PNG-only callers (kept for any existing call sites).
     public static Task<SavePickResult?> PickPngSaveAsync(IntPtr hwnd, string initialDir, string suggestedName)

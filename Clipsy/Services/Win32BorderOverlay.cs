@@ -11,6 +11,13 @@ public class Win32BorderOverlay
     private IntPtr _hwnd;
     private bool _created;
     private int _x, _y, _w, _h;
+    private static readonly WndProcDelegate _staticWndProc = StaticWndProc;
+    private static readonly System.Collections.Generic.Dictionary<IntPtr, Win32BorderOverlay> _byHwnd = new();
+
+    // Magenta color key: any pixel painted with this exact RGB becomes transparent.
+    private const uint COLORKEY_BGR = 0x00FF00FF;
+
+    public IntPtr Hwnd => _hwnd;
 
     public bool Create(int x, int y, int w, int h)
     {
@@ -18,20 +25,21 @@ public class Win32BorderOverlay
 
         _x = x; _y = y; _w = w; _h = h;
 
-        // Register window class
+        // Register window class — magenta background brush is what color-key
+        // strips out, leaving only the border lines visible on screen.
+        if (_magentaBrush == IntPtr.Zero) _magentaBrush = CreateSolidBrush(COLORKEY_BGR);
         var wc = new WNDCLASS
         {
-            lpfnWndProc = WndProc,
+            lpfnWndProc = _staticWndProc,
             hInstance = GetModuleHandle(null),
             lpszClassName = "ClipsyBorderOverlay",
-            hbrBackground = IntPtr.Zero, // No background
+            hbrBackground = _magentaBrush,
             hCursor = LoadCursor(IntPtr.Zero, IDC_ARROW)
         };
 
-        var atom = RegisterClass(ref wc);
-        if (atom == 0) return false;
+        // RegisterClass returns 0 if class already registered (atom collision). Ignore that.
+        RegisterClass(ref wc);
 
-        // Create layered window
         _hwnd = CreateWindowEx(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             "ClipsyBorderOverlay",
@@ -41,9 +49,11 @@ public class Win32BorderOverlay
             IntPtr.Zero, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
 
         if (_hwnd == IntPtr.Zero) return false;
+        _byHwnd[_hwnd] = this;
 
-        // Make window transparent with colored border
-        SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
+        // Color-key mode: magenta pixels become fully transparent, everything
+        // else renders normally. Works reliably for GDI-painted layered windows.
+        SetLayeredWindowAttributes(_hwnd, COLORKEY_BGR, 0, LWA_COLORKEY);
 
         _created = true;
         ShowWindow(_hwnd, SW_SHOW);
@@ -51,6 +61,8 @@ public class Win32BorderOverlay
 
         return true;
     }
+
+    private static IntPtr _magentaBrush;
 
     public void MoveTo(int x, int y, int w, int h)
     {
@@ -63,9 +75,17 @@ public class Win32BorderOverlay
     public void Destroy()
     {
         if (!_created) return;
+        _byHwnd.Remove(_hwnd);
         DestroyWindow(_hwnd);
         _created = false;
         _hwnd = IntPtr.Zero;
+    }
+
+    private static IntPtr StaticWndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        if (_byHwnd.TryGetValue(hwnd, out var self))
+            return self.WndProc(hwnd, msg, wParam, lParam);
+        return DefWindowProc(hwnd, msg, wParam, lParam);
     }
 
     private IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -139,6 +159,9 @@ public class Win32BorderOverlay
     private const uint WS_EX_TOPMOST = 0x00000008;
     private const uint WS_EX_TOOLWINDOW = 0x00000080;
     private const uint LWA_ALPHA = 0x00000002;
+    private const uint LWA_COLORKEY = 0x00000001;
+
+    [DllImport("gdi32.dll")] private static extern IntPtr CreateSolidBrush(uint crColor);
     private const int SW_SHOW = 5;
     private const uint SWP_SHOWWINDOW = 0x0040;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
