@@ -62,6 +62,8 @@ public sealed partial class CaptureOverlayWindow : Window
 
     // OCR state
     private bool _inOcrMode;
+    private bool _ocrPanelDragging;
+    private Point _ocrPanelDragOffset;
 
     // Current shape tool for shapes button
     private ToolKind _currentShapeTool = ToolKind.Rectangle;
@@ -1565,7 +1567,7 @@ public sealed partial class CaptureOverlayWindow : Window
         // unusable so the user can't paint on top of the OCR overlay.
         SetRightToolbarEnabled(false);
         TranslatePanel.Visibility = Visibility.Collapsed;
-        OcrTextPanel.Visibility = Visibility.Collapsed;
+        OcrPanelsContainer.Visibility = Visibility.Collapsed;
         ClearOcrVisuals();
         OcrStatusLabel.Visibility = Visibility.Collapsed;
         OcrLayer.Visibility = Visibility.Visible;
@@ -1601,7 +1603,7 @@ public sealed partial class CaptureOverlayWindow : Window
         ClearOcrVisuals();
         OcrToolbar.Visibility = Visibility.Collapsed;
         TranslatePanel.Visibility = Visibility.Collapsed;
-        OcrTextPanel.Visibility = Visibility.Collapsed;
+        OcrPanelsContainer.Visibility = Visibility.Collapsed;
         OcrStatusLabel.Visibility = Visibility.Collapsed;
         OcrTextBox.Text = string.Empty;
         SetRightToolbarEnabled(true);
@@ -1728,8 +1730,8 @@ public sealed partial class CaptureOverlayWindow : Window
 
         // Build sorted, line-grouped text for the text panel.
         OcrTextBox.Text = BuildSortedText();
-        OcrTextPanel.Visibility = Visibility.Visible;
-        PositionOcrTextPanel();
+        OcrPanelsContainer.Visibility = Visibility.Visible;
+        PositionOcrPanelsContainer();
         SetOcrButtonsEnabled(true);
     }
 
@@ -1779,10 +1781,10 @@ public sealed partial class CaptureOverlayWindow : Window
         return sb.ToString().TrimEnd();
     }
 
-    private void PositionOcrTextPanel()
+    private void PositionOcrPanelsContainer()
     {
-        OcrTextPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var sz = OcrTextPanel.DesiredSize;
+        OcrPanelsContainer.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var sz = OcrPanelsContainer.DesiredSize;
         double rootW = RootGrid.ActualWidth;
         double rootH = RootGrid.ActualHeight;
         double tx = Canvas.GetLeft(OcrToolbar);
@@ -1794,8 +1796,8 @@ public sealed partial class CaptureOverlayWindow : Window
         }
         if (tx + sz.Width > rootW - 8) tx = rootW - sz.Width - 8;
         if (tx < 8) tx = 8;
-        Canvas.SetLeft(OcrTextPanel, tx);
-        Canvas.SetTop(OcrTextPanel, ty);
+        Canvas.SetLeft(OcrPanelsContainer, tx);
+        Canvas.SetTop(OcrPanelsContainer, ty);
     }
 
     private void UpdateOcrDragSelection(Point pos)
@@ -1920,20 +1922,6 @@ public sealed partial class CaptureOverlayWindow : Window
         Canvas.SetTop(OcrToolbar, y);
     }
 
-    private void PositionTranslatePanel()
-    {
-        TranslatePanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var rootW = RootGrid.ActualWidth;
-        var rootH = RootGrid.ActualHeight;
-        double w = TranslatePanel.DesiredSize.Width;
-        double h = TranslatePanel.DesiredSize.Height;
-        double x = _selectionRect.X + (_selectionRect.Width - w) / 2;
-        double y = Canvas.GetTop(OcrToolbar) + OcrToolbar.DesiredSize.Height + 8;
-        if (y + h > rootH - 8) y = _selectionRect.Y - h - 12;
-        x = System.Math.Clamp(x, 8, System.Math.Max(8, rootW - w - 8));
-        Canvas.SetLeft(TranslatePanel, x);
-        Canvas.SetTop(TranslatePanel, y);
-    }
 
     private void OnOcrSelectAll(object sender, RoutedEventArgs e)
     {
@@ -1977,14 +1965,49 @@ public sealed partial class CaptureOverlayWindow : Window
             ? OcrTextBox.SelectedText
             : OcrTextBox.Text;
         if (string.IsNullOrWhiteSpace(text)) return;
-        TranslateOriginal.Text = text;
         TranslateTarget.Text = "...";
         TranslatePanel.Visibility = Visibility.Visible;
-        PositionTranslatePanel();
         var (from, to) = TranslationService.GuessLangPair(text);
         var translated = await TranslationService.TranslateAsync(text, from, to);
         TranslateTarget.Text = translated ?? Strings.Get("TranslateUnavailable");
-        PositionTranslatePanel();
+    }
+
+    private void OnOcrPanelDragStart(object sender, PointerRoutedEventArgs e)
+    {
+        var pos = e.GetCurrentPoint(OverlayLayer).Position;
+        _ocrPanelDragOffset = new Point(
+            pos.X - Canvas.GetLeft(OcrPanelsContainer),
+            pos.Y - Canvas.GetTop(OcrPanelsContainer));
+        _ocrPanelDragging = ((UIElement)sender).CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnOcrPanelDragMove(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_ocrPanelDragging) return;
+        var pos = e.GetCurrentPoint(OverlayLayer).Position;
+        double x = pos.X - _ocrPanelDragOffset.X;
+        double y = pos.Y - _ocrPanelDragOffset.Y;
+        x = System.Math.Clamp(x, 0, System.Math.Max(0, RootGrid.ActualWidth - OcrPanelsContainer.ActualWidth));
+        y = System.Math.Clamp(y, 0, System.Math.Max(0, RootGrid.ActualHeight - OcrPanelsContainer.ActualHeight));
+        Canvas.SetLeft(OcrPanelsContainer, x);
+        Canvas.SetTop(OcrPanelsContainer, y);
+        e.Handled = true;
+    }
+
+    private void OnOcrPanelDragEnd(object sender, PointerRoutedEventArgs e)
+    {
+        if (_ocrPanelDragging)
+        {
+            ((UIElement)sender).ReleasePointerCapture(e.Pointer);
+            _ocrPanelDragging = false;
+        }
+        e.Handled = true;
+    }
+
+    private void OnOcrPanelDragCancel(object sender, PointerRoutedEventArgs e)
+    {
+        _ocrPanelDragging = false;
     }
 
     private void OnOcrExit(object sender, RoutedEventArgs e) => ExitOcrMode();

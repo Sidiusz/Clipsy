@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
@@ -54,16 +55,56 @@ public sealed class WinRtOcrEngine : IOcrEngine
     }
 }
 
+/// <summary>
+/// Tesseract OCR engine — bundled native Tesseract via charlesw/tesseract NuGet.
+/// Uses eng+rus tessdata from Assets/tessdata shipped with the binary.
+/// </summary>
+public sealed class TesseractOcrEngine : IOcrEngine
+{
+    private static readonly string TessDataPath =
+        Path.Combine(AppContext.BaseDirectory, "Assets", "tessdata");
+
+    public Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes)
+    {
+        return Task.Run<IReadOnlyList<OcrWord>>(() =>
+        {
+            var words = new List<OcrWord>();
+            try
+            {
+                using var engine = new Tesseract.TesseractEngine(TessDataPath, "eng+rus", Tesseract.EngineMode.Default);
+                using var pix = Tesseract.Pix.LoadFromMemory(pngBytes);
+                using var page = engine.Process(pix);
+                using var iter = page.GetIterator();
+                iter.Begin();
+                do
+                {
+                    if (iter.TryGetBoundingBox(Tesseract.PageIteratorLevel.Word, out var r))
+                    {
+                        var text = iter.GetText(Tesseract.PageIteratorLevel.Word)?.Trim();
+                        if (!string.IsNullOrEmpty(text))
+                            words.Add(new OcrWord(text, new Rect(r.X1, r.Y1, r.X2 - r.X1, r.Y2 - r.Y1)));
+                    }
+                }
+                while (iter.Next(Tesseract.PageIteratorLevel.Word));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Clipsy] Tesseract failed: {ex.Message}");
+            }
+            return words;
+        });
+    }
+}
+
 public static class OcrEngineFactory
 {
     public static IOcrEngine Resolve()
     {
         var configured = SettingsService.Instance.Settings.OcrEngine;
-        if (string.Equals(configured, "Tesseract", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(configured, "Tesseract", StringComparison.OrdinalIgnoreCase)
+            && Directory.Exists(Path.Combine(AppContext.BaseDirectory, "Assets", "tessdata")))
         {
-            // Tesseract integration is gated on tessdata. Until that ships,
-            // fall back to the WinRT engine.
-            return new WinRtOcrEngine();
+            return new TesseractOcrEngine();
         }
         return new WinRtOcrEngine();
     }
