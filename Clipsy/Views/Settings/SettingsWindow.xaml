@@ -173,11 +173,21 @@
                                                    Text="Live-switches without restart."
                                                    Style="{StaticResource ClipsyHelper}" />
                                     </StackPanel>
-                                    <ComboBox x:Name="ThemeBox" Width="240">
-                                        <ComboBoxItem x:Name="ThemeAuto" Content="Auto-detect" Tag="auto" />
-                                        <ComboBoxItem x:Name="ThemeDark" Content="Dark" Tag="dark" />
-                                        <ComboBoxItem x:Name="ThemeLight" Content="Light" Tag="light" />
-                                    </ComboBox>
+                                    <Border Background="{StaticResource ClipsyBgInputBrush}"
+                                            BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                            BorderThickness="1" CornerRadius="6" Padding="3">
+                                        <StackPanel Orientation="Horizontal" Spacing="2">
+                                            <ToggleButton x:Name="ThemeBtnAuto" Content="Auto"
+                                                          Style="{StaticResource ClipsySegmentBtn}"
+                                                          Tag="auto" Click="OnThemeSegmentClick" />
+                                            <ToggleButton x:Name="ThemeBtnDark" Content="Dark"
+                                                          Style="{StaticResource ClipsySegmentBtn}"
+                                                          Tag="dark" Click="OnThemeSegmentClick" />
+                                            <ToggleButton x:Name="ThemeBtnLight" Content="Light"
+                                                          Style="{StaticResource ClipsySegmentBtn}"
+                                                          Tag="light" Click="OnThemeSegmentClick" />
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
 
                                 <Border Style="{StaticResource ClipsyHairline}" />
@@ -338,12 +348,36 @@
                                                Text="Default H.264 hardware encode at 30 fps."
                                                Style="{StaticResource ClipsyHelper}" />
                                 </StackPanel>
-                                <ComboBox x:Name="CodecBox" Width="320" SelectionChanged="OnCodecChanged">
-                                    <ComboBoxItem x:Name="CodecH264Item" Content="H.264, wide compatibility" Tag="H.264" />
-                                    <ComboBoxItem x:Name="CodecH265Item" Content="H.265, smaller files" Tag="H.265" />
-                                    <ComboBoxItem x:Name="CodecVp9Item"  Content="VP9, web-friendly" Tag="VP9" />
-                                    <ComboBoxItem x:Name="CodecAv1Item"  Content="AV1, smallest, slow encoder" Tag="AV1" />
-                                </ComboBox>
+                                <StackPanel Spacing="6">
+                                    <RadioButton x:Name="RadioCodecH264" Style="{StaticResource ClipsyRadioCard}"
+                                                 GroupName="Codec" Tag="H.264">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="H.264" Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock Text="Wide compatibility, hardware-accelerated" Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton x:Name="RadioCodecH265" Style="{StaticResource ClipsyRadioCard}"
+                                                 GroupName="Codec" Tag="H.265">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="H.265" Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock Text="Smaller files, slower encode" Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton x:Name="RadioCodecVp9" Style="{StaticResource ClipsyRadioCard}"
+                                                 GroupName="Codec" Tag="VP9">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="VP9" Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock Text="Web-friendly, open codec" Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton x:Name="RadioCodecAv1" Style="{StaticResource ClipsyRadioCard}"
+                                                 GroupName="Codec" Tag="AV1">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="AV1" Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock Text="Smallest, very slow encoder" Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                    </RadioButton>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
@@ -357,13 +391,27 @@
                                                    Text="Applies to full-screen recordings only. Region recordings use the selection size."
                                                    Style="{StaticResource ClipsyHelper}" />
                                     </StackPanel>
-                                    <ComboBox x:Name="ResolutionBox" Width="240" SelectionChanged="OnResolutionChanged">
-                                        <ComboBoxItem Content="480p" Tag="480p" />
-                                        <ComboBoxItem Content="720p" Tag="720p" />
-                                        <ComboBoxItem Content="1080p" Tag="1080p" />
-                                        <ComboBoxItem Content="1440p" Tag="1440p" />
-                                        <ComboBoxItem Content="Original" Tag="Original" />
-                                    </ComboBox>
+                                    <Border Background="{StaticResource ClipsyBgInputBrush}"
+                                            BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                            BorderThickness="1" CornerRadius="6" Padding="3">
+                                        <StackPanel Orientation="Horizontal" Spacing="2">
+                                            <ToggleButton x:Name="ResBtn480p" Content="480p"
+                                                          Style="{StaticResource ClipsySegmentBtn}"
+                                                          Tag="480p" Click="OnResolutionSegmentClick" />
+                                            <ToggleButton x:Name="ResBtn720p" Content="720p"
+                                                          Style="{StaticResource ClipsySegmentBtn}"
+                                                          Tag="720p" Click="OnResolutionSegmentClick" />
+                                            <ToggleButton x:Name="ResBtn1080p" Content="1080p"
+                                                          Style="{StaticResource ClipsySegmentBtn}"
+                                                          Tag="1080p" Click="OnResolutionSegmentClick" />
+                                            <ToggleButton x:Name="ResBtn1440p" Content="1440p"
+                                                          Style="{StaticResource ClipsySegmentBtn}"
+                                                          Tag="1440p" Click="OnResolutionSegmentClick" />
+                                            <ToggleButton x:Name="ResBtnOriginal" Content="Original"
+                                                          Style="{StaticResource ClipsySegmentBtn}"
+                                                          Tag="Original" Click="OnResolutionSegmentClick" />
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
 
                                 <Border Style="{StaticResource ClipsyHairline}" />
@@ -573,13 +621,18 @@
                             <StackPanel Spacing="4" VerticalAlignment="Center">
                                 <TextBlock Text="Clipsy" FontSize="26" FontWeight="SemiBold"
                                            Foreground="{StaticResource ClipsyTextBrush}" />
-                                <Border Background="{StaticResource ClipsyBgInputBrush}"
-                                        BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
-                                        BorderThickness="1" CornerRadius="999" Padding="8,1">
-                                    <TextBlock x:Name="VersionLabel"
-                                               Style="{StaticResource ClipsyMono}"
-                                               FontSize="11" />
-                                </Border>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Border Background="{StaticResource ClipsyBgInputBrush}"
+                                            BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                            BorderThickness="1" CornerRadius="999" Padding="8,1">
+                                        <TextBlock x:Name="VersionLabel"
+                                                   Style="{StaticResource ClipsyMono}"
+                                                   FontSize="11" />
+                                    </Border>
+                                    <TextBlock x:Name="BuildDateLabel"
+                                               Style="{StaticResource ClipsyHelper}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
                             </StackPanel>
                         </StackPanel>
 
@@ -638,6 +691,27 @@
                                             <TextBlock Text="Check now" />
                                         </StackPanel>
                                     </Button>
+                                </Grid>
+
+                                <Border Style="{StaticResource ClipsyHairline}" />
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Like Clipsy?" Style="{StaticResource ClipsyBodyStrong}" />
+                                        <TextBlock Text="Star it on GitHub — that's enough." Style="{StaticResource ClipsyHelper}" />
+                                    </StackPanel>
+                                    <HyperlinkButton Grid.Column="1"
+                                                     NavigateUri="https://github.com/Sidiusz/Clipsy"
+                                                     VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <FontIcon Glyph="&#xE735;" FontSize="13" />
+                                            <TextBlock Text="Star" />
+                                        </StackPanel>
+                                    </HyperlinkButton>
                                 </Grid>
                             </StackPanel>
                         </Border>

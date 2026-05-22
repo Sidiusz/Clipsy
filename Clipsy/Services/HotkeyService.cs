@@ -10,28 +10,38 @@ namespace Clipsy.Services;
 /// running its own GetMessage pump on a background STA thread. We do not
 /// subclass the WinUI 3 hwnd because WM_HOTKEY routing through the
 /// XAML island's WndProc is unreliable and risks breaking dispatch.
+/// Supports two simultaneous hotkeys: capture (primary) and record-stop (optional).
 /// </summary>
 public sealed class HotkeyService : IDisposable
 {
-    private const int WM_HOTKEY = 0x0312;
-    private const int WM_QUIT   = 0x0012;
-    private const uint MOD_NONE = 0x0000;
-    private const int HOTKEY_ID = 0xC1170;
-    private const uint VK_SNAPSHOT = 0x2C;
-    private const int HWND_MESSAGE = -3;
+    private const int WM_HOTKEY       = 0x0312;
+    private const int WM_QUIT         = 0x0012;
+    private const int WM_USER_REREG   = 0x0401;
+    private const uint MOD_NONE       = 0x0000;
+    private const uint MOD_ALT        = 0x0001;
+    private const uint MOD_CONTROL    = 0x0002;
+    private const uint MOD_SHIFT      = 0x0004;
+    private const int HOTKEY_CAPTURE  = 0xC1170;
+    private const int HOTKEY_RECORD   = 0xC1171;
+    private const int HWND_MESSAGE    = -3;
 
     private readonly DispatcherQueue _dispatcher;
     private Thread? _thread;
     private IntPtr _hwnd;
-    private WndProcDelegate? _wndProc;       // kept alive against GC
+    private WndProcDelegate? _wndProc;
     private GCHandle _wndProcHandle;
-    private Action? _callback;
     private volatile bool _running;
     private uint _threadId;
 
-    public bool IsRegistered { get; private set; }
+    private Action? _captureCallback;
+    private Action? _recordCallback;
 
-    /// <summary>Last Win32 error from RegisterHotKey, 0 if success or not attempted.</summary>
+    private uint _captureVk;
+    private uint _captureMods;
+    private uint _recordVk;
+    private uint _recordMods;
+
+    public bool IsCaptureRegistered { get; private set; }
     public int LastRegisterError { get; private set; }
 
     public HotkeyService(DispatcherQueue uiDispatcher)
@@ -39,9 +49,15 @@ public sealed class HotkeyService : IDisposable
         _dispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
     }
 
-    public bool RegisterDefault(Action callback)
+    public bool Register(Action captureCallback, string captureBinding,
+                         Action? recordCallback = null, string? recordBinding = null)
     {
-        _callback = callback;
+        _captureCallback = captureCallback;
+        _recordCallback  = recordCallback;
+
+        ParseBinding(captureBinding, out _captureVk, out _captureMods);
+        ParseBinding(recordBinding,  out _recordVk,  out _recordMods);
+
         _running = true;
         var ready = new ManualResetEventSlim(false);
         _thread = new Thread(() => MessageLoop(ready))
@@ -52,7 +68,16 @@ public sealed class HotkeyService : IDisposable
         _thread.SetApartmentState(ApartmentState.STA);
         _thread.Start();
         ready.Wait(TimeSpan.FromSeconds(2));
-        return IsRegistered;
+        return IsCaptureRegistered;
+    }
+
+    /// <summary>Re-register both hotkeys with new bindings without restarting the thread.</summary>
+    public void Reregister(string captureBinding, string? recordBinding)
+    {
+        ParseBinding(captureBinding, out _captureVk, out _captureMods);
+        ParseBinding(recordBinding,  out _recordVk,  out _recordMods);
+        if (_threadId != 0)
+            PostThreadMessage(_threadId, WM_USER_REREG, IntPtr.Zero, IntPtr.Zero);
     }
 
     private void MessageLoop(ManualResetEventSlim ready)
@@ -66,35 +91,18 @@ public sealed class HotkeyService : IDisposable
             var hInstance = GetModuleHandle(null);
             var wc = new WNDCLASS
             {
-                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
-                hInstance   = hInstance,
+                lpfnWndProc   = Marshal.GetFunctionPointerForDelegate(_wndProc),
+                hInstance     = hInstance,
                 lpszClassName = className,
             };
             ushort atom = RegisterClassW(ref wc);
-            if (atom == 0)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Clipsy] RegisterClass failed err={Marshal.GetLastWin32Error()}");
-                ready.Set();
-                return;
-            }
+            if (atom == 0) { ready.Set(); return; }
+
             _hwnd = CreateWindowExW(0, className, "ClipsyHotkey", 0, 0, 0, 0, 0,
                 new IntPtr(HWND_MESSAGE), IntPtr.Zero, hInstance, IntPtr.Zero);
-            if (_hwnd == IntPtr.Zero)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Clipsy] CreateWindowEx failed err={Marshal.GetLastWin32Error()}");
-                ready.Set();
-                return;
-            }
+            if (_hwnd == IntPtr.Zero) { ready.Set(); return; }
 
-            if (!RegisterHotKey(_hwnd, HOTKEY_ID, MOD_NONE, VK_SNAPSHOT))
-            {
-                LastRegisterError = Marshal.GetLastWin32Error();
-                System.Diagnostics.Debug.WriteLine($"[Clipsy] RegisterHotKey(PrintScreen) failed err=0x{LastRegisterError:X}. Win11 Snipping Tool override likely. Disable in Settings > Accessibility > Keyboard > Use PrtScn key.");
-            }
-            else
-            {
-                IsRegistered = true;
-            }
+            DoRegister();
             ready.Set();
 
             while (_running && GetMessageW(out var msg, IntPtr.Zero, 0, 0))
@@ -114,7 +122,8 @@ public sealed class HotkeyService : IDisposable
             {
                 if (_hwnd != IntPtr.Zero)
                 {
-                    UnregisterHotKey(_hwnd, HOTKEY_ID);
+                    UnregisterHotKey(_hwnd, HOTKEY_CAPTURE);
+                    UnregisterHotKey(_hwnd, HOTKEY_RECORD);
                     DestroyWindow(_hwnd);
                     _hwnd = IntPtr.Zero;
                 }
@@ -124,12 +133,56 @@ public sealed class HotkeyService : IDisposable
         }
     }
 
+    private void DoRegister()
+    {
+        UnregisterHotKey(_hwnd, HOTKEY_CAPTURE);
+        UnregisterHotKey(_hwnd, HOTKEY_RECORD);
+        IsCaptureRegistered = false;
+
+        if (_captureVk != 0)
+        {
+            if (!RegisterHotKey(_hwnd, HOTKEY_CAPTURE, _captureMods, _captureVk))
+            {
+                LastRegisterError = Marshal.GetLastWin32Error();
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Clipsy] RegisterHotKey(capture) failed err=0x{LastRegisterError:X}");
+            }
+            else
+            {
+                IsCaptureRegistered = true;
+            }
+        }
+
+        if (_recordVk != 0 && _recordCallback != null)
+        {
+            if (!RegisterHotKey(_hwnd, HOTKEY_RECORD, _recordMods, _recordVk))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Clipsy] RegisterHotKey(record-stop) failed err=0x{Marshal.GetLastWin32Error():X}");
+            }
+        }
+    }
+
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
-        if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+        if (msg == WM_HOTKEY)
         {
-            var cb = _callback;
-            if (cb != null) _dispatcher.TryEnqueue(() => cb());
+            int id = wParam.ToInt32();
+            if (id == HOTKEY_CAPTURE)
+            {
+                var cb = _captureCallback;
+                if (cb != null) _dispatcher.TryEnqueue(() => cb());
+            }
+            else if (id == HOTKEY_RECORD)
+            {
+                var cb = _recordCallback;
+                if (cb != null) _dispatcher.TryEnqueue(() => cb());
+            }
+            return IntPtr.Zero;
+        }
+        if (msg == WM_USER_REREG)
+        {
+            DoRegister();
             return IntPtr.Zero;
         }
         return DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -139,11 +192,56 @@ public sealed class HotkeyService : IDisposable
     {
         _running = false;
         if (_threadId != 0)
-        {
             PostThreadMessage(_threadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
-        }
         try { _thread?.Join(500); } catch { }
     }
+
+    // ---------- Binding parser ----------
+
+    private static void ParseBinding(string? binding, out uint vk, out uint mods)
+    {
+        vk = 0; mods = 0;
+        if (string.IsNullOrWhiteSpace(binding)) return;
+        var parts = binding.Split('+');
+        for (int i = 0; i < parts.Length - 1; i++)
+        {
+            switch (parts[i].Trim().ToLowerInvariant())
+            {
+                case "ctrl": case "control": mods |= MOD_CONTROL; break;
+                case "shift":                mods |= MOD_SHIFT;   break;
+                case "alt":  case "menu":    mods |= MOD_ALT;     break;
+            }
+        }
+        vk = KeyNameToVk(parts[^1].Trim());
+    }
+
+    private static uint KeyNameToVk(string name) => name.ToLowerInvariant() switch
+    {
+        "snapshot" or "printscreen" or "print screen" => 0x2C,
+        "pause"    => 0x13,
+        "escape"   => 0x1B,
+        "tab"      => 0x09,
+        "space"    => 0x20,
+        "insert"   => 0x2D,
+        "delete"   => 0x2E,
+        "home"     => 0x24,
+        "end"      => 0x23,
+        "pageup"   => 0x21,
+        "pagedown" => 0x22,
+        "left"     => 0x25,
+        "up"       => 0x26,
+        "right"    => 0x27,
+        "down"     => 0x28,
+        "f1"  => 0x70, "f2"  => 0x71, "f3"  => 0x72, "f4"  => 0x73,
+        "f5"  => 0x74, "f6"  => 0x75, "f7"  => 0x76, "f8"  => 0x77,
+        "f9"  => 0x78, "f10" => 0x79, "f11" => 0x7A, "f12" => 0x7B,
+        "number0" => 0x30, "number1" => 0x31, "number2" => 0x32,
+        "number3" => 0x33, "number4" => 0x34, "number5" => 0x35,
+        "number6" => 0x36, "number7" => 0x37, "number8" => 0x38,
+        "number9" => 0x39,
+        _ when name.Length == 1 && char.IsLetter(name[0]) => (uint)char.ToUpper(name[0]),
+        _ => 0
+    };
 
     // ---------- Win32 ----------
 

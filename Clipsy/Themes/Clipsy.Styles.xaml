@@ -74,8 +74,9 @@
         </Setter>
     </Style>
 
-    <!-- Default Button style targets ALL Buttons in the app -->
-    <Style TargetType="Button" BasedOn="{StaticResource ClipsyButton}" />
+    <!-- NOTE: implicit Button style removed — broke ComboBox internal DropDownGlyph button.
+         Use Style="{StaticResource ClipsyButton}" explicitly. -->
+    <!--<Style TargetType="Button" BasedOn="{StaticResource ClipsyButton}" />-->
 
     <Style x:Key="ClipsyButtonPrimary" TargetType="Button" BasedOn="{StaticResource ClipsyButton}">
         <Setter Property="Background" Value="{StaticResource ClipsyAccentBrush}" />
@@ -369,8 +370,6 @@
         </Setter>
     </Style>
 
-    <Style TargetType="ToggleButton" BasedOn="{StaticResource ClipsyIconToggle}" />
-
     <!-- ============================================================
          Text input
          ============================================================ -->
@@ -385,7 +384,7 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="SelectionHighlightColor" Value="{StaticResource ClipsyAccentBrush}" />
     </Style>
-    <Style TargetType="TextBox" BasedOn="{StaticResource ClipsyTextBox}" />
+    <!--<Style TargetType="TextBox" BasedOn="{StaticResource ClipsyTextBox}" />-->
 
     <!-- ============================================================
          Combo box
@@ -400,12 +399,12 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Padding" Value="10,4,8,4" />
     </Style>
-    <Style TargetType="ComboBox" BasedOn="{StaticResource ClipsyComboBox}" />
+    <!--<Style TargetType="ComboBox" BasedOn="{StaticResource ClipsyComboBox}" />-->
 
     <!-- ============================================================
          ToggleSwitch — strip the Header label area to look like our pill
          ============================================================ -->
-    <Style TargetType="ToggleSwitch">
+    <Style x:Key="ClipsyToggleSwitch" TargetType="ToggleSwitch">
         <Setter Property="OffContent" Value="" />
         <Setter Property="OnContent" Value="" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyTextBrush}" />
@@ -511,6 +510,151 @@
         <Setter Property="CornerRadius" Value="3" />
         <Setter Property="Padding" Value="6,1" />
         <Setter Property="MinWidth" Value="20" />
+    </Style>
+
+
+    <!-- Segmented control button: Theme / Resolution pickers -->
+    <Style x:Key="ClipsySegmentBtn" TargetType="ToggleButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource ClipsyText2Brush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource ClipsyRadiusSm}" />
+        <Setter Property="Padding" Value="14,5" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Height" Value="{StaticResource ClipsyControlHeight}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="UseSystemFocusVisuals" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid x:Name="RootGrid" Background="{TemplateBinding Background}"
+                          CornerRadius="{TemplateBinding CornerRadius}">
+                        <ContentPresenter x:Name="ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          Padding="{TemplateBinding Padding}"
+                                          HorizontalContentAlignment="Center"
+                                          VerticalContentAlignment="Center"
+                                          Foreground="{TemplateBinding Foreground}" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyBgHoverBrush}" />
+                                        <Setter Target="ContentPresenter.Foreground" Value="{StaticResource ClipsyTextBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyBgActiveBrush}" />
+                                        <Setter Target="ContentPresenter.Foreground" Value="{StaticResource ClipsyTextBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Checked">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyBg3Brush}" />
+                                        <Setter Target="ContentPresenter.Foreground" Value="{StaticResource ClipsyTextBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="CheckedPointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyBg3Brush}" />
+                                        <Setter Target="ContentPresenter.Foreground" Value="{StaticResource ClipsyTextBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="CheckedPressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyBgActiveBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Opacity" Value="0.45" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Radio button as a full-width card row (used in Video codec picker) -->
+    <Style x:Key="ClipsyRadioCard" TargetType="RadioButton">
+        <Setter Property="Background" Value="{StaticResource ClipsyBg3Brush}" />
+        <Setter Property="Foreground" Value="{StaticResource ClipsyTextBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource ClipsyBorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource ClipsyRadiusMd}" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="UseSystemFocusVisuals" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid x:Name="RootGrid"
+                          Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}"
+                          BorderThickness="{TemplateBinding BorderThickness}"
+                          CornerRadius="{TemplateBinding CornerRadius}"
+                          Padding="{TemplateBinding Padding}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0" Width="16" Height="16"
+                              VerticalAlignment="Center" Margin="0,0,10,0">
+                            <Ellipse x:Name="OuterEllipse"
+                                     Stroke="{StaticResource ClipsyBorderBrush}"
+                                     StrokeThickness="1.5" Fill="Transparent" />
+                            <Ellipse x:Name="InnerEllipse" Width="8" Height="8"
+                                     Fill="{StaticResource ClipsyAccentBrush}"
+                                     Visibility="Collapsed" />
+                        </Grid>
+                        <ContentPresenter x:Name="ContentPresenter"
+                                          Grid.Column="1"
+                                          Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyBgHoverBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyBgActiveBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Opacity" Value="0.45" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <VisualStateGroup x:Name="CheckStates">
+                                <VisualState x:Name="Checked">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.BorderBrush" Value="{StaticResource ClipsyAccentBrush}" />
+                                        <Setter Target="OuterEllipse.Stroke" Value="{StaticResource ClipsyAccentBrush}" />
+                                        <Setter Target="InnerEllipse.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Unchecked" />
+                                <VisualState x:Name="Indeterminate" />
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
 </ResourceDictionary>

@@ -335,7 +335,7 @@
                 Background="{StaticResource ClipsyBg1Brush}"
                 BorderBrush="{StaticResource ClipsyBorderBrush}"
                 BorderThickness="1"
-                CornerRadius="8"
+                CornerRadius="999"
                 Padding="18,10"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
