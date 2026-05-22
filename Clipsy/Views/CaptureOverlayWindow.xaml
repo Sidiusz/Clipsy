@@ -162,7 +162,7 @@
                                 PointerMoved="OnOcrPanelDragMove"
                                 PointerReleased="OnOcrPanelDragEnd"
                                 PointerCaptureLost="OnOcrPanelDragCancel">
-                            <TextBlock Text="RECOGNIZED TEXT" Style="{StaticResource ClipsyLabel}" />
+                            <TextBlock x:Name="OcrPanelTitle" Style="{StaticResource ClipsyLabel}" />
                         </Border>
                         <ScrollViewer Grid.Row="1" MaxHeight="200" MaxWidth="480"
                                       VerticalScrollBarVisibility="Auto"
@@ -233,7 +233,7 @@
                                 PointerMoved="OnOcrPanelDragMove"
                                 PointerReleased="OnOcrPanelDragEnd"
                                 PointerCaptureLost="OnOcrPanelDragCancel">
-                            <TextBlock Text="TRANSLATION" Style="{StaticResource ClipsyLabel}" />
+                            <TextBlock x:Name="TranslatePanelTitle" Style="{StaticResource ClipsyLabel}" />
                         </Border>
                         <ScrollViewer Grid.Row="1" MaxHeight="220" MaxWidth="480"
                                       VerticalScrollBarVisibility="Auto"
