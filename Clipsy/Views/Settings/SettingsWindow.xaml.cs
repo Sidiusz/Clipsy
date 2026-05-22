@@ -9,11 +9,13 @@ using System.Runtime.InteropServices;
 using Clipsy.Localization;
 using Clipsy.Services;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using Windows.System;
 using WinRT.Interop;
@@ -25,7 +27,13 @@ public sealed partial class SettingsWindow : Window
     public sealed class HotkeyRow : System.ComponentModel.INotifyPropertyChanged
     {
         public required string Key { get; init; }
-        public required string Label { get; init; }
+
+        private string _label = string.Empty;
+        public required string Label
+        {
+            get => _label;
+            set { if (_label != value) { _label = value; OnChanged(); } }
+        }
 
         private string _binding = string.Empty;
         public string Binding
@@ -43,11 +51,37 @@ public sealed partial class SettingsWindow : Window
 
     private readonly IntPtr _hwnd;
     private AppSettings _draft;
+    private AppSettings _initial = new();
     private readonly ObservableCollection<HotkeyRow> _hotkeyRows = new();
+    private readonly HashSet<string> _dirty = new();
     private Button? _listeningButton;
     private string? _listeningKey;
 
     private bool _firstActivated;
+    private bool _loading;
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _notifyTimer;
+
+    private static readonly Dictionary<string, string> _paramToCategory = new()
+    {
+        ["lang"] = "general",
+        ["theme"] = "general",
+        ["ocr"] = "general",
+        ["ss-folder"] = "general",
+        ["vid-folder"] = "general",
+        ["remember"] = "general",
+        ["ss-format"] = "general",
+        ["jpg-q"] = "general",
+        ["after-save"] = "general",
+        ["update-int"] = "general",
+        ["codec"] = "video",
+        ["resolution"] = "video",
+        ["bitrate"] = "video",
+        ["gif-color"] = "gif",
+        ["gif-fps"] = "gif",
+        ["gif-dither"] = "gif",
+        // hk-* dynamic, mapped to hotkeys category
+    };
 
     public SettingsWindow()
     {
@@ -119,15 +153,48 @@ public sealed partial class SettingsWindow : Window
         NavHotkeysLabel.Text  = Strings.Get("TabHotkeys");
         NavInfoLabel.Text     = Strings.Get("TabInfo");
 
+        if (TitleBarSubtitle != null) TitleBarSubtitle.Text = Strings.Get("TitleBarSubtitle");
+        if (LblTipHeader != null)     LblTipHeader.Text    = Strings.Get("TipLabel");
+        if (LblTip != null)           LblTip.Text          = Strings.Get("TipText");
+
+        HdrGeneral.Text  = Strings.Get("TabGeneral");
+        HdrVideo.Text    = Strings.Get("TabVideo");
+        HdrGif.Text      = Strings.Get("TabGif");
+        HdrHotkeys.Text  = Strings.Get("TabHotkeys");
+
+        SubGeneral.Text  = Strings.Get("SubGeneral");
+        SubVideo.Text    = Strings.Get("SubVideo");
+        SubGif.Text      = Strings.Get("SubGif");
+
+        HelperLanguage.Text = Strings.Get("HelperLanguage");
+        HelperTheme.Text    = Strings.Get("HelperTheme");
+        HelperOcr.Text      = Strings.Get("HelperOcr");
+        HelperRemember.Text = Strings.Get("HelperRemember");
+        HelperCodec.Text    = Strings.Get("HelperCodec");
+        HelperBitrate.Text  = Strings.Get("HelperBitrate");
+        HelperGifColors.Text= Strings.Get("HelperGifColors");
+        HelperGifFps.Text   = Strings.Get("HelperGifFps");
+        HelperGifDither.Text= Strings.Get("HelperGifDither");
+
         LblLanguage.Text         = Strings.Get("LblLanguage");
         LblTheme.Text            = Strings.Get("LblTheme");
         LblOcrEngine.Text        = Strings.Get("LblOcrEngine");
         LblScreenshotFolder.Text = Strings.Get("LblScreenshotFolder");
         LblVideoFolder.Text      = Strings.Get("LblVideoFolder");
+        LblRememberFolder.Text   = Strings.Get("LblRememberFolder");
         LblScreenshotFormat.Text = Strings.Get("LblScreenshotFormat");
         LblJpgQuality.Text       = Strings.Get("LblJpgQuality");
         LblAfterSave.Text        = Strings.Get("LblAfterSave");
         LblUpdates.Text          = Strings.Get("LblUpdates");
+
+        if (LblAuthor != null)        LblAuthor.Text        = Strings.Get("LblAuthorHeader");
+        if (LblMit != null)           LblMit.Text           = Strings.Get("LblMit");
+        if (LblGithubLine != null)    LblGithubLine.Text    = Strings.Get("LblGithubLine");
+        if (LinkGithubOpen != null)   LinkGithubOpen.Content = Strings.Get("BtnOpen");
+        if (LblLikeClipsy != null)    LblLikeClipsy.Text    = Strings.Get("LblLikeClipsy");
+        if (LblLikeClipsyHint != null) LblLikeClipsyHint.Text = Strings.Get("LblLikeClipsyHint");
+        if (LblStarBtn != null)       LblStarBtn.Text       = Strings.Get("BtnStar");
+        if (UpdateStatusLabel != null) UpdateStatusLabel.Text = Strings.Get("LblUpdateStatus");
 
         LangAuto.Content   = Strings.Get("OptAuto");
         LangEn.Content     = Strings.Get("OptEnglish");
@@ -160,15 +227,19 @@ public sealed partial class SettingsWindow : Window
 
         LblHotkeyHint.Text = Strings.Get("LblHotkeyHint");
 
-        // LblAuthor stays "Author" header; name shown separately in LblAuthorName.
         BtnCheckForUpdates.Content = Strings.Get("BtnCheckForUpdates");
-
         ScreenshotFolderPick.Content = Strings.Get("BtnBrowse");
         VideoFolderPick.Content      = Strings.Get("BtnBrowse");
         BtnCheckNow.Content          = Strings.Get("BtnCheckNow");
         BtnReset.Content             = Strings.Get("BtnReset");
         BtnClose.Content             = Strings.Get("BtnClose");
         BtnSave.Content              = Strings.Get("BtnSave");
+
+        // Rebuild hotkey rows with localized labels (preserves bindings).
+        var wasLoading = _loading;
+        _loading = true;
+        BuildHotkeyRows();
+        _loading = wasLoading;
     }
 
     public static void ShowOrActivate()
@@ -197,6 +268,7 @@ public sealed partial class SettingsWindow : Window
 
     private void Load()
     {
+        _loading = true;
         SelectComboByTag(LangBox, _draft.Language);
         SelectSegment(_draft.Theme, ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight);
         SelectComboByTag(OcrEngineBox, _draft.OcrEngine);
@@ -238,6 +310,11 @@ public sealed partial class SettingsWindow : Window
         GifDitherSwitch.IsOn = _draft.GifDither;
 
         BuildHotkeyRows();
+
+        _initial = _draft.Clone();
+        _dirty.Clear();
+        _loading = false;
+        UpdateDirtyVisuals();
     }
 
     private static void SelectComboByTag(ComboBox box, string tag)
@@ -301,14 +378,28 @@ public sealed partial class SettingsWindow : Window
 
     private void BuildHotkeyRows()
     {
+        foreach (var existing in _hotkeyRows) existing.PropertyChanged -= OnHotkeyRowChanged;
         _hotkeyRows.Clear();
-        _hotkeyRows.Add(new HotkeyRow { Key = "capture", Label = "Open capture overlay", Binding = _draft.HotkeyCapture });
-        _hotkeyRows.Add(new HotkeyRow { Key = "save-silent", Label = "Save screenshot (silent)", Binding = _draft.HotkeyScreenshotSilent });
-        _hotkeyRows.Add(new HotkeyRow { Key = "copy", Label = "Copy to clipboard", Binding = _draft.HotkeyCopy });
-        _hotkeyRows.Add(new HotkeyRow { Key = "undo", Label = "Undo", Binding = _draft.HotkeyUndo });
-        _hotkeyRows.Add(new HotkeyRow { Key = "redo", Label = "Redo", Binding = _draft.HotkeyRedo });
-        _hotkeyRows.Add(new HotkeyRow { Key = "select-all", Label = "Select all", Binding = _draft.HotkeySelectAll });
-        _hotkeyRows.Add(new HotkeyRow { Key = "record-save", Label = "Save recording (silent)", Binding = _draft.HotkeyRecordSilentSave });
+        AddHotkeyRow("capture",     "HkOpenCapture", _draft.HotkeyCapture);
+        AddHotkeyRow("save-silent", "HkSaveSilent",  _draft.HotkeyScreenshotSilent);
+        AddHotkeyRow("copy",        "HkCopy",        _draft.HotkeyCopy);
+        AddHotkeyRow("undo",        "HkUndo",        _draft.HotkeyUndo);
+        AddHotkeyRow("redo",        "HkRedo",        _draft.HotkeyRedo);
+        AddHotkeyRow("select-all",  "HkSelectAll",   _draft.HotkeySelectAll);
+        AddHotkeyRow("record-save", "HkRecordSave",  _draft.HotkeyRecordSilentSave);
+    }
+
+    private void AddHotkeyRow(string key, string labelKey, string binding)
+    {
+        var row = new HotkeyRow { Key = key, Label = Strings.Get(labelKey), Binding = binding };
+        row.PropertyChanged += OnHotkeyRowChanged;
+        _hotkeyRows.Add(row);
+    }
+
+    private void OnHotkeyRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_loading) return;
+        if (e.PropertyName == nameof(HotkeyRow.Binding)) MarkChanged();
     }
 
     private static void SelectSegment(string tag, params ToggleButton[] btns)
@@ -358,7 +449,7 @@ public sealed partial class SettingsWindow : Window
         {
             var loc = System.Reflection.Assembly.GetEntryAssembly()?.Location;
             if (!string.IsNullOrEmpty(loc))
-                return "Built " + File.GetLastWriteTime(loc).ToString("d MMM yyyy");
+                return string.Format(Strings.Get("LblBuilt"), File.GetLastWriteTime(loc).ToString("d MMM yyyy"));
         }
         catch { }
         return string.Empty;
@@ -411,6 +502,7 @@ public sealed partial class SettingsWindow : Window
         if (sender is not ToggleButton clicked) return;
         foreach (var btn in new[] { ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight })
             btn.IsChecked = btn == clicked;
+        MarkChanged();
     }
 
     private void OnResolutionSegmentClick(object sender, RoutedEventArgs e)
@@ -420,6 +512,7 @@ public sealed partial class SettingsWindow : Window
             btn.IsChecked = btn == clicked;
         UpdateBitrateBounds(clicked.Tag as string ?? string.Empty);
         UpdateBitrateLabel();
+        MarkChanged();
     }
 
     private void OnScreenshotFormatChanged(object sender, SelectionChangedEventArgs e)
@@ -465,11 +558,11 @@ public sealed partial class SettingsWindow : Window
     {
         if (BitrateLabel == null || EstFileSizeLabel == null || BitrateSlider == null) return;
         int mbps = (int)BitrateSlider.Value;
-        BitrateLabel.Text = mbps + " Mbps";
+        BitrateLabel.Text = string.Format(Strings.Get("BitrateMbps"), mbps);
         double mbPerMin = mbps * 60.0 / 8.0;
         long rounded = (long)System.Math.Round(mbPerMin / 10.0) * 10;
         if (rounded == 0) rounded = 10;
-        EstFileSizeLabel.Text = $"Est. ~{rounded} MB per minute";
+        EstFileSizeLabel.Text = string.Format(Strings.Get("BitrateEstimate"), rounded);
     }
 
     private void OnGifColorChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -493,7 +586,7 @@ public sealed partial class SettingsWindow : Window
         if (_listeningButton != null) FinishListening();
         _listeningButton = b;
         _listeningKey = key;
-        b.Content = "Press keys...";
+        b.Content = Strings.Get("HkPressKeys");
         try
         {
             b.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyBg2Brush"];
@@ -527,7 +620,7 @@ public sealed partial class SettingsWindow : Window
         if (_listeningButton != null)
         {
             var row = _hotkeyRows.FirstOrDefault(r => r.Key == _listeningKey);
-            if (row != null && (_listeningButton.Content as string) == "Press keys...")
+            if (row != null && (_listeningButton.Content as string) == Strings.Get("HkPressKeys"))
             {
                 _listeningButton.Content = row.Binding;
             }
@@ -568,19 +661,153 @@ public sealed partial class SettingsWindow : Window
         return (s & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
     }
 
+    // ============== Change tracking ==============
+
+    private void OnAnyControlChanged(object sender, SelectionChangedEventArgs e) => MarkChanged();
+    private void OnAnyControlChanged(object sender, RoutedEventArgs e) => MarkChanged();
+    private void OnAnyTextChanged(object sender, TextChangedEventArgs e) => MarkChanged();
+    private void OnAnyToggleChanged(object sender, RoutedEventArgs e) => MarkChanged();
+
+    private void MarkChanged()
+    {
+        if (_loading) return;
+        Collect();
+        ComputeDirty();
+        UpdateDirtyVisuals();
+    }
+
+    private void ComputeDirty()
+    {
+        _dirty.Clear();
+        if (_draft.Language != _initial.Language) _dirty.Add("lang");
+        if (_draft.Theme != _initial.Theme) _dirty.Add("theme");
+        if (_draft.OcrEngine != _initial.OcrEngine) _dirty.Add("ocr");
+        if (_draft.ScreenshotFolder != _initial.ScreenshotFolder) _dirty.Add("ss-folder");
+        if (_draft.VideoFolder != _initial.VideoFolder) _dirty.Add("vid-folder");
+        if (_draft.RememberLastFolder != _initial.RememberLastFolder) _dirty.Add("remember");
+        if (_draft.ScreenshotFormat != _initial.ScreenshotFormat) _dirty.Add("ss-format");
+        if (_draft.JpgQuality != _initial.JpgQuality) _dirty.Add("jpg-q");
+        if (_draft.AfterSaveAction != _initial.AfterSaveAction) _dirty.Add("after-save");
+        if (_draft.UpdateInterval != _initial.UpdateInterval) _dirty.Add("update-int");
+        if (_draft.VideoCodec != _initial.VideoCodec) _dirty.Add("codec");
+        if (_draft.VideoResolution != _initial.VideoResolution) _dirty.Add("resolution");
+        if (_draft.VideoBitrateMbps != _initial.VideoBitrateMbps) _dirty.Add("bitrate");
+        if (_draft.GifColors != _initial.GifColors) _dirty.Add("gif-color");
+        if (_draft.GifFps != _initial.GifFps) _dirty.Add("gif-fps");
+        if (_draft.GifDither != _initial.GifDither) _dirty.Add("gif-dither");
+        if (_draft.HotkeyCapture != _initial.HotkeyCapture) _dirty.Add("hk-capture");
+        if (_draft.HotkeyScreenshotSilent != _initial.HotkeyScreenshotSilent) _dirty.Add("hk-save-silent");
+        if (_draft.HotkeyCopy != _initial.HotkeyCopy) _dirty.Add("hk-copy");
+        if (_draft.HotkeyUndo != _initial.HotkeyUndo) _dirty.Add("hk-undo");
+        if (_draft.HotkeyRedo != _initial.HotkeyRedo) _dirty.Add("hk-redo");
+        if (_draft.HotkeySelectAll != _initial.HotkeySelectAll) _dirty.Add("hk-select-all");
+        if (_draft.HotkeyRecordSilentSave != _initial.HotkeyRecordSilentSave) _dirty.Add("hk-record-save");
+    }
+
+    private void UpdateDirtyVisuals()
+    {
+        bool any = _dirty.Count > 0;
+        DotUnsaved.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+        FooterStatusText.Text = any ? Strings.Get("NotifyUnsaved") : string.Empty;
+
+        SetLabel(LblLanguage, "LblLanguage", _dirty.Contains("lang"));
+        SetLabel(LblTheme, "LblTheme", _dirty.Contains("theme"));
+        SetLabel(LblOcrEngine, "LblOcrEngine", _dirty.Contains("ocr"));
+        SetLabel(LblScreenshotFolder, "LblScreenshotFolder", _dirty.Contains("ss-folder"));
+        SetLabel(LblVideoFolder, "LblVideoFolder", _dirty.Contains("vid-folder"));
+        SetLabel(LblRememberFolder, "LblRememberFolder", _dirty.Contains("remember"));
+        SetLabel(LblScreenshotFormat, "LblScreenshotFormat", _dirty.Contains("ss-format"));
+        SetLabel(LblJpgQuality, "LblJpgQuality", _dirty.Contains("jpg-q"));
+        SetLabel(LblAfterSave, "LblAfterSave", _dirty.Contains("after-save"));
+        SetLabel(LblUpdates, "LblUpdates", _dirty.Contains("update-int"));
+        SetLabel(LblCodec, "LblCodec", _dirty.Contains("codec"));
+        SetLabel(LblResolution, "LblResolution", _dirty.Contains("resolution"));
+        SetLabel(LblBitrate, "LblBitrate", _dirty.Contains("bitrate"));
+        SetLabel(LblGifColors, "LblGifColors", _dirty.Contains("gif-color"));
+        SetLabel(LblGifFps, "LblGifFps", _dirty.Contains("gif-fps"));
+        SetLabel(LblGifDither, "LblGifDither", _dirty.Contains("gif-dither"));
+
+        SetNavLabel(NavGeneralLabel, "TabGeneral", "general");
+        SetNavLabel(NavVideoLabel,   "TabVideo",   "video");
+        SetNavLabel(NavGifLabel,     "TabGif",     "gif");
+        SetNavLabel(NavHotkeysLabel, "TabHotkeys", "hotkeys");
+        SetNavLabel(NavInfoLabel,    "TabInfo",    "info");
+    }
+
+    private static void SetLabel(TextBlock lbl, string stringKey, bool dirty)
+    {
+        if (lbl == null) return;
+        var baseText = Strings.Get(stringKey);
+        lbl.Text = (dirty ? "● " : string.Empty) + baseText;
+    }
+
+    private void SetNavLabel(TextBlock lbl, string stringKey, string category)
+    {
+        if (lbl == null) return;
+        var baseText = Strings.Get(stringKey);
+        bool catDirty = false;
+        foreach (var k in _dirty)
+        {
+            var c = k.StartsWith("hk-") ? "hotkeys" : _paramToCategory.GetValueOrDefault(k, string.Empty);
+            if (c == category) { catDirty = true; break; }
+        }
+        lbl.Text = (catDirty ? "● " : string.Empty) + baseText;
+    }
+
+    // ============== Notification ==============
+
+    private void ShowNotification(string messageKey, string kind = "success")
+        => ShowNotificationText(Strings.Get(messageKey), kind);
+
+    private void ShowNotificationText(string text, string kind)
+    {
+        NotifyMessage.Text = text;
+        string glyph;
+        string brushKey;
+        switch (kind)
+        {
+            case "error":   glyph = ""; brushKey = "ClipsyDangerBrush"; break;
+            case "warning": glyph = ""; brushKey = "ClipsyWarningBrush"; break;
+            case "info":    glyph = ""; brushKey = "ClipsyAccentBrush"; break;
+            default:        glyph = ""; brushKey = "ClipsySuccessBrush"; break;
+        }
+        NotifyIcon.Glyph = glyph;
+        try
+        {
+            var brush = (Brush)Application.Current.Resources[brushKey];
+            NotifyIcon.Foreground = brush;
+            NotifyAccentBar.Background = brush;
+        }
+        catch { }
+        NotifyBanner.Visibility = Visibility.Visible;
+
+        _notifyTimer?.Stop();
+        _notifyTimer = DispatcherQueue.CreateTimer();
+        _notifyTimer.Interval = TimeSpan.FromSeconds(3);
+        _notifyTimer.IsRepeating = false;
+        _notifyTimer.Tick += (_, _) => { NotifyBanner.Visibility = Visibility.Collapsed; };
+        _notifyTimer.Start();
+    }
+
+    // ============== Save / Reset / Updates ==============
+
     private void OnSave(object sender, RoutedEventArgs e)
     {
         try
         {
             Collect();
             SettingsService.Instance.Replace(_draft);
+            _initial = _draft.Clone();
+            _dirty.Clear();
             ThemeService.ApplyTo(Content as FrameworkElement);
             ApplyLocalization();
-            NotificationService.Info("SettingsSaved");
+            UpdateDirtyVisuals();
+            ShowNotification("NotifySaved", "success");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Clipsy] Settings save failed: {ex.Message}");
+            Diagnostics.Log("SettingsWindow.OnSave", ex);
+            ShowNotification("NotifySaveFailed", "error");
         }
     }
 
@@ -591,12 +818,34 @@ public sealed partial class SettingsWindow : Window
         _draft = new AppSettings();
         Load();
         ThemeService.ApplyTo(Content as FrameworkElement);
+        ShowNotification("NotifyReset", "info");
     }
 
     private async void OnCheckUpdates(object sender, RoutedEventArgs e)
     {
-        try { await Clipsy.App.Current.CheckUpdatesIfDueAsync(force: true); }
-        catch (Exception ex) { Debug.WriteLine($"[Clipsy] Forced update check failed: {ex.Message}"); }
+        try
+        {
+            ShowNotification("NotifyUpdateChecking", "info");
+            var info = await UpdateService.CheckLatestAsync();
+            if (info == null)
+            {
+                ShowNotification("NotifyUpdateFailed", "error");
+                return;
+            }
+            if (UpdateService.IsNewer(info.Version, UpdateService.CurrentVersion()))
+            {
+                ShowNotificationText(string.Format(Strings.Get("NotifyUpdateAvailable"), info.Version), "info");
+            }
+            else
+            {
+                ShowNotification("NotifyUpdateUpToDate", "success");
+            }
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("SettingsWindow.OnCheckUpdates", ex);
+            ShowNotification("NotifyUpdateFailed", "error");
+        }
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
