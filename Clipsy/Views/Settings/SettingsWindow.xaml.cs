@@ -188,6 +188,8 @@ public sealed partial class SettingsWindow : Window
         LblScreenshotFolder.Text = Strings.Get("LblScreenshotFolder");
         LblVideoFolder.Text      = Strings.Get("LblVideoFolder");
         LblRememberFolder.Text   = Strings.Get("LblRememberFolder");
+        LblAutostart.Text        = Strings.Get("LblAutostart");
+        HelperAutostart.Text     = Strings.Get("HelperAutostart");
         LblScreenshotFormat.Text = Strings.Get("LblScreenshotFormat");
         LblJpgQuality.Text       = Strings.Get("LblJpgQuality");
         LblAfterSave.Text        = Strings.Get("LblAfterSave");
@@ -285,6 +287,7 @@ public sealed partial class SettingsWindow : Window
             ? SettingsService.Instance.DefaultVideoFolder
             : _draft.VideoFolder!;
         RememberFolderSwitch.IsChecked = _draft.RememberLastFolder;
+        AutostartSwitch.IsChecked = AutostartService.IsEnabled();
 
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
 
@@ -673,6 +676,11 @@ public sealed partial class SettingsWindow : Window
     private void OnAnyControlChanged(object sender, RoutedEventArgs e) => MarkChanged();
     private void OnAnyTextChanged(object sender, TextChangedEventArgs e) => MarkChanged();
     private void OnAnyToggleChanged(object sender, RoutedEventArgs e) => MarkChanged();
+
+    private void OnAutostartToggled(object sender, RoutedEventArgs e)
+    {
+        AutostartService.SetEnabled(AutostartSwitch.IsChecked == true);
+    }
 
     private void MarkChanged()
     {

@@ -83,6 +83,8 @@ public static class Strings
         ["LblScreenshotFolder"] = New("Screenshot folder",         "Папка скриншотов"),
         ["LblVideoFolder"]      = New("Video folder",              "Папка видео"),
         ["LblRememberFolder"]   = New("Remember last Save As folder", "Запоминать последнюю папку"),
+        ["LblAutostart"]        = New("Start with Windows", "Запускать с Windows"),
+        ["HelperAutostart"]     = New("Launch Clipsy when you sign in.", "Запускать Clipsy при входе в систему."),
         ["LblScreenshotFormat"] = New("Screenshot format",         "Формат скриншота"),
         ["LblJpgQuality"]       = New("JPEG quality",              "Качество JPEG"),
         ["LblAfterSave"]        = New("After save",                "После сохранения"),
