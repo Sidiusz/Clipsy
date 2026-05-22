@@ -142,6 +142,60 @@ public static class Strings
         ["UpdateAvailable"]  = New("A new version of Clipsy is available.", "Доступна новая версия Clipsy."),
         ["UpdateUpToDate"]   = New("You are running the latest version.",    "Установлена последняя версия."),
         ["UpdateCheckFailed"]= New("Update check failed.",                   "Проверка обновлений не удалась."),
+
+        // Settings - subtitles, helpers, info, author
+        ["TitleBarSubtitle"]      = New("Settings",                "Настройки"),
+        ["SubGeneral"]            = New("Language, theme, and where files end up.",       "Язык, тема и место сохранения файлов."),
+        ["SubVideo"]              = New("Codec, resolution, and bitrate for screen recordings.", "Кодек, разрешение и битрейт для записи."),
+        ["SubGif"]                = New("Output settings when exporting recordings as animated GIF.", "Параметры вывода для экспорта в анимированный GIF."),
+        ["HelperLanguage"]        = New("Auto-detect uses the system locale.",            "Автоопределение использует язык системы."),
+        ["HelperTheme"]           = New("Live-switches without restart.",                 "Меняется без перезапуска."),
+        ["HelperOcr"]             = New("Tesseract is bundled. Windows OCR is faster but lower-quality.", "Tesseract включён. Windows OCR быстрее, но хуже по качеству."),
+        ["LblRememberFolder"]     = New("Remember last Save As folder",                   "Запоминать последнюю папку «Сохранить как»"),
+        ["HelperRemember"]        = New("Future captures default to wherever you saved last.", "Следующие захваты сохранятся туда же, куда сохранили в прошлый раз."),
+        ["HelperCodec"]           = New("Default H.264 hardware encode at 30 fps.",       "По умолчанию H.264, аппаратное кодирование при 30 fps."),
+        ["HelperBitrate"]         = New("Higher bitrate = better quality and larger files. Max scales with resolution.", "Чем выше битрейт, тем лучше качество и больше файл. Потолок зависит от разрешения."),
+        ["HelperGifColors"]       = New("Fewer colors = smaller file but more banding.",  "Меньше цветов — меньше файл, но видны полосы."),
+        ["HelperGifFps"]          = New("12 fps is a good default for screen content.",   "12 fps хорошо подходит для записи экрана."),
+        ["HelperGifDither"]       = New("Smooths color transitions at the cost of file size.", "Сглаживает переходы цветов, увеличивая размер файла."),
+        ["LblBuilt"]              = New("Built {0}",                                       "Сборка от {0}"),
+        ["TipText"]               = New("Press PrtSc anywhere to capture.",                "Нажмите PrtSc в любом месте для захвата."),
+        ["TipLabel"]              = New("TIP",                                             "СОВЕТ"),
+        ["SectionLabelAction"]    = New("ACTION",                                          "ДЕЙСТВИЕ"),
+        ["SectionLabelBinding"]   = New("BINDING",                                         "КОМБИНАЦИЯ"),
+        ["LblLikeClipsy"]         = New("Like Clipsy?",                                    "Нравится Clipsy?"),
+        ["LblLikeClipsyHint"]     = New("Star it on GitHub - that's enough.",              "Поставьте звезду на GitHub - этого достаточно."),
+        ["LblGithubLine"]         = New("Source, issues, releases",                        "Исходники, баги, релизы."),
+        ["LblUpdateStatus"]       = New("You are on the latest version.",                  "Установлена последняя версия."),
+        ["LblAuthorHeader"]       = New("Author",                                          "Автор"),
+        ["LblMit"]                = New("MIT",                                             "MIT"),
+        ["BtnStar"]               = New("Star",                                            "Звезда"),
+        ["BtnOpen"]               = New("Open",                                            "Открыть"),
+        ["BtnSaveChanges"]        = New("Save changes",                                    "Сохранить"),
+
+        // Hotkey row labels
+        ["HkOpenCapture"]         = New("Open capture overlay",                            "Открыть выделение"),
+        ["HkSaveSilent"]          = New("Save screenshot (silent)",                        "Сохранить скриншот (без диалога)"),
+        ["HkCopy"]                = New("Copy to clipboard",                               "Скопировать в буфер"),
+        ["HkUndo"]                = New("Undo",                                            "Отменить"),
+        ["HkRedo"]                = New("Redo",                                            "Повторить"),
+        ["HkSelectAll"]           = New("Select all",                                      "Выделить всё"),
+        ["HkRecordSave"]          = New("Save recording (silent)",                         "Сохранить запись (без диалога)"),
+        ["HkPressKeys"]           = New("Press keys...",                                   "Нажмите клавиши..."),
+
+        // Notifications shown in Settings
+        ["NotifySaved"]           = New("Settings saved.",                                 "Настройки сохранены."),
+        ["NotifyReset"]           = New("Settings reset to defaults.",                     "Настройки сброшены по умолчанию."),
+        ["NotifyUnsaved"]         = New("You have unsaved changes.",                       "Есть несохранённые изменения."),
+        ["NotifyUpdateChecking"]  = New("Checking for updates...",                         "Проверка обновлений..."),
+        ["NotifyUpdateUpToDate"]  = New("You are on the latest version.",                  "Установлена последняя версия."),
+        ["NotifyUpdateAvailable"] = New("Update available: {0}",                           "Доступно обновление: {0}"),
+        ["NotifyUpdateFailed"]    = New("Update check failed.",                            "Проверка обновлений не удалась."),
+        ["NotifySaveFailed"]      = New("Could not save settings.",                        "Не удалось сохранить настройки."),
+
+        // Bitrate label
+        ["BitrateMbps"]           = New("{0} Mbps",                                        "{0} Мбит/с"),
+        ["BitrateEstimate"]       = New("Est. ~{0} MB per minute",                         "Прибл. ~{0} МБ в минуту"),
     };
 
     private static Dictionary<string, string> New(string en, string ru)

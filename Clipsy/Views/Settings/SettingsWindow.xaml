@@ -160,7 +160,7 @@
                             Margin="12,12,12,16"
                             Padding="10">
                         <StackPanel Spacing="3">
-                            <TextBlock Text="TIP" Style="{StaticResource ClipsyLabel}" />
+                            <TextBlock x:Name="LblTipHeader" Text="TIP" Style="{StaticResource ClipsyLabel}" />
                             <TextBlock x:Name="LblTip"
                                        Text="Press PrtSc anywhere to capture."
                                        Style="{StaticResource ClipsyHelper}" />
@@ -200,7 +200,8 @@
                                                        Text="Auto-detect uses the system locale."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ComboBox x:Name="LangBox" Grid.Column="1" MinWidth="220" VerticalAlignment="Center">
+                                        <ComboBox x:Name="LangBox" Grid.Column="1" MinWidth="220" VerticalAlignment="Center"
+                                                  SelectionChanged="OnAnyControlChanged">
                                             <ComboBoxItem x:Name="LangAuto" Content="Auto-detect" Tag="auto" />
                                             <ComboBoxItem x:Name="LangEn" Content="English" Tag="en" />
                                             <ComboBoxItem x:Name="LangRu" Content="Russian" Tag="ru" />
@@ -266,7 +267,8 @@
                                                        Text="Tesseract is bundled. Windows OCR is faster but lower-quality."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ComboBox x:Name="OcrEngineBox" Grid.Column="1" MinWidth="220" VerticalAlignment="Center">
+                                        <ComboBox x:Name="OcrEngineBox" Grid.Column="1" MinWidth="220" VerticalAlignment="Center"
+                                                  SelectionChanged="OnAnyControlChanged">
                                             <ComboBoxItem x:Name="OcrTesseract" Content="Tesseract (default)" Tag="Tesseract" />
                                             <ComboBoxItem x:Name="OcrWinRt" Content="Windows OCR" Tag="WinRT" />
                                         </ComboBox>
@@ -284,7 +286,7 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBox x:Name="ScreenshotFolderBox" Grid.Column="0" />
+                                            <TextBox x:Name="ScreenshotFolderBox" Grid.Column="0" TextChanged="OnAnyTextChanged" />
                                             <Button x:Name="ScreenshotFolderPick" Grid.Column="1"
                                                     Style="{StaticResource ClipsyButtonGhost}"
                                                     Content="Browse"
@@ -300,7 +302,7 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBox x:Name="VideoFolderBox" Grid.Column="0" />
+                                            <TextBox x:Name="VideoFolderBox" Grid.Column="0" TextChanged="OnAnyTextChanged" />
                                             <Button x:Name="VideoFolderPick" Grid.Column="1"
                                                     Style="{StaticResource ClipsyButtonGhost}"
                                                     Content="Browse"
@@ -316,13 +318,19 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock Text="Remember last Save As folder"
+                                            <TextBlock x:Name="LblRememberFolder"
+                                                       Text="Remember last Save As folder"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperRemember"
                                                        Text="Future captures default to wherever you saved last."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ToggleSwitch x:Name="RememberFolderSwitch" Grid.Column="1" VerticalAlignment="Center" />
+                                        <ToggleSwitch x:Name="RememberFolderSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyToggleSwitch}"
+                                                      OnContent="" OffContent=""
+                                                      MinWidth="0" Margin="0,0,-44,0"
+                                                      Toggled="OnAnyToggleChanged"
+                                                      VerticalAlignment="Center" />
                                     </Grid>
 
                                     <Border Style="{StaticResource ClipsyHairline}" />
@@ -371,7 +379,8 @@
                                                    Style="{StaticResource ClipsyBodyStrong}"
                                                    VerticalAlignment="Center" />
                                         <ComboBox x:Name="AfterSaveBox" Grid.Column="1" MinWidth="220"
-                                                  VerticalAlignment="Center">
+                                                  VerticalAlignment="Center"
+                                                  SelectionChanged="OnAnyControlChanged">
                                             <ComboBoxItem x:Name="AfterNothing" Content="Do nothing" Tag="nothing" />
                                             <ComboBoxItem x:Name="AfterOpenFile" Content="Open file" Tag="open-file" />
                                             <ComboBoxItem x:Name="AfterOpenFolder" Content="Open folder" Tag="open-folder" />
@@ -390,7 +399,8 @@
                                                    Style="{StaticResource ClipsyHelper}" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <ComboBox x:Name="UpdateIntervalBox" MinWidth="200">
+                                        <ComboBox x:Name="UpdateIntervalBox" MinWidth="200"
+                                                  SelectionChanged="OnAnyControlChanged">
                                             <ComboBoxItem x:Name="UpdHourly" Content="Hourly" Tag="hourly" />
                                             <ComboBoxItem x:Name="UpdDaily" Content="Daily" Tag="daily" />
                                             <ComboBoxItem x:Name="UpdWeekly" Content="Weekly" Tag="weekly" />
@@ -431,7 +441,7 @@
                                     </StackPanel>
                                     <StackPanel Spacing="6">
                                         <RadioButton x:Name="RadioCodecH264" Style="{StaticResource ClipsyRadioCard}"
-                                                     GroupName="Codec" Tag="H.264">
+                                                     GroupName="Codec" Tag="H.264" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="H.264" FontSize="13" FontWeight="SemiBold" />
                                                 <TextBlock Text="Wide compatibility, hardware-accelerated"
@@ -440,7 +450,7 @@
                                             </StackPanel>
                                         </RadioButton>
                                         <RadioButton x:Name="RadioCodecH265" Style="{StaticResource ClipsyRadioCard}"
-                                                     GroupName="Codec" Tag="H.265">
+                                                     GroupName="Codec" Tag="H.265" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="H.265" FontSize="13" FontWeight="SemiBold" />
                                                 <TextBlock Text="Smaller files, slower encode"
@@ -449,7 +459,7 @@
                                             </StackPanel>
                                         </RadioButton>
                                         <RadioButton x:Name="RadioCodecVp9" Style="{StaticResource ClipsyRadioCard}"
-                                                     GroupName="Codec" Tag="VP9">
+                                                     GroupName="Codec" Tag="VP9" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="VP9" FontSize="13" FontWeight="SemiBold" />
                                                 <TextBlock Text="Web-friendly, open codec"
@@ -458,7 +468,7 @@
                                             </StackPanel>
                                         </RadioButton>
                                         <RadioButton x:Name="RadioCodecAv1" Style="{StaticResource ClipsyRadioCard}"
-                                                     GroupName="Codec" Tag="AV1">
+                                                     GroupName="Codec" Tag="AV1" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="AV1" FontSize="13" FontWeight="SemiBold" />
                                                 <TextBlock Text="Smallest, very slow encoder"
@@ -624,7 +634,12 @@
                                                        Text="Smooths color transitions at the cost of file size."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ToggleSwitch x:Name="GifDitherSwitch" Grid.Column="1" VerticalAlignment="Center" />
+                                        <ToggleSwitch x:Name="GifDitherSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyToggleSwitch}"
+                                                      OnContent="" OffContent=""
+                                                      MinWidth="0" Margin="0,0,-44,0"
+                                                      Toggled="OnAnyToggleChanged"
+                                                      VerticalAlignment="Center" />
                                     </Grid>
                                 </StackPanel>
                             </Border>
@@ -678,29 +693,38 @@
                                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                                 <Setter Property="Padding" Value="0" />
                                                 <Setter Property="MinHeight" Value="44" />
-                                                <Setter Property="Margin" Value="0,4,0,4" />
+                                                <Setter Property="Margin" Value="0" />
                                             </Style>
                                         </ListView.ItemContainerStyle>
                                         <ListView.ItemTemplate>
                                             <DataTemplate>
-                                                <Grid Padding="14,4" ColumnSpacing="16">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="160" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock Grid.Column="0"
-                                                               Text="{Binding Label}"
-                                                               FontSize="13"
-                                                               FontWeight="SemiBold"
-                                                               Foreground="{StaticResource ClipsyTextBrush}"
-                                                               VerticalAlignment="Center" />
-                                                    <Button Grid.Column="1"
-                                                            Style="{StaticResource ClipsyKeyChip}"
-                                                            Click="OnHotkeyRebindClick"
-                                                            Tag="{Binding Key}"
-                                                            VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding Binding}" />
-                                                    </Button>
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="*" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+                                                    <Grid Grid.Row="0" Padding="14,6" ColumnSpacing="16">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="160" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0"
+                                                                   Text="{Binding Label}"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource ClipsyTextBrush}"
+                                                                   VerticalAlignment="Center" />
+                                                        <Button Grid.Column="1"
+                                                                Style="{StaticResource ClipsyKeyChip}"
+                                                                Click="OnHotkeyRebindClick"
+                                                                Tag="{Binding Key}"
+                                                                VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Binding}" />
+                                                        </Button>
+                                                    </Grid>
+                                                    <Border Grid.Row="1" Height="1"
+                                                            Background="{StaticResource ClipsyBorderSubtleBrush}"
+                                                            Margin="14,0,14,0" />
                                                 </Grid>
                                             </DataTemplate>
                                         </ListView.ItemTemplate>
@@ -743,7 +767,7 @@
                                             <TextBlock x:Name="LblAuthorName" Text="Sidiusz"
                                                        Style="{StaticResource ClipsyHelper}" />
                                             <TextBlock Text="·" Style="{StaticResource ClipsyHelper}" />
-                                            <TextBlock Text="MIT" Style="{StaticResource ClipsyHelper}" />
+                                            <TextBlock x:Name="LblMit" Text="MIT" Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                     </StackPanel>
 
@@ -757,10 +781,10 @@
                                         <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
                                             <TextBlock Text="github.com/Sidiusz/Clipsy"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock Text="Source, issues, releases"
+                                            <TextBlock x:Name="LblGithubLine" Text="Source, issues, releases"
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <HyperlinkButton Grid.Column="1"
+                                        <HyperlinkButton x:Name="LinkGithubOpen" Grid.Column="1"
                                                          Content="Open"
                                                          NavigateUri="https://github.com/Sidiusz/Clipsy"
                                                          VerticalAlignment="Center" />
@@ -798,15 +822,15 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
-                                        <TextBlock Text="Like Clipsy?" Style="{StaticResource ClipsyBodyStrong}" />
-                                        <TextBlock Text="Star it on GitHub — that's enough." Style="{StaticResource ClipsyHelper}" />
+                                        <TextBlock x:Name="LblLikeClipsy" Text="Like Clipsy?" Style="{StaticResource ClipsyBodyStrong}" />
+                                        <TextBlock x:Name="LblLikeClipsyHint" Text="Star it on GitHub - that's enough." Style="{StaticResource ClipsyHelper}" />
                                     </StackPanel>
                                     <HyperlinkButton Grid.Column="1"
                                                      NavigateUri="https://github.com/Sidiusz/Clipsy"
                                                      VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal" Spacing="4">
                                             <FontIcon Glyph="&#xE735;" FontSize="13" />
-                                            <TextBlock Text="Star" />
+                                            <TextBlock x:Name="LblStarBtn" Text="Star" />
                                         </StackPanel>
                                     </HyperlinkButton>
                                 </Grid>
@@ -823,12 +847,51 @@
                     BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
                     BorderThickness="0,1,0,0"
                     Padding="20,12">
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                    <Button x:Name="BtnReset" Style="{StaticResource ClipsyButtonGhost}"
-                            Content="Reset" Click="OnReset" />
-                    <Button x:Name="BtnClose" Content="Close" Click="OnClose" />
-                    <Button x:Name="BtnSave" Style="{StaticResource ClipsyButtonPrimary}"
-                            Content="Save changes" Click="OnSave" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Ellipse x:Name="DotUnsaved" Width="8" Height="8"
+                                 Fill="{StaticResource ClipsyAccentBrush}"
+                                 Visibility="Collapsed" />
+                        <TextBlock x:Name="FooterStatusText"
+                                   Style="{StaticResource ClipsyHelper}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <Button x:Name="BtnReset" Style="{StaticResource ClipsyButtonGhost}"
+                                Content="Reset" Click="OnReset" />
+                        <Button x:Name="BtnClose" Content="Close" Click="OnClose" />
+                        <Button x:Name="BtnSave" Style="{StaticResource ClipsyButtonPrimary}"
+                                Content="Save changes" Click="OnSave" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ============== Notification banner (bottom-right overlay) ============== -->
+            <Border x:Name="NotifyBanner" Grid.Row="0" Grid.Column="1"
+                    Background="{StaticResource ClipsyBg2Brush}"
+                    BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="14,10"
+                    Margin="0,0,24,24"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Border x:Name="NotifyAccentBar" Width="3" Height="22"
+                            Background="{StaticResource ClipsyAccentBrush}"
+                            CornerRadius="2" />
+                    <FontIcon x:Name="NotifyIcon" Glyph="&#xE73E;" FontSize="14"
+                              Foreground="{StaticResource ClipsyAccentBrush}"
+                              VerticalAlignment="Center" />
+                    <TextBlock x:Name="NotifyMessage"
+                               Style="{StaticResource ClipsyBody}"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource ClipsyTextBrush}" />
                 </StackPanel>
             </Border>
         </Grid>
