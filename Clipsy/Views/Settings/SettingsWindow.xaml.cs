@@ -117,7 +117,7 @@ public sealed partial class SettingsWindow : Window
             Load();
             ApplyLocalization();
             ThemeService.ApplyTo(Content as FrameworkElement);
-            VersionLabel.Text = Strings.Get("VersionPrefix") + " " + GetVersion();
+            VersionLabel.Text = Strings.Get("VersionPrefix") + GetVersion();
             BuildDateLabel.Text = GetBuildDate();
         }
         catch (Exception ex)
