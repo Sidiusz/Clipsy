@@ -53,3 +53,13 @@ installer/output/
 # Clipsy project specific
 Clipsy/bin/
 Clipsy/obj/
+
+# Session/workspace noise
+checkpoint.md
+.codegraph/
+.claude/
+DESIGN SCREENSHOTS/
+new design/
+*.full
+*.zip
+Clipsy UI _ standalone.html
