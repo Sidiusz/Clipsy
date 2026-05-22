@@ -73,8 +73,7 @@ public sealed partial class CaptureOverlayWindow : Window
     private readonly HashSet<int> _ocrSelected = new();
     private DispatcherTimer? _scanTimer;
     private DispatcherTimer? _hoverTimer;
-    private double _scanY;
-    private int _scanDir = 1;
+    private double _scanProgress;
     private Point _ocrDragStart;
 
     // Pre-allocated dim geometry — avoids GC pressure and XAML re-layout on every PointerMoved.
@@ -1640,14 +1639,11 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void StartScanAnimation()
     {
-        // ScanLine lives inside SelectionLayer (which Margin-positions to the
-        // selection). Width tracks the selection's local size.
         ScanLine.Visibility = Visibility.Visible;
         ScanLine.Width = _selectionRect.Width;
         Canvas.SetLeft(ScanLine, 0);
         Canvas.SetTop(ScanLine, 0);
-        _scanY = 0;
-        _scanDir = 1;
+        _scanProgress = 0;
         _scanTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _scanTimer.Tick += OnScanTick;
         _scanTimer.Start();
@@ -1655,10 +1651,13 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void OnScanTick(object? sender, object e)
     {
-        _scanY += _scanDir * 6;
-        if (_scanY >= _selectionRect.Height) { _scanY = _selectionRect.Height; _scanDir = -1; }
-        if (_scanY <= 0) { _scanY = 0; _scanDir = 1; }
-        Canvas.SetTop(ScanLine, _scanY);
+        _scanProgress += 0.018; // ~55 ticks per sweep = ~0.9 s
+        if (_scanProgress > 1.0) _scanProgress = 0;
+        // smooth ease-in-out so beam accelerates from top and decelerates at bottom
+        var t = _scanProgress;
+        var eased = t * t * (3.0 - 2.0 * t);
+        double maxY = System.Math.Max(0, _selectionRect.Height - ScanLine.Height);
+        Canvas.SetTop(ScanLine, eased * maxY);
     }
 
     private void StopScanAnimation()
@@ -1730,6 +1729,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
         // Build sorted, line-grouped text for the text panel.
         OcrTextBox.Text = BuildSortedText();
+        OcrToolbar.Visibility = Visibility.Collapsed;
         OcrPanelsContainer.Visibility = Visibility.Visible;
         PositionOcrPanelsContainer();
         SetOcrButtonsEnabled(true);

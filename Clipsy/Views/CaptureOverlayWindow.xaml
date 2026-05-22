@@ -60,10 +60,18 @@
                        IsHitTestVisible="False" />
             <Canvas x:Name="HandlesLayer" />
             <Rectangle x:Name="ScanLine"
-                       Height="2"
-                       Fill="{StaticResource ClipsyWarningBrush}"
-                       Opacity="0.85"
-                       Visibility="Collapsed" />
+                       Height="18"
+                       Opacity="0.9"
+                       Visibility="Collapsed">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="Transparent" Offset="0" />
+                        <GradientStop Color="#FFFFC107" Offset="0.4" />
+                        <GradientStop Color="#FFFFC107" Offset="0.6" />
+                        <GradientStop Color="Transparent" Offset="1" />
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
             <TextBlock x:Name="OcrStatusLabel"
                        Text="No text found"
                        Foreground="{StaticResource ClipsyTextBrush}"
@@ -115,37 +123,16 @@
                 </StackPanel>
             </Border>
 
-            <!-- ============== OCR toolbar ============== -->
+            <!-- ============== OCR toolbar (visible while scanning, exit only) ============== -->
             <Border x:Name="OcrToolbar"
                     Style="{StaticResource ClipsyToolbar}"
                     Visibility="Collapsed">
-                <StackPanel Orientation="Horizontal" Spacing="2">
-                    <Button x:Name="OcrSelectAllBtn"
-                            Style="{StaticResource ClipsyIconButton}"
-                            Click="OnOcrSelectAll"
-                            ToolTipService.ToolTip="Select all text">
-                        <FontIcon Glyph="&#xE8B3;" FontSize="16" />
-                    </Button>
-                    <Button x:Name="OcrCopyBtn"
-                            Style="{StaticResource ClipsyIconButton}"
-                            Click="OnOcrCopy"
-                            ToolTipService.ToolTip="Copy text">
-                        <FontIcon Glyph="&#xE8C8;" FontSize="16" />
-                    </Button>
-                    <Button x:Name="OcrTranslateBtn"
-                            Style="{StaticResource ClipsyIconButton}"
-                            Click="OnOcrTranslate"
-                            ToolTipService.ToolTip="Translate">
-                        <FontIcon Glyph="&#xE8C1;" FontSize="16" />
-                    </Button>
-                    <Border Style="{StaticResource ClipsyToolbarSeparator}" />
-                    <Button x:Name="OcrExitBtn"
-                            Style="{StaticResource ClipsyIconButton}"
-                            Click="OnOcrExit"
-                            ToolTipService.ToolTip="Exit OCR (Esc)">
-                        <FontIcon Glyph="&#xE711;" FontSize="16" />
-                    </Button>
-                </StackPanel>
+                <Button x:Name="OcrExitBtn"
+                        Style="{StaticResource ClipsyIconButton}"
+                        Click="OnOcrExit"
+                        ToolTipService.ToolTip="Exit OCR (Esc)">
+                    <FontIcon Glyph="&#xE711;" FontSize="16" />
+                </Button>
             </Border>
 
             <!-- ============== OCR panels (draggable, horizontal) ============== -->
@@ -163,6 +150,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <Border Grid.Row="0"
                                 Background="{StaticResource ClipsyBg2Brush}"
@@ -176,7 +164,7 @@
                                 PointerCaptureLost="OnOcrPanelDragCancel">
                             <TextBlock Text="RECOGNIZED TEXT" Style="{StaticResource ClipsyLabel}" />
                         </Border>
-                        <ScrollViewer Grid.Row="1" MaxHeight="220" MaxWidth="480"
+                        <ScrollViewer Grid.Row="1" MaxHeight="200" MaxWidth="480"
                                       VerticalScrollBarVisibility="Auto"
                                       Padding="12,10">
                             <TextBox x:Name="OcrTextBox"
@@ -188,6 +176,39 @@
                                      Foreground="{StaticResource ClipsyTextBrush}"
                                      FontSize="13" />
                         </ScrollViewer>
+                        <Border Grid.Row="2"
+                                Background="{StaticResource ClipsyBg2Brush}"
+                                BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                BorderThickness="0,1,0,0"
+                                CornerRadius="0,0,8,8"
+                                Padding="8,6">
+                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                <Button x:Name="OcrSelectAllBtn"
+                                        Style="{StaticResource ClipsyIconButton}"
+                                        Click="OnOcrSelectAll"
+                                        ToolTipService.ToolTip="Select all text">
+                                    <FontIcon Glyph="&#xE8B3;" FontSize="15" />
+                                </Button>
+                                <Button x:Name="OcrCopyBtn"
+                                        Style="{StaticResource ClipsyIconButton}"
+                                        Click="OnOcrCopy"
+                                        ToolTipService.ToolTip="Copy text">
+                                    <FontIcon Glyph="&#xE8C8;" FontSize="15" />
+                                </Button>
+                                <Button x:Name="OcrTranslateBtn"
+                                        Style="{StaticResource ClipsyIconButton}"
+                                        Click="OnOcrTranslate"
+                                        ToolTipService.ToolTip="Translate">
+                                    <FontIcon Glyph="&#xE8C1;" FontSize="15" />
+                                </Button>
+                                <Border Style="{StaticResource ClipsyToolbarSeparator}" />
+                                <Button Style="{StaticResource ClipsyIconButton}"
+                                        Click="OnOcrExit"
+                                        ToolTipService.ToolTip="Exit OCR (Esc)">
+                                    <FontIcon Glyph="&#xE711;" FontSize="15" />
+                                </Button>
+                            </StackPanel>
+                        </Border>
                     </Grid>
                 </Border>
 
