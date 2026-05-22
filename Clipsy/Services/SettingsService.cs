@@ -9,7 +9,8 @@ public sealed class AppSettings
     // General
     public string Language { get; set; } = "auto";          // auto / en / ru
     public string Theme { get; set; } = "auto";             // auto / dark / light
-    public string OcrEngine { get; set; } = "Tesseract";    // Tesseract / WinRT
+    public string OcrEngine { get; set; } = "WinRT";          // Tesseract / WinRT
+    public string TesseractLanguages { get; set; } = "";   // comma-separated codes, e.g. "eng,rus"
     public string? ScreenshotFolder { get; set; }
     public string? VideoFolder { get; set; }
     public bool RememberLastFolder { get; set; } = true;

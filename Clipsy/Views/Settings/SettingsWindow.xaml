@@ -268,11 +268,26 @@
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ComboBox x:Name="OcrEngineBox" Grid.Column="1" MinWidth="220" VerticalAlignment="Center"
-                                                  SelectionChanged="OnAnyControlChanged">
-                                            <ComboBoxItem x:Name="OcrTesseract" Content="Tesseract (default)" Tag="Tesseract" />
-                                            <ComboBoxItem x:Name="OcrWinRt" Content="Windows OCR" Tag="WinRT" />
+                                                  SelectionChanged="OnOcrEngineChanged">
+                                            <ComboBoxItem x:Name="OcrTesseract" Content="Tesseract" Tag="Tesseract" />
+                                            <ComboBoxItem x:Name="OcrWinRt" Content="Windows OCR (default)" Tag="WinRT" />
                                         </ComboBox>
                                     </Grid>
+
+                                    <!-- Tesseract language management (shown only when Tesseract is selected) -->
+                                    <Border x:Name="TessLangSection" Visibility="Collapsed">
+                                        <StackPanel Spacing="10">
+                                            <Border Style="{StaticResource ClipsyHairline}" />
+                                            <StackPanel Spacing="4">
+                                                <TextBlock x:Name="LblTessLang" Text="Tesseract Languages"
+                                                           Style="{StaticResource ClipsyBodyStrong}" />
+                                                <TextBlock x:Name="HelperTessLang"
+                                                           Text="Download language files for offline text recognition (~4–22 MB each)."
+                                                           Style="{StaticResource ClipsyHelper}" />
+                                            </StackPanel>
+                                            <StackPanel x:Name="TessLangList" Spacing="2" />
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
                             </Border>
 

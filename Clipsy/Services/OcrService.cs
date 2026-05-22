@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
@@ -56,14 +56,11 @@ public sealed class WinRtOcrEngine : IOcrEngine
 }
 
 /// <summary>
-/// Tesseract OCR engine — bundled native Tesseract via charlesw/tesseract NuGet.
-/// Uses eng+rus tessdata from Assets/tessdata shipped with the binary.
+/// Tesseract OCR engine — user-downloaded tessdata via TessdataService.
+/// Falls back silently if no language files are installed.
 /// </summary>
 public sealed class TesseractOcrEngine : IOcrEngine
 {
-    private static readonly string TessDataPath =
-        Path.Combine(AppContext.BaseDirectory, "Assets", "tessdata");
-
     public Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes)
     {
         return Task.Run<IReadOnlyList<OcrWord>>(() =>
@@ -71,7 +68,12 @@ public sealed class TesseractOcrEngine : IOcrEngine
             var words = new List<OcrWord>();
             try
             {
-                using var engine = new Tesseract.TesseractEngine(TessDataPath, "eng+rus", Tesseract.EngineMode.Default);
+                var langs = TessdataService.InstalledSelectedCodes();
+                if (langs.Count == 0)
+                    throw new InvalidOperationException("No Tesseract language files installed.");
+
+                var langStr = string.Join("+", langs);
+                using var engine = new Tesseract.TesseractEngine(TessdataService.StorageDir, langStr, Tesseract.EngineMode.Default);
                 using var pix = Tesseract.Pix.LoadFromMemory(pngBytes);
                 using var page = engine.Process(pix);
                 using var iter = page.GetIterator();
@@ -102,7 +104,7 @@ public static class OcrEngineFactory
     {
         var configured = SettingsService.Instance.Settings.OcrEngine;
         if (string.Equals(configured, "Tesseract", StringComparison.OrdinalIgnoreCase)
-            && Directory.Exists(Path.Combine(AppContext.BaseDirectory, "Assets", "tessdata")))
+            && TessdataService.InstalledSelectedCodes().Count > 0)
         {
             return new TesseractOcrEngine();
         }
