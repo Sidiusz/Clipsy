@@ -18,6 +18,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon>Assets\clipsy.ico</ApplicationIcon>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <!-- Trim per-locale satellite assemblies (en + ru only). Drops 80+
+         Microsoft.UI.Xaml.dll.mui folders from output. -->
+    <SatelliteResourceLanguages>en;en-US;ru;ru-RU</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,4 +39,33 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+
+  <!-- Drop x86 native Tesseract DLLs on x64 builds. The Tesseract NuGet
+       targets file copies both x86\ and x64\ unconditionally. -->
+  <Target Name="StripTesseractX86" AfterTargets="ResolveLockFileCopyLocalFiles">
+    <ItemGroup Condition="'$(Platform)' == 'x64' or '$(PlatformTarget)' == 'x64'">
+      <None Remove="@(None)" Condition="$([System.String]::Copy('%(None.Link)').StartsWith('x86\'))" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Delete the win-x64/ duplicate subtree msbuild creates next to the
+       non-RID output when -p:Platform=x64 is used without -r. Saves ~195 MB
+       in bin\. Safe: nothing in the project references this path. -->
+  <Target Name="StripRidDuplicate" AfterTargets="Build">
+    <RemoveDir Directories="$(OutDir)\win-x64" Condition="Exists('$(OutDir)\win-x64') and '$(RuntimeIdentifier)' == ''" />
+  </Target>
+
+  <!-- Strip Microsoft.UI.Xaml.dll.mui native resource folders for every
+       locale except en-* / ru-*. These ship from WindowsAppSDK as plain
+       files, so SatelliteResourceLanguages doesn't filter them. -->
+  <Target Name="StripMuiLocales" AfterTargets="Build">
+    <ItemGroup>
+      <_LocaleDirs Include="$([System.IO.Directory]::GetDirectories('$(OutDir)'))" />
+      <_LocaleDirsToKill Include="@(_LocaleDirs)"
+        Condition="Exists('%(Identity)\Microsoft.ui.xaml.dll.mui') and
+                   !$([System.String]::Copy('%(Filename)').StartsWith('en-', StringComparison.OrdinalIgnoreCase)) and
+                   !$([System.String]::Copy('%(Filename)').StartsWith('ru-', StringComparison.OrdinalIgnoreCase))" />
+    </ItemGroup>
+    <RemoveDir Directories="@(_LocaleDirsToKill)" />
+  </Target>
 </Project>
