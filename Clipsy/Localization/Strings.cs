@@ -70,6 +70,9 @@ public static class Strings
         ["TipMove"]             = New("Hold to drag region",                   "Удерживайте для переноса области"),
         ["TipLock"]             = New("Double-click to lock or unlock region", "Двойной клик для блокировки области"),
         ["TipCancelRec"]        = New("Cancel recording (discard)",            "Отменить запись (удалить)"),
+        ["AlreadyRunningTitle"] = New("Clipsy is already running",             "Clipsy уже запущен"),
+        ["AlreadyRunningBody"]  = New("Another instance is active. Look for Clipsy in the system tray.",
+                                       "Другая копия уже работает. Найдите Clipsy в системном трее."),
 
         // Settings - tabs
         ["TabGeneral"]          = New("General",  "Основные"),
