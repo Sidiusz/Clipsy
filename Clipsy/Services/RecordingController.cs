@@ -202,6 +202,8 @@ public sealed class RecordingController
                 {
                     _drawWin = new Win32DrawingOverlay();
                     _drawWin.Create(_x, _y, _w, _h);
+                    _drawWin.SetColor(0xFF, 0x00, 0x00);
+                    _drawWin.SetThickness(3);
                     try { Recorder.SetExcludeFromCapture(_drawWin.Hwnd, false); } catch { }
                 }
                 _drawWin.SetActive(true);
@@ -262,7 +264,7 @@ public sealed class RecordingController
         });
     }
 
-    private async void SilentSave(string tempPath)
+    private void SilentSave(string tempPath)
     {
         Diagnostics.Log($"SilentSave ENTER tempPath='{tempPath}'");
         try
@@ -273,29 +275,11 @@ public sealed class RecordingController
                 : (settings.Settings.VideoFolder ?? settings.DefaultVideoFolder);
             Diagnostics.Log($"  folder='{folder}'");
             Directory.CreateDirectory(folder);
-
-            var format = settings.Settings.VideoFormat;
-            var name = SaveDialogService.MakeTimestampName("Clipsy", format);
+            var name = SaveDialogService.MakeTimestampName("Clipsy", "mp4");
             var dest = Path.Combine(folder, name);
-            Diagnostics.Log($"  dest='{dest}', format='{format}'");
-
-            if (format == "mp4")
-            {
-                File.Copy(tempPath, dest, overwrite: true);
-            }
-            else
-            {
-                var success = await NativeVideoConverter.ConvertToFormatAsync(tempPath, dest, format);
-                if (!success)
-                {
-                    // Fallback to MP4 if conversion fails
-                    dest = Path.ChangeExtension(dest, ".mp4");
-                    File.Copy(tempPath, dest, overwrite: true);
-                    NotificationService.Warning($"Conversion to {format.ToUpper()} failed - saved as MP4");
-                }
-            }
-
-            Diagnostics.Log("  File conversion/copy OK");
+            Diagnostics.Log($"  dest='{dest}'");
+            File.Copy(tempPath, dest, overwrite: true);
+            Diagnostics.Log("  File.Copy OK");
             TryDelete(tempPath);
             settings.Settings.LastVideoFolder = folder;
             settings.Save();
@@ -329,43 +313,19 @@ public sealed class RecordingController
             ? settings.Settings.LastVideoFolder!
             : (settings.Settings.VideoFolder ?? settings.DefaultVideoFolder);
         Directory.CreateDirectory(initialDir);
-
-        var defaultFormat = settings.Settings.VideoFormat;
-        var name = SaveDialogService.MakeTimestampName("Clipsy", defaultFormat);
-
+        var name = SaveDialogService.MakeTimestampName("Clipsy", "mp4");
         // Prefer HostWindow over HUD hwnd: HUD is a TOOLWINDOW + NOACTIVATE +
         // TRANSPARENT click-through window — invalid modal owner for common dialogs.
         var hwnd = App.Current?.HostWindow?.Hwnd ?? _hudHwnd;
-
         var filters = new System.Collections.Generic.List<SaveDialogService.SaveFilter>
         {
             new("MP4 video (*.mp4)", "*.mp4"),
-            new("AVI video (*.avi)", "*.avi"),
-            new("MKV video (*.mkv)", "*.mkv"),
-            new("GIF animation (*.gif)", "*.gif"),
         };
-
-        // Set default extension based on current format setting
-        var defaultExt = "." + defaultFormat;
-
         Diagnostics.Log($"  hwnd=0x{hwnd.ToInt64():X}, initialDir='{initialDir}', suggested='{name}'");
-
-        // Hide any remaining overlays during save dialog to prevent interference
-        try
-        {
-            _border?.SetZOrder(false);
-            _drawWin?.SetZOrder(false);
-            _resizeWin?.SetZOrder(false);
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log("OfferSaveAsync overlay z-order", ex);
-        }
-
         SaveDialogService.SavePickResult? pick = null;
         try
         {
-            pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir!, name, filters, defaultExt);
+            pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir!, name, filters, ".mp4");
             Diagnostics.Log($"  PickSaveAsync returned pick={(pick == null ? "null" : "'" + pick.Path + "'")}");
         }
         catch (Exception ex)
@@ -378,36 +338,15 @@ public sealed class RecordingController
             Diagnostics.Log("OfferSaveAsync EXIT (no pick)");
             return;
         }
-
         var dest = pick.Path;
-        var selectedFormat = SaveDialogService.ExtensionFromPattern(filters[pick.FilterIndex - 1].Pattern);
-
-        // Ensure correct extension
-        if (!dest.EndsWith($".{selectedFormat}", StringComparison.OrdinalIgnoreCase))
+        if (!dest.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
         {
-            dest = Path.ChangeExtension(dest, selectedFormat);
+            dest = Path.ChangeExtension(dest, ".mp4");
         }
-
         try
         {
-            Diagnostics.Log($"  Converting to format '{selectedFormat}' → '{dest}'");
-
-            if (selectedFormat == "mp4")
-            {
-                File.Copy(tempPath, dest, overwrite: true);
-            }
-            else
-            {
-                var success = await NativeVideoConverter.ConvertToFormatAsync(tempPath, dest, selectedFormat);
-                if (!success)
-                {
-                    // Fallback to MP4 if conversion fails
-                    dest = Path.ChangeExtension(dest, ".mp4");
-                    File.Copy(tempPath, dest, overwrite: true);
-                    NotificationService.Warning($"Conversion to {selectedFormat.ToUpper()} failed - saved as MP4");
-                }
-            }
-
+            Diagnostics.Log($"  File.Copy → '{dest}'");
+            File.Copy(tempPath, dest, overwrite: true);
             TryDelete(tempPath);
             var dir = Path.GetDirectoryName(dest);
             if (!string.IsNullOrEmpty(dir))

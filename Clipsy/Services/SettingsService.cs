@@ -25,7 +25,6 @@ public sealed class AppSettings
 
     // Video
     public string VideoCodec { get; set; } = "H.264";       // H.264 / H.265 / VP9 / AV1
-    public string VideoFormat { get; set; } = "mp4";        // mp4 / avi / mkv
     public string VideoResolution { get; set; } = "1080p";  // 480p / 720p / 1080p / 1440p / Original
     public int VideoBitrateMbps { get; set; } = 8;
 
@@ -33,7 +32,6 @@ public sealed class AppSettings
     public int GifColors { get; set; } = 256;
     public int GifFps { get; set; } = 12;
     public bool GifDither { get; set; } = true;
-    public string GifMethod { get; set; } = "native"; // native / ffmpeg
 
     // Hotkeys (stored as human-readable accelerator strings)
     public string HotkeyCapture { get; set; } = "PrintScreen";
@@ -53,7 +51,7 @@ public sealed class AppSettings
     public string TranslateFrom { get; set; } = "auto";
     public string TranslateTo { get; set; } = "ui"; // "ui" = current interface language
 
-    // Pro v1 stubs — kept for future donation / paid-feature gating.
+    // Pro v1 stubs
     public bool ProEnabled { get; set; } = false;
 
     public AppSettings Clone()
