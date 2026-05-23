@@ -41,6 +41,18 @@ public sealed class HotkeyService : IDisposable
     private uint _recordVk;
     private uint _recordMods;
 
+    // Low-level keyboard hook fallback. RegisterHotKey collides with
+    // Win11's Snipping Tool when the user has "Use PrintScreen to open
+    // Snipping" enabled, and with arbitrary third-party apps that already
+    // own a binding. WH_KEYBOARD_LL intercepts the key before any other
+    // hotkey handler and works in all those cases — same approach as
+    // Lightshot / ShareX.
+    private IntPtr _llHook;
+    private LowLevelKeyboardProc? _llProc;
+    private GCHandle _llProcHandle;
+    private bool _captureViaLL;
+    private bool _recordViaLL;
+
     public bool IsCaptureRegistered { get; private set; }
     public int LastRegisterError { get; private set; }
 
@@ -120,6 +132,11 @@ public sealed class HotkeyService : IDisposable
         {
             try
             {
+                if (_llHook != IntPtr.Zero)
+                {
+                    UnhookWindowsHookEx(_llHook);
+                    _llHook = IntPtr.Zero;
+                }
                 if (_hwnd != IntPtr.Zero)
                 {
                     UnregisterHotKey(_hwnd, HOTKEY_CAPTURE);
@@ -129,6 +146,7 @@ public sealed class HotkeyService : IDisposable
                 }
             }
             catch { }
+            if (_llProcHandle.IsAllocated) _llProcHandle.Free();
             if (_wndProcHandle.IsAllocated) _wndProcHandle.Free();
         }
     }
@@ -137,18 +155,24 @@ public sealed class HotkeyService : IDisposable
     {
         UnregisterHotKey(_hwnd, HOTKEY_CAPTURE);
         UnregisterHotKey(_hwnd, HOTKEY_RECORD);
+        _captureViaLL = false;
+        _recordViaLL  = false;
         IsCaptureRegistered = false;
 
         if (_captureVk != 0)
         {
-            if (!RegisterHotKey(_hwnd, HOTKEY_CAPTURE, _captureMods, _captureVk))
+            if (RegisterHotKey(_hwnd, HOTKEY_CAPTURE, _captureMods, _captureVk))
             {
-                LastRegisterError = Marshal.GetLastWin32Error();
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Clipsy] RegisterHotKey(capture) failed err=0x{LastRegisterError:X}");
+                IsCaptureRegistered = true;
             }
             else
             {
+                LastRegisterError = Marshal.GetLastWin32Error();
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Clipsy] RegisterHotKey(capture) failed err=0x{LastRegisterError:X} — falling back to LL hook");
+                _captureViaLL = true;
+                // Treat LL-hook registration as success since the key will
+                // still fire; the UI does not need to warn the user.
                 IsCaptureRegistered = true;
             }
         }
@@ -158,9 +182,74 @@ public sealed class HotkeyService : IDisposable
             if (!RegisterHotKey(_hwnd, HOTKEY_RECORD, _recordMods, _recordVk))
             {
                 System.Diagnostics.Debug.WriteLine(
-                    $"[Clipsy] RegisterHotKey(record-stop) failed err=0x{Marshal.GetLastWin32Error():X}");
+                    $"[Clipsy] RegisterHotKey(record-stop) failed err=0x{Marshal.GetLastWin32Error():X} — falling back to LL hook");
+                _recordViaLL = true;
             }
         }
+
+        SyncLowLevelHook();
+    }
+
+    private void SyncLowLevelHook()
+    {
+        bool need = _captureViaLL || _recordViaLL;
+        if (need && _llHook == IntPtr.Zero)
+        {
+            _llProc = LowLevelKbProc;
+            _llProcHandle = GCHandle.Alloc(_llProc);
+            var hMod = GetModuleHandle(null);
+            _llHook = SetWindowsHookExW(WH_KEYBOARD_LL, _llProc, hMod, 0);
+            if (_llHook == IntPtr.Zero)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Clipsy] SetWindowsHookEx(WH_KEYBOARD_LL) failed err=0x{Marshal.GetLastWin32Error():X}");
+                if (_llProcHandle.IsAllocated) _llProcHandle.Free();
+                _llProc = null;
+            }
+        }
+        else if (!need && _llHook != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_llHook);
+            _llHook = IntPtr.Zero;
+            if (_llProcHandle.IsAllocated) _llProcHandle.Free();
+            _llProc = null;
+        }
+    }
+
+    private IntPtr LowLevelKbProc(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode == HC_ACTION)
+        {
+            int w = wParam.ToInt32();
+            if (w == WM_KEYDOWN || w == WM_SYSKEYDOWN)
+            {
+                var kbd = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+                uint vk = kbd.vkCode;
+                uint mods = CurrentModifiers();
+                if (_captureViaLL && vk == _captureVk && mods == _captureMods)
+                {
+                    var cb = _captureCallback;
+                    if (cb != null) _dispatcher.TryEnqueue(() => cb());
+                    return new IntPtr(1); // swallow so OS shortcut doesn't also fire
+                }
+                if (_recordViaLL && vk == _recordVk && mods == _recordMods)
+                {
+                    var cb = _recordCallback;
+                    if (cb != null) _dispatcher.TryEnqueue(() => cb());
+                    return new IntPtr(1);
+                }
+            }
+        }
+        return CallNextHookEx(_llHook, nCode, wParam, lParam);
+    }
+
+    private static uint CurrentModifiers()
+    {
+        uint m = 0;
+        if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) m |= MOD_CONTROL;
+        if ((GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0) m |= MOD_SHIFT;
+        if ((GetAsyncKeyState(VK_MENU)    & 0x8000) != 0) m |= MOD_ALT;
+        return m;
     }
 
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -313,4 +402,39 @@ public sealed class HotkeyService : IDisposable
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+    // ---------- WH_KEYBOARD_LL ----------
+
+    private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    private const int WH_KEYBOARD_LL = 13;
+    private const int HC_ACTION      = 0;
+    private const int WM_KEYDOWN     = 0x0100;
+    private const int WM_SYSKEYDOWN  = 0x0104;
+    private const int VK_SHIFT       = 0x10;
+    private const int VK_CONTROL     = 0x11;
+    private const int VK_MENU        = 0x12;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KBDLLHOOKSTRUCT
+    {
+        public uint vkCode;
+        public uint scanCode;
+        public uint flags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr SetWindowsHookExW(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 }
