@@ -69,6 +69,29 @@ public partial class App : Application
         SettingsService.Instance.SettingsChanged += OnSettingsChangedRewireHotkeys;
 
         _ = CheckUpdatesIfDueAsync();
+
+        // Warm up the capture pipeline so the first PrintScreen press doesn't
+        // pay for JIT + WinUI 3 XAML island cold init + first GDI BitBlt at
+        // the same time. Runs on a background thread; we never touch the
+        // returned types from there — just force-load the assemblies.
+        System.Threading.Tasks.Task.Run(WarmupCapturePath);
+    }
+
+    private static void WarmupCapturePath()
+    {
+        try
+        {
+            // Touch the freeze service (loads GDI handles, screen-bounds calc).
+            _ = Services.ScreenFreezeService.GetVirtualScreenBounds();
+            // Force-load the overlay window type so its XAML resources are
+            // parsed/JITted before the user presses PrintScreen the first time.
+            _ = typeof(Views.CaptureOverlayWindow).Assembly;
+            _ = typeof(Views.Recording.RecordingHudWindow).Assembly;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Warmup failed: {ex.Message}");
+        }
     }
 
     public async Task CheckUpdatesIfDueAsync(bool force = false)
@@ -133,7 +156,13 @@ public partial class App : Application
         bool ok = Hotkey!.Register(OnCaptureRequested, capture, OnRecordStopRequested, record);
         if (!ok)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Capture hotkey '{capture}' not registered. Win11 Snipping Tool may own PrintScreen.");
+            // RegisterHotKey collided with another app. Most common on Win11
+            // is the system Snipping Tool owning PrintScreen — surface this
+            // so users know to either rebind or disable the OS shortcut,
+            // instead of silently failing.
+            System.Diagnostics.Debug.WriteLine(
+                $"[Clipsy] Capture hotkey '{capture}' not registered. Win11 Snipping Tool may own PrintScreen.");
+            NotificationService.Warning("WarnHotkeyConflict");
         }
     }
 

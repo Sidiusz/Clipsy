@@ -70,6 +70,8 @@ public static class Strings
         ["TipMove"]             = New("Hold to drag region",                   "Удерживайте для переноса области"),
         ["TipLock"]             = New("Double-click to lock or unlock region", "Двойной клик для блокировки области"),
         ["TipCancelRec"]        = New("Cancel recording (discard)",            "Отменить запись (удалить)"),
+        ["WarnHotkeyConflict"]  = New("Capture hotkey is in use by another app. Open Settings → Hotkeys to rebind, or disable the Win11 \"Use PrintScreen to open Snipping\" option.",
+                                       "Горячая клавиша занята другим приложением. Откройте Настройки → Горячие клавиши или отключите в Win11 «Использовать PrintScreen для запуска Snipping»."),
         ["AlreadyRunningTitle"] = New("Clipsy is already running",             "Clipsy уже запущен"),
         ["AlreadyRunningBody"]  = New("Another instance is active. Look for Clipsy in the system tray.",
                                        "Другая копия уже работает. Найдите Clipsy в системном трее."),

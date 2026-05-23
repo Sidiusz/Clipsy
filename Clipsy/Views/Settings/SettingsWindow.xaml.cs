@@ -365,6 +365,12 @@ public sealed partial class SettingsWindow : Window
         VideoFolderBox.Text = string.IsNullOrEmpty(_draft.VideoFolder)
             ? SettingsService.Instance.DefaultVideoFolder
             : _draft.VideoFolder!;
+        // Mirror the displayed defaults back into the draft so the post-Load
+        // _initial snapshot matches what Collect() will later read out of the
+        // TextBoxes. Otherwise the first MarkChanged() after Load() compares
+        // "default path" vs "" and falsely marks ss-folder/vid-folder dirty.
+        _draft.ScreenshotFolder = ScreenshotFolderBox.Text;
+        _draft.VideoFolder      = VideoFolderBox.Text;
         RememberFolderSwitch.IsChecked = _draft.RememberLastFolder;
         _initialAutostart = AutostartService.IsEnabled();
         AutostartSwitch.IsChecked = _initialAutostart;
@@ -1236,9 +1242,15 @@ public sealed partial class SettingsWindow : Window
     private async void OnReset(object sender, RoutedEventArgs e)
     {
         if (!await ConfirmReset()) return;
+        // Persist defaults right away — previously Reset only updated the UI
+        // draft, leaving SettingsService unchanged until the user also hit Save.
         _draft = new AppSettings();
+        SettingsService.Instance.Replace(_draft);
+        // Autostart isn't part of AppSettings; default = off.
+        AutostartService.SetEnabled(false);
         Load();
         ThemeService.ApplyTo(Content as FrameworkElement);
+        ApplyLocalization();
         ShowNotification("NotifyReset", "info");
     }
 
