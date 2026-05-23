@@ -275,7 +275,8 @@ public sealed class RecordingController
                 : (settings.Settings.VideoFolder ?? settings.DefaultVideoFolder);
             Diagnostics.Log($"  folder='{folder}'");
             Directory.CreateDirectory(folder);
-            var name = SaveDialogService.MakeTimestampName("Clipsy", "mp4");
+            var fmt = settings.Settings.VideoFormat ?? "mp4";
+            var name = SaveDialogService.MakeTimestampName("Clipsy", fmt);
             var dest = Path.Combine(folder, name);
             Diagnostics.Log($"  dest='{dest}'");
             File.Copy(tempPath, dest, overwrite: true);
@@ -313,19 +314,27 @@ public sealed class RecordingController
             ? settings.Settings.LastVideoFolder!
             : (settings.Settings.VideoFolder ?? settings.DefaultVideoFolder);
         Directory.CreateDirectory(initialDir);
-        var name = SaveDialogService.MakeTimestampName("Clipsy", "mp4");
+        var fmt = settings.Settings.VideoFormat ?? "mp4";
+        var name = SaveDialogService.MakeTimestampName("Clipsy", fmt);
         // Prefer HostWindow over HUD hwnd: HUD is a TOOLWINDOW + NOACTIVATE +
         // TRANSPARENT click-through window — invalid modal owner for common dialogs.
         var hwnd = App.Current?.HostWindow?.Hwnd ?? _hudHwnd;
+        var (filterLabel, filterPattern) = fmt switch
+        {
+            "avi" => ("AVI video (*.avi)", "*.avi"),
+            "mkv" => ("MKV video (*.mkv)", "*.mkv"),
+            "gif" => ("GIF animation (*.gif)", "*.gif"),
+            _     => ("MP4 video (*.mp4)", "*.mp4"),
+        };
         var filters = new System.Collections.Generic.List<SaveDialogService.SaveFilter>
         {
-            new("MP4 video (*.mp4)", "*.mp4"),
+            new(filterLabel, filterPattern),
         };
-        Diagnostics.Log($"  hwnd=0x{hwnd.ToInt64():X}, initialDir='{initialDir}', suggested='{name}'");
+        Diagnostics.Log($"  hwnd=0x{hwnd.ToInt64():X}, initialDir='{initialDir}', suggested='{name}', fmt='{fmt}'");
         SaveDialogService.SavePickResult? pick = null;
         try
         {
-            pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir!, name, filters, ".mp4");
+            pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir!, name, filters, "." + fmt);
             Diagnostics.Log($"  PickSaveAsync returned pick={(pick == null ? "null" : "'" + pick.Path + "'")}");
         }
         catch (Exception ex)
@@ -339,9 +348,9 @@ public sealed class RecordingController
             return;
         }
         var dest = pick.Path;
-        if (!dest.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+        if (!dest.EndsWith("." + fmt, StringComparison.OrdinalIgnoreCase))
         {
-            dest = Path.ChangeExtension(dest, ".mp4");
+            dest = Path.ChangeExtension(dest, "." + fmt);
         }
         try
         {

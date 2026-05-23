@@ -76,7 +76,7 @@ public sealed partial class SettingsWindow : Window
     {
         ["lang"] = "general",
         ["theme"] = "general",
-        ["ocr"] = "general",
+        ["ocr"] = "ocr",
         ["ss-folder"] = "general",
         ["vid-folder"] = "general",
         ["remember"] = "general",
@@ -84,12 +84,13 @@ public sealed partial class SettingsWindow : Window
         ["jpg-q"] = "general",
         ["after-save"] = "general",
         ["update-int"] = "general",
-        ["translate-svc"]  = "general",
-        ["translate-from"] = "general",
-        ["translate-to"]   = "general",
+        ["translate-svc"]  = "ocr",
+        ["translate-from"] = "ocr",
+        ["translate-to"]   = "ocr",
         ["codec"] = "video",
         ["resolution"] = "video",
         ["bitrate"] = "video",
+        ["vid-format"] = "video",
         ["gif-color"] = "gif",
         ["gif-fps"] = "gif",
         ["gif-dither"] = "gif",
@@ -206,11 +207,13 @@ public sealed partial class SettingsWindow : Window
 
         HdrGeneral.Text  = Strings.Get("TabGeneral");
         HdrVideo.Text    = Strings.Get("TabVideo");
+        HdrOcr.Text      = Strings.Get("TabOcr");
         HdrGif.Text      = Strings.Get("TabGif");
         HdrHotkeys.Text  = Strings.Get("TabHotkeys");
 
         SubGeneral.Text  = Strings.Get("SubGeneral");
         SubVideo.Text    = Strings.Get("SubVideo");
+        SubOcr.Text      = Strings.Get("SubOcr");
         SubGif.Text      = Strings.Get("SubGif");
 
         HelperLanguage.Text  = Strings.Get("HelperLanguage");
@@ -996,6 +999,7 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblVideoFolder, "LblVideoFolder", _dirty.Contains("vid-folder"));
         SetLabel(LblRememberFolder, "LblRememberFolder", _dirty.Contains("remember"));
         SetLabel(LblScreenshotFormat, "LblScreenshotFormat", _dirty.Contains("ss-format"));
+        SetLabel(LblVideoFormat, "LblVideoFormat", _dirty.Contains("vid-format"));
         SetLabel(LblJpgQuality, "LblJpgQuality", _dirty.Contains("jpg-q"));
         SetLabel(LblAfterSave, "LblAfterSave", _dirty.Contains("after-save"));
         SetLabel(LblUpdates, "LblUpdates", _dirty.Contains("update-int"));
@@ -1008,6 +1012,7 @@ public sealed partial class SettingsWindow : Window
 
         SetNavLabel(NavGeneralLabel, "TabGeneral", "general");
         SetNavLabel(NavVideoLabel,   "TabVideo",   "video");
+        SetNavLabel(NavOcrLabel,     "TabOcr",     "ocr");
         SetNavLabel(NavGifLabel,     "TabGif",     "gif");
         SetNavLabel(NavHotkeysLabel, "TabHotkeys", "hotkeys");
         SetNavLabel(NavInfoLabel,    "TabInfo",    "info");
