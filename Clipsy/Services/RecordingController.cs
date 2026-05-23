@@ -75,6 +75,7 @@ public sealed class RecordingController
         _hud.ResumeRequested += OnResumeRequested;
         _hud.StopRequested += OnStopRequested;
         _hud.StopSaveRequested += OnStopSaveRequested;
+        _hud.CancelRequested += OnCancelRequested;
         _hud.LockChanged += OnLockChanged;
         _hud.DrawToggled += OnDrawToggled;
 
@@ -178,6 +179,23 @@ public sealed class RecordingController
         catch (Exception ex) { Diagnostics.Log("OnStopSaveRequested _service.Stop", ex); }
         try { _ffmpegRec?.Stop(); Diagnostics.Log("  _ffmpegRec.Stop OK"); }
         catch (Exception ex) { Diagnostics.Log("OnStopSaveRequested _ffmpegRec.Stop", ex); }
+    }
+
+    /// <summary>Cancel button: stop and discard temp file (no save, no dialog).</summary>
+    private void OnCancelRequested()
+    {
+        Diagnostics.Log("RecordingController.OnCancelRequested ENTER");
+        if (_stopping) { Diagnostics.Log("  already _stopping, skip"); return; }
+        _stopping = true;
+        _stopAndSave = false;     // OnRecordingComplete discards temp when false
+        _saveAsDialog = false;
+        _hudHwnd = _hud?.Hwnd ?? IntPtr.Zero;
+        try { _hud?.Shutdown(); Diagnostics.Log("  _hud.Shutdown OK"); }
+        catch (Exception ex) { Diagnostics.Log("OnCancelRequested _hud.Shutdown", ex); }
+        try { _service?.Stop(); Diagnostics.Log("  _service.Stop OK"); }
+        catch (Exception ex) { Diagnostics.Log("OnCancelRequested _service.Stop", ex); }
+        try { _ffmpegRec?.Stop(); Diagnostics.Log("  _ffmpegRec.Stop OK"); }
+        catch (Exception ex) { Diagnostics.Log("OnCancelRequested _ffmpegRec.Stop", ex); }
     }
 
     private void OnLockChanged(bool locked)

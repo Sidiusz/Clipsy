@@ -51,6 +51,12 @@
                         ToolTipService.ToolTip="Stop and Save As">
                     <FontIcon Glyph="&#xE74E;" FontSize="16" />
                 </Button>
+                <Button x:Name="CancelBtn"
+                        Style="{StaticResource ClipsyIconButton}"
+                        Click="OnCancelClick"
+                        ToolTipService.ToolTip="Cancel recording (discard)">
+                    <FontIcon Glyph="&#xE711;" FontSize="16" />
+                </Button>
 
                 <Border Style="{StaticResource ClipsyToolbarSeparator}" />
 
