@@ -180,7 +180,7 @@ public sealed partial class SettingsWindow : Window
             BuildDateLabel.Text = GetBuildDate();
 
             // Sync nav icon / pane visibility with default-checked radio
-            foreach (var rb in new[] { NavGeneral, NavVideo, NavGif, NavHotkeys, NavInfo })
+            foreach (var rb in new[] { NavGeneral, NavVideo, NavOcr, NavGif, NavHotkeys, NavInfo })
             {
                 if (rb.IsChecked == true) { OnNavChecked(rb, new RoutedEventArgs()); break; }
             }
@@ -195,6 +195,7 @@ public sealed partial class SettingsWindow : Window
     {
         NavGeneralLabel.Text  = Strings.Get("TabGeneral");
         NavVideoLabel.Text    = Strings.Get("TabVideo");
+        NavOcrLabel.Text      = Strings.Get("TabOcr");
         NavGifLabel.Text      = Strings.Get("TabGif");
         NavHotkeysLabel.Text  = Strings.Get("TabHotkeys");
         NavInfoLabel.Text     = Strings.Get("TabInfo");
@@ -238,6 +239,7 @@ public sealed partial class SettingsWindow : Window
         LblAutostart.Text        = Strings.Get("LblAutostart");
         HelperAutostart.Text     = Strings.Get("HelperAutostart");
         LblScreenshotFormat.Text = Strings.Get("LblScreenshotFormat");
+        LblVideoFormat.Text      = Strings.Get("LblVideoFormat");
         LblJpgQuality.Text       = Strings.Get("LblJpgQuality");
         LblAfterSave.Text        = Strings.Get("LblAfterSave");
         LblUpdates.Text          = Strings.Get("LblUpdates");
@@ -356,6 +358,7 @@ public sealed partial class SettingsWindow : Window
         AutostartSwitch.IsChecked = AutostartService.IsEnabled();
 
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
+        SelectComboByTag(VideoFormatBox, _draft.VideoFormat);
 
         JpgQualitySlider.Minimum = 50;
         JpgQualitySlider.Maximum = 100;
@@ -423,6 +426,7 @@ public sealed partial class SettingsWindow : Window
         _draft.VideoFolder = VideoFolderBox.Text;
         _draft.RememberLastFolder = RememberFolderSwitch.IsChecked == true;
         _draft.ScreenshotFormat = SelectedComboTag(ScreenshotFormatBox);
+        _draft.VideoFormat = SelectedComboTag(VideoFormatBox);
         _draft.JpgQuality = (int)JpgQualitySlider.Value;
         _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
         _draft.UpdateInterval = SelectedComboTag(UpdateIntervalBox);
@@ -597,6 +601,11 @@ public sealed partial class SettingsWindow : Window
     private void OnScreenshotFormatChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateJpgQualityRowVisibility();
+    }
+
+    private void OnVideoFormatChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loading) MarkChanged();
     }
 
     private void UpdateJpgQualityRowVisibility()
@@ -953,6 +962,7 @@ public sealed partial class SettingsWindow : Window
         if (_draft.VideoFolder != _initial.VideoFolder) _dirty.Add("vid-folder");
         if (_draft.RememberLastFolder != _initial.RememberLastFolder) _dirty.Add("remember");
         if (_draft.ScreenshotFormat != _initial.ScreenshotFormat) _dirty.Add("ss-format");
+        if (_draft.VideoFormat != _initial.VideoFormat) _dirty.Add("vid-format");
         if (_draft.JpgQuality != _initial.JpgQuality) _dirty.Add("jpg-q");
         if (_draft.AfterSaveAction != _initial.AfterSaveAction) _dirty.Add("after-save");
         if (_draft.UpdateInterval != _initial.UpdateInterval) _dirty.Add("update-int");
@@ -1188,6 +1198,7 @@ public sealed partial class SettingsWindow : Window
 
         PaneGeneral.Visibility = key == "general" ? Visibility.Visible : Visibility.Collapsed;
         PaneVideo.Visibility   = key == "video"   ? Visibility.Visible : Visibility.Collapsed;
+        PaneOcr.Visibility     = key == "ocr"     ? Visibility.Visible : Visibility.Collapsed;
         PaneGif.Visibility     = key == "gif"     ? Visibility.Visible : Visibility.Collapsed;
         PaneHotkeys.Visibility = key == "hotkeys" ? Visibility.Visible : Visibility.Collapsed;
         PaneInfo.Visibility    = key == "info"    ? Visibility.Visible : Visibility.Collapsed;
@@ -1198,6 +1209,7 @@ public sealed partial class SettingsWindow : Window
             var dim = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyText2Brush"];
             IconNavGeneral.Foreground = key == "general" ? accent : dim;
             IconNavVideo.Foreground   = key == "video"   ? accent : dim;
+            IconNavOcr.Foreground     = key == "ocr"     ? accent : dim;
             IconNavGif.Foreground     = key == "gif"     ? accent : dim;
             IconNavHotkeys.Foreground = key == "hotkeys" ? accent : dim;
             IconNavInfo.Foreground    = key == "info"    ? accent : dim;
