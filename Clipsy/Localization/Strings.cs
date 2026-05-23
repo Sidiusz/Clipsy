@@ -69,6 +69,7 @@ public static class Strings
                                        "Рисовать. ПКМ - стирать, Shift+ПКМ - стереть всю фигуру."),
         ["TipMove"]             = New("Hold to drag region",                   "Удерживайте для переноса области"),
         ["TipLock"]             = New("Double-click to lock or unlock region", "Двойной клик для блокировки области"),
+        ["TipCancelRec"]        = New("Cancel recording (discard)",            "Отменить запись (удалить)"),
 
         // Settings - tabs
         ["TabGeneral"]          = New("General",  "Основные"),

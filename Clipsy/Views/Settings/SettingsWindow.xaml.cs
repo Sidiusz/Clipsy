@@ -73,6 +73,9 @@ public sealed partial class SettingsWindow : Window
     // FFmpeg download
     private CancellationTokenSource? _ffmpegCts;
 
+    // Autostart lives in registry (not AppSettings) — track init state separately
+    private bool _initialAutostart;
+
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _notifyTimer;
 
     private static readonly Dictionary<string, string> _paramToCategory = new()
@@ -83,6 +86,7 @@ public sealed partial class SettingsWindow : Window
         ["ss-folder"] = "general",
         ["vid-folder"] = "general",
         ["remember"] = "general",
+        ["autostart"] = "general",
         ["ss-format"] = "general",
         ["jpg-q"] = "general",
         ["after-save"] = "general",
@@ -362,7 +366,8 @@ public sealed partial class SettingsWindow : Window
             ? SettingsService.Instance.DefaultVideoFolder
             : _draft.VideoFolder!;
         RememberFolderSwitch.IsChecked = _draft.RememberLastFolder;
-        AutostartSwitch.IsChecked = AutostartService.IsEnabled();
+        _initialAutostart = AutostartService.IsEnabled();
+        AutostartSwitch.IsChecked = _initialAutostart;
 
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
         SelectComboByTag(VideoFormatBox, _draft.VideoFormat);
@@ -1039,7 +1044,9 @@ public sealed partial class SettingsWindow : Window
 
     private void OnAutostartToggled(object sender, RoutedEventArgs e)
     {
-        AutostartService.SetEnabled(AutostartSwitch.IsChecked == true);
+        // Defer apply until Save so the change participates in dirty tracking
+        // and can be discarded by Close → "discard?" prompt.
+        MarkChanged();
     }
 
     private void MarkChanged()
@@ -1063,6 +1070,7 @@ public sealed partial class SettingsWindow : Window
         if (_draft.ScreenshotFolder != _initial.ScreenshotFolder) _dirty.Add("ss-folder");
         if (_draft.VideoFolder != _initial.VideoFolder) _dirty.Add("vid-folder");
         if (_draft.RememberLastFolder != _initial.RememberLastFolder) _dirty.Add("remember");
+        if ((AutostartSwitch.IsChecked == true) != _initialAutostart) _dirty.Add("autostart");
         if (_draft.ScreenshotFormat != _initial.ScreenshotFormat) _dirty.Add("ss-format");
         if (_draft.VideoFormat != _initial.VideoFormat) _dirty.Add("vid-format");
         if (_draft.JpgQuality != _initial.JpgQuality) _dirty.Add("jpg-q");
@@ -1097,6 +1105,7 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblScreenshotFolder, "LblScreenshotFolder", _dirty.Contains("ss-folder"));
         SetLabel(LblVideoFolder, "LblVideoFolder", _dirty.Contains("vid-folder"));
         SetLabel(LblRememberFolder, "LblRememberFolder", _dirty.Contains("remember"));
+        SetLabel(LblAutostart, "LblAutostart", _dirty.Contains("autostart"));
         SetLabel(LblScreenshotFormat, "LblScreenshotFormat", _dirty.Contains("ss-format"));
         SetLabel(LblVideoFormat, "LblVideoFormat", _dirty.Contains("vid-format"));
         SetLabel(LblJpgQuality, "LblJpgQuality", _dirty.Contains("jpg-q"));
@@ -1197,6 +1206,13 @@ public sealed partial class SettingsWindow : Window
         {
             Collect();
             SettingsService.Instance.Replace(_draft);
+            bool wantAutostart = AutostartSwitch.IsChecked == true;
+            if (wantAutostart != _initialAutostart)
+            {
+                AutostartService.SetEnabled(wantAutostart);
+                _initialAutostart = AutostartService.IsEnabled();
+                AutostartSwitch.IsChecked = _initialAutostart;
+            }
             _initial = _draft.Clone();
             _dirty.Clear();
             ThemeService.ApplyTo(Content as FrameworkElement);

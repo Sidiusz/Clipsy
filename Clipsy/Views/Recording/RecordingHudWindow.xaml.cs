@@ -36,6 +36,7 @@ public sealed partial class RecordingHudWindow : Window
     public event Action? ResumeRequested;
     public event Action? StopRequested;
     public event Action? StopSaveRequested;
+    public event Action? CancelRequested;
     public event Action<bool>? LockChanged;
     public event Action<bool>? DrawToggled;
 
@@ -68,6 +69,7 @@ public sealed partial class RecordingHudWindow : Window
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(PauseBtn,    Strings.Get("TipPause"));
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(StopBtn,     Strings.Get("TipStop"));
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(StopSaveBtn, Strings.Get("TipSaveAs"));
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(CancelBtn,   Strings.Get("TipCancelRec"));
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(DrawBtn,     Strings.Get("TipDraw"));
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(LockBtn,     Strings.Get("TipLock"));
     }
@@ -232,6 +234,7 @@ public sealed partial class RecordingHudWindow : Window
 
     private void OnStopClick(object sender, RoutedEventArgs e) => StopRequested?.Invoke();
     private void OnStopSaveClick(object sender, RoutedEventArgs e) => StopSaveRequested?.Invoke();
+    private void OnCancelClick(object sender, RoutedEventArgs e) => CancelRequested?.Invoke();
 
     private void OnLockDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
