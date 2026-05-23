@@ -3,33 +3,25 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
+using Clipsy.Drawing;
 
 namespace Clipsy.Services;
 
 /// <summary>
-/// Per-pixel-alpha Win32 layered overlay for free-hand annotation during
-/// recording. Uses UpdateLayeredWindow + a GDI+ paint into an ARGB DIB so:
-///   • strokes render with antialiasing and clean RGBA pixels in the MP4;
-///   • the background tints the region by 1/255 (visually invisible) so the
-///     layered window blocks clicks across the whole region — the user can't
-///     accidentally activate the app being recorded while drawing;
-///   • toggling click-through (active vs inactive) is a single style flip.
+/// Per-pixel-alpha Win32 layered overlay that hosts <see cref="PencilEngine"/>
+/// during a recording. The engine owns the stroke list, eraser logic, brush
+/// state, and cursor position — this class only translates Win32 mouse / wheel
+/// messages into engine calls and re-paints the engine's state into an ARGB
+/// DIB via System.Drawing. The same engine is reused by the capture overlay.
 /// </summary>
 public sealed class Win32DrawingOverlay
 {
-    private const int EraserRadius = 14;
-
     private IntPtr _hwnd;
     private bool _created;
     private int _x, _y, _w, _h;
     private bool _active;
-    private bool _drawing;
-    private bool _erasing;
-    private System.Drawing.Color _penColor = System.Drawing.Color.Red;
-    private float _penThickness = 3f;
 
-    private readonly List<Stroke> _strokes = new();
-    private Stroke? _current;
+    public PencilEngine Engine { get; } = new();
 
     private IntPtr _screenDc;
     private IntPtr _memDc;
@@ -43,13 +35,6 @@ public sealed class Win32DrawingOverlay
 
     public IntPtr Hwnd => _hwnd;
 
-    private sealed class Stroke
-    {
-        public System.Drawing.Color Color;
-        public float Thickness;
-        public List<PointF> Points = new();
-    }
-
     public bool Create(int x, int y, int w, int h)
     {
         if (_created) return false;
@@ -61,7 +46,7 @@ public sealed class Win32DrawingOverlay
             hInstance = GetModuleHandle(null),
             lpszClassName = "ClipsyDrawingOverlay",
             hbrBackground = IntPtr.Zero,
-            hCursor = LoadCursor(IntPtr.Zero, IDC_CROSS),
+            hCursor = LoadCursor(IntPtr.Zero, IDC_ARROW),
         };
         RegisterClass(ref wc);
 
@@ -76,6 +61,7 @@ public sealed class Win32DrawingOverlay
         _byHwnd[_hwnd] = this;
 
         AllocDib();
+        Engine.Changed += Render;
         ShowWindow(_hwnd, SW_SHOWNOACTIVATE);
         Render();
         return _created = true;
@@ -94,37 +80,29 @@ public sealed class Win32DrawingOverlay
     {
         if (!_created) return;
         _active = active;
-        // While active we own clicks (no WS_EX_TRANSPARENT). While inactive we
-        // let everything fall through to the app being recorded.
         var ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
         ex = active ? (ex & ~WS_EX_TRANSPARENT) : (ex | (int)WS_EX_TRANSPARENT);
         SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
+        if (!active) Engine.HideCursor();
         Render();
     }
 
-    public void SetColor(byte r, byte g, byte b)
+    public void SetZOrder(bool topmost)
     {
-        _penColor = System.Drawing.Color.FromArgb(255, r, g, b);
-    }
-
-    public void SetThickness(int t) => _penThickness = Math.Max(1, t);
-
-    public void ClearAll()
-    {
-        _strokes.Clear();
-        _current = null;
-        Render();
+        if (!_created) return;
+        var insertAfter = topmost ? HWND_TOPMOST : HWND_BOTTOM;
+        SetWindowPos(_hwnd, insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     public void Destroy()
     {
         if (!_created) return;
+        Engine.Changed -= Render;
         _byHwnd.Remove(_hwnd);
         FreeDib();
         DestroyWindow(_hwnd);
         _created = false;
         _hwnd = IntPtr.Zero;
-        _strokes.Clear();
     }
 
     private void AllocDib()
@@ -133,21 +111,12 @@ public sealed class Win32DrawingOverlay
         if (_w <= 0 || _h <= 0) return;
         _screenDc = GetDC(IntPtr.Zero);
         _memDc = CreateCompatibleDC(_screenDc);
-
         var bi = new BITMAPINFO
         {
-            biSize = Marshal.SizeOf<BITMAPINFOHEADER>(),
-            biWidth = _w,
-            biHeight = -_h,            // top-down DIB
-            biPlanes = 1,
-            biBitCount = 32,
-            biCompression = 0,         // BI_RGB
+            biSize = 40, biWidth = _w, biHeight = -_h, biPlanes = 1, biBitCount = 32, biCompression = 0,
         };
-        IntPtr ppvBits;
-        _dibBitmap = CreateDIBSection(_memDc, ref bi, 0, out ppvBits, IntPtr.Zero, 0);
+        _dibBitmap = CreateDIBSection(_memDc, ref bi, 0, out IntPtr ppvBits, IntPtr.Zero, 0);
         _oldBitmap = SelectObject(_memDc, _dibBitmap);
-        // Wrap the DIB pixel buffer with a managed Bitmap so we can use GDI+
-        // for antialiased stroke rendering without copying.
         _bitmap = new Bitmap(_w, _h, _w * 4, System.Drawing.Imaging.PixelFormat.Format32bppPArgb, ppvBits);
         _g = System.Drawing.Graphics.FromImage(_bitmap);
         _g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -171,26 +140,32 @@ public sealed class Win32DrawingOverlay
     {
         if (_g == null || _bitmap == null) return;
 
-        // Bg: alpha = 1 black so the layered window absorbs clicks across the
-        // whole region (per-pixel alpha hit-testing) while staying visually
-        // invisible. Strokes render on top with full opacity.
         if (_active)
             _g.Clear(System.Drawing.Color.FromArgb(1, 0, 0, 0));
         else
             _g.Clear(System.Drawing.Color.Transparent);
 
-        DrawAll(_g);
+        foreach (var s in Engine.Strokes) DrawStroke(_g, s);
+        if (Engine.Current != null) DrawStroke(_g, Engine.Current);
+
+        if (_active && Engine.CursorVisible)
+        {
+            // Cursor preview: a ring whose diameter matches the brush thickness,
+            // identical to the XAML capture overlay so behavior reads the same
+            // on both surfaces.
+            float d = Math.Max(2f, Engine.Thickness);
+            float r = d / 2f;
+            var c = Engine.Cursor;
+            using var fill = new SolidBrush(System.Drawing.Color.FromArgb(80, 0, 0, 0));
+            using var outline = new Pen(System.Drawing.Color.White, 1f);
+            _g.FillEllipse(fill, c.X - r, c.Y - r, d, d);
+            _g.DrawEllipse(outline, c.X - r, c.Y - r, d, d);
+        }
 
         UpdateLayered();
     }
 
-    private void DrawAll(System.Drawing.Graphics g)
-    {
-        foreach (var s in _strokes) DrawStroke(g, s);
-        if (_current != null) DrawStroke(g, _current);
-    }
-
-    private static void DrawStroke(System.Drawing.Graphics g, Stroke s)
+    private static void DrawStroke(System.Drawing.Graphics g, PencilEngine.Stroke s)
     {
         if (s.Points.Count < 1) return;
         using var pen = new Pen(s.Color, s.Thickness)
@@ -214,10 +189,7 @@ public sealed class Win32DrawingOverlay
     private void UpdateLayered()
     {
         if (_memDc == IntPtr.Zero) return;
-        var blend = new BLENDFUNCTION
-        {
-            BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 /* AC_SRC_ALPHA */,
-        };
+        var blend = new BLENDFUNCTION { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };
         var size = new SIZE { cx = _w, cy = _h };
         var src = new POINT { X = 0, Y = 0 };
         var dst = new POINT { X = _x, Y = _y };
@@ -236,81 +208,57 @@ public sealed class Win32DrawingOverlay
         switch (msg)
         {
             case WM_LBUTTONDOWN:
-            {
                 if (!_active) break;
                 SetCapture(hwnd);
-                _drawing = true;
-                _current = new Stroke { Color = _penColor, Thickness = _penThickness };
-                _current.Points.Add(new PointF(LoWord(lParam), HiWord(lParam)));
-                Render();
+                Engine.BeginStroke(LoWord(lParam), HiWord(lParam));
                 return IntPtr.Zero;
-            }
+
             case WM_MOUSEMOVE:
-            {
-                float x = LoWord(lParam), y = HiWord(lParam);
-                if (_erasing)
+                if (!_active) break;
                 {
-                    if (EraseAt(x, y)) Render();
-                    return IntPtr.Zero;
+                    float x = LoWord(lParam), y = HiWord(lParam);
+                    Engine.SetCursor(x, y);
+                    if (Engine.IsDrawing) Engine.ExtendStroke(x, y);
+                    else if (Engine.IsErasing) Engine.ExtendErase(x, y);
                 }
-                if (!_drawing || _current == null) break;
-                var last = _current.Points[_current.Points.Count - 1];
-                if (last.X == x && last.Y == y) break;
-                _current.Points.Add(new PointF(x, y));
-                Render();
                 return IntPtr.Zero;
-            }
+
             case WM_LBUTTONUP:
-            {
-                if (!_drawing) break;
-                _drawing = false;
+                if (!Engine.IsDrawing) break;
+                Engine.EndStroke();
                 ReleaseCapture();
-                if (_current != null && _current.Points.Count > 0) _strokes.Add(_current);
-                _current = null;
-                Render();
                 return IntPtr.Zero;
-            }
+
             case WM_RBUTTONDOWN:
-            {
                 if (!_active) break;
                 SetCapture(hwnd);
-                _erasing = true;
-                if (EraseAt(LoWord(lParam), HiWord(lParam))) Render();
+                bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                Engine.BeginErase(LoWord(lParam), HiWord(lParam), shift);
                 return IntPtr.Zero;
-            }
+
             case WM_RBUTTONUP:
-            {
-                if (!_erasing) break;
-                _erasing = false;
+                if (!Engine.IsErasing) break;
+                Engine.EndErase();
                 ReleaseCapture();
                 return IntPtr.Zero;
-            }
+
+            case WM_MOUSEWHEEL:
+                if (!_active) break;
+                {
+                    short delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
+                    int steps = delta / 120; // one notch
+                    Engine.NudgeThickness(steps);
+                }
+                return IntPtr.Zero;
+
+            case WM_MOUSELEAVE:
+                Engine.HideCursor();
+                return IntPtr.Zero;
+
             case WM_DESTROY:
                 return IntPtr.Zero;
         }
         return DefWindowProc(hwnd, msg, wParam, lParam);
-    }
-
-    private bool EraseAt(float x, float y)
-    {
-        bool removed = false;
-        for (int i = _strokes.Count - 1; i >= 0; i--)
-        {
-            var s = _strokes[i];
-            float hit = EraserRadius + s.Thickness / 2f;
-            float hit2 = hit * hit;
-            foreach (var p in s.Points)
-            {
-                float dx = p.X - x, dy = p.Y - y;
-                if (dx * dx + dy * dy <= hit2)
-                {
-                    _strokes.RemoveAt(i);
-                    removed = true;
-                    break;
-                }
-            }
-        }
-        return removed;
     }
 
     private static int LoWord(IntPtr p) => unchecked((short)(p.ToInt64() & 0xFFFF));
@@ -335,22 +283,12 @@ public sealed class Win32DrawingOverlay
     [StructLayout(LayoutKind.Sequential)] private struct SIZE { public int cx, cy; }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct BITMAPINFOHEADER
-    {
-        public int biSize; public int biWidth; public int biHeight;
-        public ushort biPlanes; public ushort biBitCount; public uint biCompression;
-        public uint biSizeImage; public int biXPelsPerMeter; public int biYPelsPerMeter;
-        public uint biClrUsed; public uint biClrImportant;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
     private struct BITMAPINFO
     {
         public int biSize; public int biWidth; public int biHeight;
         public ushort biPlanes; public ushort biBitCount; public uint biCompression;
         public uint biSizeImage; public int biXPelsPerMeter; public int biYPelsPerMeter;
-        public uint biClrUsed; public uint biClrImportant;
-        public uint biPalette;
+        public uint biClrUsed; public uint biClrImportant; public uint biPalette;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -368,6 +306,8 @@ public sealed class Win32DrawingOverlay
     private const uint WM_MOUSEMOVE = 0x0200;
     private const uint WM_RBUTTONDOWN = 0x0204;
     private const uint WM_RBUTTONUP = 0x0205;
+    private const uint WM_MOUSEWHEEL = 0x020A;
+    private const uint WM_MOUSELEAVE = 0x02A3;
     private const uint WS_POPUP = 0x80000000;
     private const int WS_EX_LAYERED = 0x00080000;
     private const int WS_EX_TRANSPARENT = 0x00000020;
@@ -377,10 +317,14 @@ public sealed class Win32DrawingOverlay
     private const int SW_SHOWNOACTIVATE = 4;
     private const uint SWP_SHOWWINDOW = 0x0040;
     private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-    private const uint IDC_CROSS = 32515;
+    private static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
+    private const uint IDC_ARROW = 32512;
     private const int GWL_EXSTYLE = -20;
     private const uint ULW_ALPHA = 0x00000002;
+    private const int VK_SHIFT = 0x10;
 
     [DllImport("user32.dll", SetLastError = true)] private static extern ushort RegisterClass(ref WNDCLASS lpWndClass);
     [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr CreateWindowEx(int dwExStyle, string lpClassName, string lpWindowName, uint dwStyle, int x, int y, int nWidth, int nHeight, IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
@@ -395,6 +339,7 @@ public sealed class Win32DrawingOverlay
     [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
     [DllImport("user32.dll")] private static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst, ref POINT pptDst, ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc, uint crKey, ref BLENDFUNCTION pblend, uint dwFlags);
+    [DllImport("user32.dll")] private static extern short GetKeyState(int nVirtKey);
     [DllImport("kernel32.dll")] private static extern IntPtr GetModuleHandle(string? lpModuleName);
     [DllImport("user32.dll")] private static extern IntPtr LoadCursor(IntPtr hInstance, uint lpCursorName);
     [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr hdc);

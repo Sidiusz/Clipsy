@@ -135,7 +135,7 @@ public static class SaveDialogService
     public static string ExtensionFromPattern(string pattern)
     {
         var i = pattern.LastIndexOf('.');
-        return i < 0 ? "" : pattern.Substring(i).ToLowerInvariant();
+        return i < 0 ? "" : pattern.Substring(i + 1).ToLowerInvariant();
     }
 
     private const int OFN_OVERWRITEPROMPT = 0x00000002;

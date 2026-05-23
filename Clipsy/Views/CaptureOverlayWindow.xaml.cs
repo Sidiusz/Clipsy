@@ -45,6 +45,7 @@ public sealed partial class CaptureOverlayWindow : Window
     private readonly DrawingController _drawing;
     private readonly List<Microsoft.UI.Xaml.Shapes.Rectangle> _handleVisuals = new();
     private readonly Ellipse _pencilPreview;
+    private readonly TextBlock _textPreview;
 
     private InteractionMode _mode = InteractionMode.Idle;
     private bool _hasSelection;
@@ -120,6 +121,19 @@ public sealed partial class CaptureOverlayWindow : Window
             Visibility = Visibility.Collapsed,
         };
         CursorPreviewLayer.Children.Add(_pencilPreview);
+
+        // Translucent "A" the size of the current text font so the user can
+        // see what the text tool will look like before clicking to commit it.
+        _textPreview = new TextBlock
+        {
+            Text = "A",
+            Foreground = new SolidColorBrush(Color.FromArgb(160, 255, 255, 255)),
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            FontSize = 18,
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+        };
+        CursorPreviewLayer.Children.Add(_textPreview);
 
         BuildScreenMenu();
         Activated += OnActivated;
@@ -671,17 +685,29 @@ public sealed partial class CaptureOverlayWindow : Window
     private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         var pos = e.GetCurrentPoint(RootGrid).Position;
+        var local = new Point(pos.X - _selectionRect.X, pos.Y - _selectionRect.Y);
         if (_drawing.Settings.Tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
         {
             _pencilPreview.Visibility = Visibility.Visible;
-            // The preview lives inside SelectionLayer; convert from root DIPs.
-            var local = new Point(pos.X - _selectionRect.X, pos.Y - _selectionRect.Y);
+            _textPreview.Visibility = Visibility.Collapsed;
             Canvas.SetLeft(_pencilPreview, local.X - _pencilPreview.Width / 2);
             Canvas.SetTop(_pencilPreview, local.Y - _pencilPreview.Height / 2);
+        }
+        else if (_drawing.Settings.Tool == ToolKind.Text && _activeTextBox == null)
+        {
+            _pencilPreview.Visibility = Visibility.Collapsed;
+            _textPreview.Visibility = Visibility.Visible;
+            _textPreview.FontSize = _drawing.Settings.TextSize;
+            // Anchor matches StartTextEntry: TextBox is top-left aligned to the
+            // click point with Padding(4,2). Mirror that so the preview lands
+            // exactly where the committed text will sit.
+            Canvas.SetLeft(_textPreview, local.X + 4);
+            Canvas.SetTop(_textPreview, local.Y + 2);
         }
         else
         {
             _pencilPreview.Visibility = Visibility.Collapsed;
+            _textPreview.Visibility = Visibility.Collapsed;
         }
 
         switch (_mode)
@@ -765,13 +791,41 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void OnRootPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
-        if (!_hasSelection || _activeTextBox != null) return;
+        if (!_hasSelection) return;
         int delta = e.GetCurrentPoint(RootGrid).Properties.MouseWheelDelta;
         if (delta == 0) return;
-
         double step = delta > 0 ? 1.0 : -1.0;
+
+        // Wheel while typing in a text box resizes the active text element
+        // instead of the brush — same gesture, the obvious meaning depends on
+        // what the user is currently doing.
+        if (_activeTextBox != null)
+        {
+            _drawing.Settings.BrushSize = System.Math.Clamp(_drawing.Settings.BrushSize + step, 1.0, 64.0);
+            _activeTextBox.FontSize = _drawing.Settings.TextSize;
+            e.Handled = true;
+            return;
+        }
+
         _drawing.Settings.BrushSize = System.Math.Clamp(_drawing.Settings.BrushSize + step, 1.0, 64.0);
         UpdatePreviewForThickness(_drawing.Settings.BrushSize);
+
+        // Refresh the text-tool preview live too — wheeling between letters
+        // shouldn't require nudging the cursor for the size hint to update.
+        if (_textPreview != null && _drawing.Settings.Tool == ToolKind.Text)
+            _textPreview.FontSize = _drawing.Settings.TextSize;
+
+        // Apply the new thickness live to whichever shape the user is currently
+        // dragging so the visual matches the cursor preview immediately.
+        if (_activeStrokeVisual != null)
+            _activeStrokeVisual.StrokeThickness = _drawing.Settings.PencilThickness;
+        if (_activeRectVisual != null)
+            _activeRectVisual.StrokeThickness = _drawing.Settings.Tool == ToolKind.Ellipse
+                ? _drawing.Settings.EllipseThickness
+                : _drawing.Settings.RectangleThickness;
+        if (_activeLineVisual != null)
+            _activeLineVisual.StrokeThickness = _drawing.Settings.LineThickness;
+
         e.Handled = true;
     }
 
@@ -1230,8 +1284,13 @@ public sealed partial class CaptureOverlayWindow : Window
         // Partial-erase pencil strokes (drop the points inside the eraser
         // disc, keep the surrounding sub-strokes). Rectangles and text are
         // removed whole on touch since they are not point-sampled.
+        // Shift + RMB removes whole strokes too, matching the recording overlay.
         double r = System.Math.Max(EraserRadius, _drawing.Settings.PencilThickness * 1.5);
-        _drawing.PartialErase(rootPos, r);
+        bool shift = (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
+            Windows.System.VirtualKey.Shift) & Windows.UI.Core.CoreVirtualKeyStates.Down)
+            == Windows.UI.Core.CoreVirtualKeyStates.Down;
+        if (shift) _drawing.WholeStrokeErase(rootPos, r);
+        else _drawing.PartialErase(rootPos, r);
     }
 
     // ---------- Keyboard ----------
@@ -1372,10 +1431,15 @@ public sealed partial class CaptureOverlayWindow : Window
         if (tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
         {
             UpdatePreviewForThickness(_drawing.Settings.BrushSize);
+            if (_textPreview != null) _textPreview.Visibility = Visibility.Collapsed;
         }
         else
         {
             _pencilPreview.Visibility = Visibility.Collapsed;
+            // Text preview's per-frame visibility is set in PointerMoved; collapse
+            // it explicitly when switching to a non-text tool so it doesn't linger.
+            if (_textPreview != null && tool != ToolKind.Text)
+                _textPreview.Visibility = Visibility.Collapsed;
         }
     }
 

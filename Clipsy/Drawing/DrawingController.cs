@@ -80,6 +80,25 @@ public sealed class DrawingController
     }
 
     /// <summary>
+    /// Removes any element the cursor touches as a single unit. Strokes,
+    /// rectangles, ellipses, lines and text are all removed whole on hit.
+    /// </summary>
+    public bool WholeStrokeErase(Point cursor, double radius)
+    {
+        bool changed = false;
+        for (int i = _elements.Count - 1; i >= 0; i--)
+        {
+            var el = _elements[i];
+            if (!el.HitTest(cursor, radius)) continue;
+            _host.Children.Remove(el.Visual);
+            _elements.RemoveAt(i);
+            changed = true;
+        }
+        if (changed) _redo.Clear();
+        return changed;
+    }
+
+    /// <summary>
     /// Eraser pass at the given root-space cursor. Pencil strokes are split:
     /// every stroke point within <paramref name="radius"/> of the cursor is
     /// dropped and the surviving runs become their own polylines. Rectangles
