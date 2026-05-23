@@ -492,6 +492,49 @@
                                             </StackPanel>
                                         </RadioButton>
                                     </StackPanel>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <!-- FFmpeg section -->
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblFfmpegSection" Text="FFmpeg"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperCodecVp9Av1"
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <Border x:Name="FfmpegStatusBadge" Grid.Column="1"
+                                                BorderThickness="1" CornerRadius="12" Padding="10,4"
+                                                VerticalAlignment="Center">
+                                            <TextBlock x:Name="FfmpegStatusText"
+                                                       FontSize="11" FontWeight="SemiBold" />
+                                        </Border>
+                                    </Grid>
+
+                                    <StackPanel x:Name="FfmpegProgressRow" Spacing="4" Visibility="Collapsed">
+                                        <ProgressBar x:Name="FfmpegProgressBar"
+                                                     Minimum="0" Maximum="100" Value="0" />
+                                        <TextBlock x:Name="FfmpegProgressText"
+                                                   Style="{StaticResource ClipsyHelper}" />
+                                    </StackPanel>
+
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Button x:Name="BtnInstallFfmpeg"
+                                                Style="{StaticResource ClipsyButtonGhost}"
+                                                Click="OnFfmpegInstall" />
+                                        <Button x:Name="BtnDeleteFfmpeg"
+                                                Style="{StaticResource ClipsyButtonGhost}"
+                                                Click="OnFfmpegDelete"
+                                                Visibility="Collapsed" />
+                                        <Button x:Name="BtnCancelFfmpeg"
+                                                Style="{StaticResource ClipsyButtonGhost}"
+                                                Click="OnFfmpegCancel"
+                                                Visibility="Collapsed" />
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
 

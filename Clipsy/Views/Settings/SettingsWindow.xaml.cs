@@ -70,6 +70,9 @@ public sealed partial class SettingsWindow : Window
     private readonly HashSet<string> _tessSelectedCodes = new();
     private readonly Dictionary<string, CancellationTokenSource> _tessDownloadCts = new();
 
+    // FFmpeg download
+    private CancellationTokenSource? _ffmpegCts;
+
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _notifyTimer;
 
     private static readonly Dictionary<string, string> _paramToCategory = new()
@@ -284,6 +287,7 @@ public sealed partial class SettingsWindow : Window
         LblResolution.Text = Strings.Get("LblResolution");
         LblBitrate.Text    = Strings.Get("LblBitrate");
         LblRegionNote.Text = Strings.Get("LblRegionNote");
+        UpdateFfmpegSection();
 
         LblGifColors.Text  = Strings.Get("LblGifColors");
         LblGifFps.Text     = Strings.Get("LblGifFps");
@@ -391,6 +395,7 @@ public sealed partial class SettingsWindow : Window
         GifDitherSwitch.IsChecked = _draft.GifDither;
 
         BuildHotkeyRows();
+        UpdateFfmpegSection();
 
         _initial = _draft.Clone();
         _dirty.Clear();
@@ -609,6 +614,100 @@ public sealed partial class SettingsWindow : Window
     private void OnVideoFormatChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_loading) MarkChanged();
+    }
+
+    // ============== FFmpeg ==============
+
+    private void UpdateFfmpegSection()
+    {
+        if (LblFfmpegSection == null) return;
+        bool installed = FFmpegService.Instance.IsAvailable;
+
+        LblFfmpegSection.Text   = Strings.Get("LblFfmpegSection");
+        HelperCodecVp9Av1.Text  = Strings.Get("HelperCodecVp9Av1");
+        FfmpegStatusText.Text   = Strings.Get(installed ? "FfmpegInstalled" : "FfmpegNotInstalled");
+        BtnInstallFfmpeg.Content = Strings.Get("BtnInstallFfmpeg");
+        BtnDeleteFfmpeg.Content  = Strings.Get("BtnDeleteFfmpeg");
+        BtnCancelFfmpeg.Content  = Strings.Get("BtnCancelFfmpeg");
+
+        try
+        {
+            var fg = (Brush)Application.Current.Resources[installed ? "ClipsySuccessBrush" : "ClipsyText3Brush"];
+            var bg = (Brush)Application.Current.Resources["ClipsyBg2Brush"];
+            var bd = (Brush)Application.Current.Resources["ClipsyBorderSubtleBrush"];
+            FfmpegStatusText.Foreground   = fg;
+            FfmpegStatusBadge.Background  = bg;
+            FfmpegStatusBadge.BorderBrush = bd;
+        }
+        catch { }
+
+        BtnInstallFfmpeg.Visibility  = installed ? Visibility.Collapsed : Visibility.Visible;
+        BtnDeleteFfmpeg.Visibility   = installed ? Visibility.Visible   : Visibility.Collapsed;
+        BtnCancelFfmpeg.Visibility   = Visibility.Collapsed;
+        FfmpegProgressRow.Visibility = Visibility.Collapsed;
+
+        UpdateCodecRadioAvailability();
+    }
+
+    private void UpdateCodecRadioAvailability()
+    {
+        if (RadioCodecVp9 == null || RadioCodecAv1 == null) return;
+        bool ffmpegAvailable = FFmpegService.Instance.IsAvailable;
+        RadioCodecVp9.IsEnabled = ffmpegAvailable;
+        RadioCodecAv1.IsEnabled = ffmpegAvailable;
+
+        // Force off VP9/AV1 if FFmpeg not available
+        if (!ffmpegAvailable)
+        {
+            var codec = SelectedRadioTag(RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
+            if (codec == "VP9" || codec == "AV1")
+            {
+                var wasLoading = _loading;
+                _loading = true;
+                RadioCodecH264.IsChecked = true;
+                _loading = wasLoading;
+            }
+        }
+    }
+
+    private async void OnFfmpegInstall(object sender, RoutedEventArgs e)
+    {
+        _ffmpegCts?.Cancel();
+        _ffmpegCts = new CancellationTokenSource();
+        var cts = _ffmpegCts;
+
+        BtnInstallFfmpeg.Visibility  = Visibility.Collapsed;
+        BtnCancelFfmpeg.Visibility   = Visibility.Visible;
+        FfmpegProgressRow.Visibility = Visibility.Visible;
+        FfmpegProgressBar.Value      = 0;
+        FfmpegProgressText.Text      = Strings.Get("FfmpegDownloading");
+
+        var progress = new Progress<(int Percent, string Message)>(p =>
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                FfmpegProgressBar.Value = p.Percent;
+                FfmpegProgressText.Text = p.Message;
+            }));
+
+        bool ok = await FFmpegService.Instance.DownloadAsync(progress, cts.Token);
+
+        if (!cts.IsCancellationRequested)
+            ShowNotification(ok ? "FfmpegDone" : "ErrFfmpegFailed", ok ? "success" : "error");
+
+        UpdateFfmpegSection();
+    }
+
+    private void OnFfmpegDelete(object sender, RoutedEventArgs e)
+    {
+        FFmpegService.Instance.Delete();
+        UpdateFfmpegSection();
+    }
+
+    private void OnFfmpegCancel(object sender, RoutedEventArgs e)
+    {
+        _ffmpegCts?.Cancel();
+        _ffmpegCts = null;
+        UpdateFfmpegSection();
     }
 
     private void UpdateJpgQualityRowVisibility()
