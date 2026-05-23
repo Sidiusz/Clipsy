@@ -124,6 +124,12 @@ public sealed partial class CaptureOverlayWindow : Window
         BuildScreenMenu();
         Activated += OnActivated;
         RootGrid.SizeChanged += OnRootGridSizeChanged;
+        RootGrid.Loaded += (_, _) =>
+        {
+            // Defer one tick so the frozen-frame image is on the swap chain
+            // before DWM reveals the window. Eliminates the black flash.
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Uncloak);
+        };
 
         // Start in region select mode (no drawing tool active)
         SetTool(ToolKind.None);
@@ -244,6 +250,12 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         try
         {
+            // Cloak the window until the first XAML composition lands. Without
+            // this DWM shows the window's default opaque surface for one frame
+            // (visible as a black flash) before the frozen-frame image paints.
+            int cloak = 1;
+            DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
+
             // Disable window rounding
             int donotround = 1;
             DwmSetWindowAttribute(_hwnd, 33, ref donotround, sizeof(int));
@@ -278,6 +290,18 @@ public sealed partial class CaptureOverlayWindow : Window
 
         // Update dimming geometry after window is fully loaded
         UpdateDimGeometry(null);
+
+    }
+
+    private bool _cloaked = true;
+    private const int DWMWA_CLOAK = 13;
+
+    private void Uncloak()
+    {
+        if (!_cloaked) return;
+        _cloaked = false;
+        int cloak = 0;
+        DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
     }
 
     private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
@@ -1020,6 +1044,13 @@ public sealed partial class CaptureOverlayWindow : Window
         double h = System.Math.Abs(pos.Y - _activeRectAnchor.Y);
         Canvas.SetLeft(_activeRectVisual, x);
         Canvas.SetTop(_activeRectVisual, y);
+        // Below the stroke thickness an ellipse degenerates into a strip — WinUI
+        // still renders the stroke across the longer axis. Hide the visual until
+        // the user drags out a usable size to avoid the "circle = line" artifact.
+        double minSide = System.Math.Max(2.0, _activeRectVisual.StrokeThickness);
+        _activeRectVisual.Visibility = (w < minSide || h < minSide)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
         _activeRectVisual.Width = w;
         _activeRectVisual.Height = h;
     }

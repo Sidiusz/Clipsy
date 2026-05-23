@@ -30,8 +30,7 @@ public sealed partial class RecordingHudWindow : Window
     private bool _paused;
     private bool _locked = true;
 
-    private bool _draggingMove;
-    private Point _moveDragStart;
+    private const bool _draggingMove = false;
 
     public event Action? PauseRequested;
     public event Action? ResumeRequested;
@@ -39,7 +38,6 @@ public sealed partial class RecordingHudWindow : Window
     public event Action? StopSaveRequested;
     public event Action<bool>? LockChanged;
     public event Action<bool>? DrawToggled;
-    public event Action<int, int>? MoveDeltaRequested; // dx, dy in screen pixels
 
     public RecordingHudWindow()
     {
@@ -71,7 +69,6 @@ public sealed partial class RecordingHudWindow : Window
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(StopBtn,     Strings.Get("TipStop"));
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(StopSaveBtn, Strings.Get("TipSaveAs"));
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(DrawBtn,     Strings.Get("TipDraw"));
-        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(MoveBtn,     Strings.Get("TipMove"));
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(LockBtn,     Strings.Get("TipLock"));
     }
 
@@ -84,8 +81,7 @@ public sealed partial class RecordingHudWindow : Window
         _paused = false;
         TimerText.Text = "00:00";
         PauseIcon.Glyph = GlyphPause;
-        LockIcon.Glyph = _locked ? GlyphLock : GlyphUnlock;
-        MoveBtn.Visibility = _locked ? Visibility.Collapsed : Visibility.Visible;
+        ApplyLockVisual();
         Root.Opacity = 1.0;
         _timer.Start();
         _hideTimer.Start();
@@ -202,8 +198,7 @@ public sealed partial class RecordingHudWindow : Window
     private void OnLockDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
         _locked = !_locked;
-        LockIcon.Glyph = _locked ? GlyphLock : GlyphUnlock;
-        MoveBtn.Visibility = _locked ? Visibility.Collapsed : Visibility.Visible;
+        ApplyLockVisual();
         LockChanged?.Invoke(_locked);
         e.Handled = true;
     }
@@ -213,32 +208,14 @@ public sealed partial class RecordingHudWindow : Window
         DrawToggled?.Invoke(DrawBtn.IsChecked == true);
     }
 
-    private void OnMovePointerPressed(object sender, PointerRoutedEventArgs e)
+    private void ApplyLockVisual()
     {
-        if (_locked) return;
-        _draggingMove = true;
-        if (GetCursorPos(out POINT pt)) _moveDragStart = new Point(pt.X, pt.Y);
-        MoveBtn.CapturePointer(e.Pointer);
-        e.Handled = true;
-    }
-
-    private void OnMovePointerMoved(object sender, PointerRoutedEventArgs e)
-    {
-        if (!_draggingMove) return;
-        if (!GetCursorPos(out POINT pt)) return;
-        int dx = (int)(pt.X - _moveDragStart.X);
-        int dy = (int)(pt.Y - _moveDragStart.Y);
-        if (dx == 0 && dy == 0) return;
-        _moveDragStart = new Point(pt.X, pt.Y);
-        MoveDeltaRequested?.Invoke(dx, dy);
-    }
-
-    private void OnMovePointerReleased(object sender, PointerRoutedEventArgs e)
-    {
-        if (!_draggingMove) return;
-        _draggingMove = false;
-        MoveBtn.ReleasePointerCapture(e.Pointer);
-        e.Handled = true;
+        LockIcon.Glyph = _locked ? GlyphLock : GlyphUnlock;
+        // When the region is unlocked, switch the lock button to the accent
+        // "active" style so the user sees at a glance that resize/move is on.
+        var style = (Microsoft.UI.Xaml.Style)Application.Current.Resources[
+            _locked ? "ClipsyIconButton" : "ClipsyIconButtonActive"];
+        LockBtn.Style = style;
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }

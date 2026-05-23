@@ -68,8 +68,10 @@ public class Win32BorderOverlay
     {
         if (!_created) return;
         _x = x; _y = y; _w = w; _h = h;
-        SetWindowPos(_hwnd, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW);
-        InvalidateRect(_hwnd, IntPtr.Zero, true);
+        SetWindowPos(_hwnd, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+        // bErase=false: WM_PAINT clears the bg itself, so skipping the erase
+        // pass kills the blue→magenta→blue flash during interactive resize.
+        InvalidateRect(_hwnd, IntPtr.Zero, false);
     }
 
     public void Destroy()
@@ -93,24 +95,31 @@ public class Win32BorderOverlay
         switch (msg)
         {
             case WM_PAINT:
+            {
                 var ps = new PAINTSTRUCT();
                 var hdc = BeginPaint(hwnd, ref ps);
 
-                // Draw blue border
+                // Fill bg with the color key magenta atomically inside WM_PAINT
+                // (no separate WM_ERASEBKGND pass) — that's what kills the
+                // flicker during interactive resize.
+                var bgRc = new RECT { Left = 0, Top = 0, Right = _w, Bottom = _h };
+                FillRect(hdc, ref bgRc, _magentaBrush);
+
                 var pen = CreatePen(PS_SOLID, 2, RGB(31, 111, 235)); // #1F6FEB
                 var oldPen = SelectObject(hdc, pen);
-
-                // Draw rectangle border
                 MoveToEx(hdc, 0, 0, IntPtr.Zero);
                 LineTo(hdc, _w - 1, 0);
                 LineTo(hdc, _w - 1, _h - 1);
                 LineTo(hdc, 0, _h - 1);
                 LineTo(hdc, 0, 0);
-
                 SelectObject(hdc, oldPen);
                 DeleteObject(pen);
                 EndPaint(hwnd, ref ps);
                 return IntPtr.Zero;
+            }
+            case WM_ERASEBKGND:
+                // Suppress default erase — WM_PAINT handles the fill, no flicker.
+                return new IntPtr(1);
 
             case WM_DESTROY:
                 return IntPtr.Zero;
@@ -133,6 +142,8 @@ public class Win32BorderOverlay
         public string lpszMenuName;
         public string lpszClassName;
     }
+
+    [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PAINTSTRUCT
@@ -160,8 +171,11 @@ public class Win32BorderOverlay
     private const uint WS_EX_TOOLWINDOW = 0x00000080;
     private const uint LWA_ALPHA = 0x00000002;
     private const uint LWA_COLORKEY = 0x00000001;
+    private const uint WM_ERASEBKGND = 0x0014;
+    private const uint SWP_NOACTIVATE = 0x0010;
 
     [DllImport("gdi32.dll")] private static extern IntPtr CreateSolidBrush(uint crColor);
+    [DllImport("user32.dll")] private static extern int FillRect(IntPtr hDC, ref RECT lprc, IntPtr hbr);
     private const int SW_SHOW = 5;
     private const uint SWP_SHOWWINDOW = 0x0040;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);

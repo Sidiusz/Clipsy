@@ -31,6 +31,11 @@ public sealed class RecordingService : IDisposable
         {
             SourceRect = new ScreenRect(x, y, width, height),
             IsCursorCaptureEnabled = true,
+            // Fill mode: any live region resize is rescaled into the fixed
+            // OutputFrameSize, no letterbox / stuck-frame edges. Aspect may
+            // distort if the user changes the region's ratio mid-recording —
+            // a known trade-off because codec frame size is locked at start.
+            Stretch = StretchMode.Fill,
         };
 
         var s = SettingsService.Instance.Settings;
@@ -111,8 +116,18 @@ public sealed class RecordingService : IDisposable
 
     public void UpdateRegion(int x, int y, int width, int height)
     {
-        if (_source == null) return;
+        if (_source == null || _recorder == null) return;
         _source.SourceRect = new ScreenRect(x, y, width, height);
+        try
+        {
+            var builder = _recorder.GetDynamicOptionsBuilder();
+            builder.SetUpdatedRecordingSource(_source);
+            builder.Apply();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] UpdateRegion dynamic apply failed: {ex.Message}");
+        }
     }
 
     public RecorderStatus Status => _recorder?.Status ?? RecorderStatus.Idle;

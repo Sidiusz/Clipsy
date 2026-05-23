@@ -60,15 +60,6 @@
                               ToolTipService.ToolTip="Draw">
                     <FontIcon Glyph="&#xE70F;" FontSize="16" />
                 </ToggleButton>
-                <Button x:Name="MoveBtn"
-                        Style="{StaticResource ClipsyIconButtonActive}"
-                        Visibility="Collapsed"
-                        PointerPressed="OnMovePointerPressed"
-                        PointerMoved="OnMovePointerMoved"
-                        PointerReleased="OnMovePointerReleased"
-                        ToolTipService.ToolTip="Hold to drag region">
-                    <FontIcon Glyph="&#xE7C2;" FontSize="16" />
-                </Button>
                 <Button x:Name="LockBtn"
                         Style="{StaticResource ClipsyIconButton}"
                         DoubleTapped="OnLockDoubleTapped"

@@ -47,7 +47,7 @@ public sealed class AppSettings
     public string SkippedVersion { get; set; } = string.Empty;
 
     // Translation
-    public string TranslateService { get; set; } = "MyMemory"; // MyMemory / Google
+    public string TranslateService { get; set; } = "Google"; // Google / MyMemory — Google default for better quality + language coverage.
     public string TranslateFrom { get; set; } = "auto";
     public string TranslateTo { get; set; } = "ui"; // "ui" = current interface language
 
