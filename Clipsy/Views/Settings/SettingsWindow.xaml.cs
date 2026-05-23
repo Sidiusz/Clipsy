@@ -110,9 +110,36 @@ public sealed partial class SettingsWindow : Window
             Diagnostics.Log("SettingsWindow.SetTitleBar", ex);
         }
 
+        // Cloak the window via DWM until XAML has composed its first frame.
+        // Without this DWM briefly shows the default opaque window surface
+        // (visible as a black flash) before the dark theme paints.
+        int cloak = 1;
+        try { DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int)); }
+        catch { }
+
         Activated += OnFirstActivated;
+        if (Content is FrameworkElement fe)
+        {
+            fe.Loaded += (_, _) =>
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Uncloak);
+        }
         Closed += (_, _) => { if (_current == this) _current = null; };
     }
+
+    private bool _cloaked = true;
+    private const int DWMWA_CLOAK = 13;
+
+    private void Uncloak()
+    {
+        if (!_cloaked) return;
+        _cloaked = false;
+        int cloak = 0;
+        try { DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int)); }
+        catch { }
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
 
     private void OnFirstActivated(object sender, WindowActivatedEventArgs e)
@@ -572,6 +599,7 @@ public sealed partial class SettingsWindow : Window
     private void OnJpgQualityChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         if (JpgQualityLabel != null) JpgQualityLabel.Text = ((int)JpgQualitySlider.Value).ToString();
+        if (!_loading) MarkChanged();
     }
 
     private void UpdateBitrateBounds(string resolution)
@@ -594,6 +622,7 @@ public sealed partial class SettingsWindow : Window
     private void OnBitrateChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         UpdateBitrateLabel();
+        if (!_loading) MarkChanged();
     }
 
     private void UpdateBitrateLabel()

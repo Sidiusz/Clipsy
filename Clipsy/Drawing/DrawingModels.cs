@@ -65,7 +65,11 @@ public sealed class DrawingSettings
         set => BrushSize = value / 6.0;
     }
 
-    public double PreviewDiameter => System.Math.Max(8.0, BrushSize * 2.0 + 4.0);
+    // Diameter equals the actual stroke pixel width (with a small floor so the
+    // cursor preview never disappears for 1-2 px brushes). The previous
+    // formula doubled the size and added a 4 px pad, so the preview ring
+    // looked roughly twice as wide as the strokes it would draw.
+    public double PreviewDiameter => System.Math.Max(2.0, BrushSize);
 
     private static double ClampBrush(double value)
         => System.Math.Clamp(value, MinBrushSize, MaxBrushSize);

@@ -770,7 +770,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void UpdatePreviewForThickness(double _thickness)
     {
-        var d = System.Math.Max(8, _drawing.Settings.PreviewDiameter);
+        var d = _drawing.Settings.PreviewDiameter;
         _pencilPreview.Width = d;
         _pencilPreview.Height = d;
     }

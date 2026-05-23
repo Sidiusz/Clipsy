@@ -109,8 +109,23 @@ public sealed class RecordingService : IDisposable
         return (w, h);
     }
 
-    public void Pause() => _recorder?.Pause();
-    public void Resume() => _recorder?.Resume();
+    private bool _paused;
+    private bool _pendingRegionWhilePaused;
+
+    public void Pause() { _paused = true; _recorder?.Pause(); }
+    public void Resume()
+    {
+        _paused = false;
+        _recorder?.Resume();
+        // While paused, ScreenRecorderLib silently ignores
+        // GetDynamicOptionsBuilder().Apply() — the new SourceRect is stored
+        // on _source but never reaches the encoder. Replay it on resume.
+        if (_pendingRegionWhilePaused)
+        {
+            _pendingRegionWhilePaused = false;
+            ApplyCurrentSourceRect();
+        }
+    }
     public void Stop() => _recorder?.Stop();
 
 
@@ -118,6 +133,18 @@ public sealed class RecordingService : IDisposable
     {
         if (_source == null || _recorder == null) return;
         _source.SourceRect = new ScreenRect(x, y, width, height);
+        if (_paused)
+        {
+            // Defer; dynamic-options Apply() during pause is a no-op.
+            _pendingRegionWhilePaused = true;
+            return;
+        }
+        ApplyCurrentSourceRect();
+    }
+
+    private void ApplyCurrentSourceRect()
+    {
+        if (_source == null || _recorder == null) return;
         try
         {
             var builder = _recorder.GetDynamicOptionsBuilder();
