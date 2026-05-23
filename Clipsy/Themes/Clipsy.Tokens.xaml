@@ -77,6 +77,7 @@
     <SolidColorBrush x:Key="ClipsyDangerDimBrush"      Color="{StaticResource ClipsyDangerDim}" />
     <SolidColorBrush x:Key="ClipsySuccessBrush"        Color="{StaticResource ClipsySuccess}" />
     <SolidColorBrush x:Key="ClipsyWarningBrush"        Color="{StaticResource ClipsyWarning}" />
+    <SolidColorBrush x:Key="ClipsyWarningDimBrush"     Color="#28F0B232" />
 
     <SolidColorBrush x:Key="ClipsyOverlayDimBrush"     Color="{StaticResource ClipsyOverlayDim}" />
     <SolidColorBrush x:Key="ClipsyOverlayPanelBrush"   Color="{StaticResource ClipsyOverlayPanel}" />
