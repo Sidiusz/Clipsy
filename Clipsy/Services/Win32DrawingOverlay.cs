@@ -25,6 +25,7 @@ public sealed class Win32DrawingOverlay
     private bool _active;
     private bool _drawing;
     private bool _erasing;
+    private bool _eraseWhole;
     private System.Drawing.Color _penColor = System.Drawing.Color.Red;
     private float _penThickness = 3f;
 
@@ -250,7 +251,7 @@ public sealed class Win32DrawingOverlay
                 float x = LoWord(lParam), y = HiWord(lParam);
                 if (_erasing)
                 {
-                    if (EraseAt(x, y)) Render();
+                    if (EraseDispatch(x, y)) Render();
                     return IntPtr.Zero;
                 }
                 if (!_drawing || _current == null) break;
@@ -275,13 +276,17 @@ public sealed class Win32DrawingOverlay
                 if (!_active) break;
                 SetCapture(hwnd);
                 _erasing = true;
-                if (EraseAt(LoWord(lParam), HiWord(lParam))) Render();
+                // Shift held at press latches whole-stroke erase for the duration
+                // of this RMB drag, matching capture overlay behavior.
+                _eraseWhole = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                if (EraseDispatch(LoWord(lParam), HiWord(lParam))) Render();
                 return IntPtr.Zero;
             }
             case WM_RBUTTONUP:
             {
                 if (!_erasing) break;
                 _erasing = false;
+                _eraseWhole = false;
                 ReleaseCapture();
                 return IntPtr.Zero;
             }
@@ -291,7 +296,10 @@ public sealed class Win32DrawingOverlay
         return DefWindowProc(hwnd, msg, wParam, lParam);
     }
 
-    private bool EraseAt(float x, float y)
+    private bool EraseDispatch(float x, float y) =>
+        _eraseWhole ? EraseWholeAt(x, y) : EraseSplitAt(x, y);
+
+    private bool EraseWholeAt(float x, float y)
     {
         bool removed = false;
         for (int i = _strokes.Count - 1; i >= 0; i--)
@@ -311,6 +319,48 @@ public sealed class Win32DrawingOverlay
             }
         }
         return removed;
+    }
+
+    // Partial erase: drop points inside the eraser disc, surviving runs become
+    // independent strokes. Mirrors DrawingController.PartialErase in the capture
+    // overlay so pencil behavior is identical across both surfaces.
+    private bool EraseSplitAt(float x, float y)
+    {
+        bool changed = false;
+        for (int i = _strokes.Count - 1; i >= 0; i--)
+        {
+            var s = _strokes[i];
+            float hit = EraserRadius + s.Thickness / 2f;
+            float hit2 = hit * hit;
+            var runs = new List<List<PointF>>();
+            List<PointF>? run = null;
+            bool anyHit = false;
+            foreach (var p in s.Points)
+            {
+                float dx = p.X - x, dy = p.Y - y;
+                bool inside = dx * dx + dy * dy <= hit2;
+                if (inside)
+                {
+                    anyHit = true;
+                    if (run != null) { runs.Add(run); run = null; }
+                }
+                else
+                {
+                    run ??= new List<PointF>();
+                    run.Add(p);
+                }
+            }
+            if (run != null) runs.Add(run);
+            if (!anyHit) continue;
+            changed = true;
+            _strokes.RemoveAt(i);
+            foreach (var r in runs)
+            {
+                if (r.Count < 2) continue;
+                _strokes.Insert(i, new Stroke { Color = s.Color, Thickness = s.Thickness, Points = r });
+            }
+        }
+        return changed;
     }
 
     private static int LoWord(IntPtr p) => unchecked((short)(p.ToInt64() & 0xFFFF));
@@ -397,6 +447,8 @@ public sealed class Win32DrawingOverlay
     [DllImport("user32.dll")] private static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst, ref POINT pptDst, ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc, uint crKey, ref BLENDFUNCTION pblend, uint dwFlags);
     [DllImport("kernel32.dll")] private static extern IntPtr GetModuleHandle(string? lpModuleName);
     [DllImport("user32.dll")] private static extern IntPtr LoadCursor(IntPtr hInstance, uint lpCursorName);
+    [DllImport("user32.dll")] private static extern short GetKeyState(int nVirtKey);
+    private const int VK_SHIFT = 0x10;
     [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
     [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr hdc);
     [DllImport("gdi32.dll")] private static extern IntPtr CreateDIBSection(IntPtr hdc, ref BITMAPINFO bmi, uint usage, out IntPtr ppvBits, IntPtr hSection, uint offset);
