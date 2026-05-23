@@ -24,6 +24,7 @@ public sealed class RecordingController
     private Win32BorderOverlay? _border;
     private RecordingHudWindow? _hud;
     private Win32DrawingOverlay? _drawWin;
+    private Win32ResizeOverlay? _resizeWin;
     private RecordingService? _service;
     private int _x, _y, _w, _h;
     private bool _stopAndSave;
@@ -66,7 +67,6 @@ public sealed class RecordingController
         _hud.StopSaveRequested += OnStopSaveRequested;
         _hud.LockChanged += OnLockChanged;
         _hud.DrawToggled += OnDrawToggled;
-        _hud.MoveDeltaRequested += OnMoveDelta;
 
         int virtualScreenH = Services.ScreenFreezeService.GetVirtualScreenBounds().Height;
         _hud.PositionBelowRegion(x, y, w, h, virtualScreenH);
@@ -99,12 +99,6 @@ public sealed class RecordingController
             NotificationService.Error("ErrRecordFailed");
             Cleanup(discardTemp: true);
         }
-    }
-
-    private void OnMoveDelta(int dx, int dy)
-    {
-        _x += dx; _y += dy;
-        ApplyRegionChange(_x, _y, _w, _h);
     }
 
     private void OnPauseRequested() => _service?.Pause();
@@ -149,7 +143,22 @@ public sealed class RecordingController
     {
         try
         {
-            // Win32BorderOverlay is not interactive
+            if (!locked)
+            {
+                if (_resizeWin == null)
+                {
+                    _resizeWin = new Win32ResizeOverlay();
+                    _resizeWin.RegionChanged += OnRegionChanged;
+                    _resizeWin.Create(_x, _y, _w, _h);
+                    try { Recorder.SetExcludeFromCapture(_resizeWin.Hwnd, true); } catch { }
+                }
+                _resizeWin.MoveTo(_x, _y, _w, _h);
+            }
+            else
+            {
+                _resizeWin?.Destroy();
+                _resizeWin = null;
+            }
         }
         catch (Exception ex)
         {
@@ -174,6 +183,7 @@ public sealed class RecordingController
             var screenH = ScreenFreezeService.GetVirtualScreenBounds().Height;
             _hud?.PositionBelowRegion(_x, _y, _w, _h, screenH);
             _drawWin?.MoveTo(_x, _y, _w, _h);
+            _resizeWin?.MoveTo(_x, _y, _w, _h);
             _service?.UpdateRegion(_x, _y, _w, _h);
         }
         catch (Exception ex)
@@ -201,6 +211,7 @@ public sealed class RecordingController
             else
             {
                 _drawWin?.SetActive(false);
+                _drawWin?.ClearAll();
             }
         }
         catch (Exception ex)
@@ -360,6 +371,7 @@ public sealed class RecordingController
             try { _hud?.Close(); Diagnostics.Log("  hud.Close OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup hud.Close", ex); }
             try { _border?.Destroy(); Diagnostics.Log("  border.Destroy OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup border.Destroy", ex); }
             try { _drawWin?.Destroy(); Diagnostics.Log("  drawWin.Destroy OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup drawWin.Destroy", ex); }
+            try { _resizeWin?.Destroy(); Diagnostics.Log("  resizeWin.Destroy OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup resizeWin.Destroy", ex); }
             try { _service?.Dispose(); Diagnostics.Log("  service.Dispose OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup service.Dispose", ex); }
             if (discardTemp && _service != null && !string.IsNullOrEmpty(_service.TempPath))
             {
@@ -371,6 +383,7 @@ public sealed class RecordingController
             _border = null;
             _hud = null;
             _drawWin = null;
+            _resizeWin = null;
             _service = null;
             _stopping = false;
             _current = null;

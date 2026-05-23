@@ -226,8 +226,12 @@ public sealed partial class SettingsWindow : Window
         ThemeBtnAutoLabel.Text  = Strings.Get("OptAuto");
         ThemeBtnDarkLabel.Text  = Strings.Get("OptDark");
         ThemeBtnLightLabel.Text = Strings.Get("OptLight");
+        var defaultSuffix = " " + Strings.Get("SuffixDefault");
         OcrTesseract.Content = Strings.Get("OptTesseract");
-        OcrWinRt.Content   = Strings.Get("OptWinRtOcr");
+        // WinRT is the OCR engine default — append a localized "(default)" hint.
+        OcrWinRt.Content   = Strings.Get("OptWinRtOcr") + defaultSuffix;
+        TrSvcMyMemory.Content = Strings.Get("OptMyMemory");
+        TrSvcGoogle.Content   = Strings.Get("OptGoogle") + defaultSuffix;
         FmtPng.Content     = Strings.Get("OptPngLossless");
         FmtJpg.Content     = Strings.Get("OptJpgSmaller");
         FmtWebp.Content    = Strings.Get("OptWebpPreview");
@@ -734,21 +738,42 @@ public sealed partial class SettingsWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90, GridUnitType.Pixel) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        // Language name + status
+        // Language name + status. For installed languages: a real CheckBox the
+        // user can toggle. For uninstalled languages: a faded download-pending
+        // glyph in the same slot, so the row never looks like an unchecked
+        // checkbox that "just won't tick".
         var namePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
-        var cb = new CheckBox
+        CheckBox? cb = null;
+        if (installed)
         {
-            IsChecked = _tessSelectedCodes.Contains(lang.Code),
-            IsEnabled = installed,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+            cb = new CheckBox
+            {
+                IsChecked = _tessSelectedCodes.Contains(lang.Code),
+                VerticalAlignment = VerticalAlignment.Center,
+                MinWidth = 0,
+            };
+            namePanel.Children.Add(cb);
+        }
+        else
+        {
+            var pendingIcon = new FontIcon
+            {
+                Glyph = "", // download glyph
+                FontSize = 14,
+                Opacity = 0.55,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(6, 0, 6, 0),
+            };
+            ToolTipService.SetToolTip(pendingIcon, Strings.Get("TessNotInstalledHint"));
+            namePanel.Children.Add(pendingIcon);
+        }
         var nameBlock = new TextBlock
         {
             Text = lang.DisplayName,
             VerticalAlignment = VerticalAlignment.Center,
             Style = (Style)Application.Current.Resources["ClipsyBody"],
+            Opacity = installed ? 1.0 : 0.7,
         };
-        namePanel.Children.Add(cb);
         namePanel.Children.Add(nameBlock);
         Grid.SetColumn(namePanel, 0);
 
@@ -787,17 +812,20 @@ public sealed partial class SettingsWindow : Window
         grid.Children.Add(progress);
         grid.Children.Add(btn);
 
-        // Checkbox handler
-        cb.Checked += (_, _) =>
+        // Checkbox handler (only present for installed languages)
+        if (cb != null)
         {
-            _tessSelectedCodes.Add(lang.Code);
-            MarkChanged();
-        };
-        cb.Unchecked += (_, _) =>
-        {
-            _tessSelectedCodes.Remove(lang.Code);
-            MarkChanged();
-        };
+            cb.Checked += (_, _) =>
+            {
+                _tessSelectedCodes.Add(lang.Code);
+                MarkChanged();
+            };
+            cb.Unchecked += (_, _) =>
+            {
+                _tessSelectedCodes.Remove(lang.Code);
+                MarkChanged();
+            };
+        }
 
         // Button handler
         btn.Click += (_, _) =>
@@ -820,7 +848,7 @@ public sealed partial class SettingsWindow : Window
         return grid;
     }
 
-    private async Task DownloadTessLangAsync(TessdataLang lang, Grid row, Button btn, ProgressBar progressBar, CheckBox cb)
+    private async Task DownloadTessLangAsync(TessdataLang lang, Grid row, Button btn, ProgressBar progressBar, CheckBox? cb)
     {
         if (_tessDownloadCts.TryGetValue(lang.Code, out var existing))
         {
@@ -948,8 +976,8 @@ public sealed partial class SettingsWindow : Window
     private void UpdateDirtyVisuals()
     {
         bool any = _dirty.Count > 0;
-        DotUnsaved.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
         FooterStatusText.Text = any ? Strings.Get("NotifyUnsaved") : string.Empty;
+        BtnSave.IsEnabled = any;
 
         SetLabel(LblLanguage, "LblLanguage", _dirty.Contains("lang"));
         SetLabel(LblTheme, "LblTheme", _dirty.Contains("theme"));
@@ -981,7 +1009,7 @@ public sealed partial class SettingsWindow : Window
     {
         if (lbl == null) return;
         var baseText = Strings.Get(stringKey);
-        lbl.Text = (dirty ? "● " : string.Empty) + baseText;
+        WriteDirtyLabel(lbl, baseText, dirty);
     }
 
     private void SetNavLabel(TextBlock lbl, string stringKey, string category)
@@ -994,7 +1022,24 @@ public sealed partial class SettingsWindow : Window
             var c = k.StartsWith("hk-") ? "hotkeys" : _paramToCategory.GetValueOrDefault(k, string.Empty);
             if (c == category) { catDirty = true; break; }
         }
-        lbl.Text = (catDirty ? "● " : string.Empty) + baseText;
+        WriteDirtyLabel(lbl, baseText, catDirty);
+    }
+
+    private static void WriteDirtyLabel(TextBlock lbl, string baseText, bool dirty)
+    {
+        lbl.Inlines.Clear();
+        lbl.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = baseText });
+        if (dirty)
+        {
+            // Orange dot rendered after the label sits at the trailing corner of
+            // the param / nav row, so changed items pop without obscuring the text.
+            var warn = (Brush)Application.Current.Resources["ClipsyWarningBrush"];
+            lbl.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+            {
+                Text = "  ●",
+                Foreground = warn,
+            });
+        }
     }
 
     // ============== Notification ==============
@@ -1054,14 +1099,40 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    private void OnClose(object sender, RoutedEventArgs e) => Close();
-
-    private void OnReset(object sender, RoutedEventArgs e)
+    private async void OnClose(object sender, RoutedEventArgs e)
     {
+        if (_dirty.Count > 0 && !await ConfirmDiscardChanges()) return;
+        Close();
+    }
+
+    private async void OnReset(object sender, RoutedEventArgs e)
+    {
+        if (!await ConfirmReset()) return;
         _draft = new AppSettings();
         Load();
         ThemeService.ApplyTo(Content as FrameworkElement);
         ShowNotification("NotifyReset", "info");
+    }
+
+    private Task<bool> ConfirmDiscardChanges() =>
+        ShowConfirmAsync(Strings.Get("ConfirmDiscardTitle"), Strings.Get("ConfirmDiscardBody"));
+
+    private Task<bool> ConfirmReset() =>
+        ShowConfirmAsync(Strings.Get("ConfirmResetTitle"), Strings.Get("ConfirmResetBody"));
+
+    private async Task<bool> ShowConfirmAsync(string title, string body)
+    {
+        var dlg = new ContentDialog
+        {
+            Title = title,
+            Content = body,
+            PrimaryButtonText = Strings.Get("BtnConfirm"),
+            CloseButtonText = Strings.Get("BtnCancel"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Content.XamlRoot,
+        };
+        var result = await dlg.ShowAsync();
+        return result == ContentDialogResult.Primary;
     }
 
     private async void OnCheckUpdates(object sender, RoutedEventArgs e)
