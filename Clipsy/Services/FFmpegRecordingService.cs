@@ -6,93 +6,174 @@ using System.Threading.Tasks;
 namespace Clipsy.Services;
 
 /// <summary>
-/// Direct FFmpeg screen recording service for VP9/AV1 codecs.
-/// Records screen region directly to VP9/AV1 without intermediate conversion.
+/// Records screen directly to VP9 or AV1 using FFmpeg's gdigrab + wasapi loopback.
+/// Same event/method surface as RecordingService so RecordingController can use both.
 /// </summary>
-public static class FFmpegRecordingService
+public sealed class FFmpegRecordingService : IDisposable
 {
-    public static async Task<bool> RecordScreenAsync(
-        string outputPath,
-        int x, int y, int width, int height,
-        string codec, int bitrateMbps,
-        Action<string>? onComplete = null,
-        Action<string>? onError = null)
+    private Process?  _process;
+    private string    _tempPath  = string.Empty;
+    private bool      _stopping;
+
+    public event Action<string>? RecordingComplete;
+    public event Action<string>? RecordingFailed;
+
+    public string TempPath => _tempPath;
+
+    // ─── Start ───────────────────────────────────────────────────────────────
+
+    public void Start(int x, int y, int w, int h)
     {
         if (!FFmpegService.Instance.IsAvailable)
-            return false;
+        {
+            RecordingFailed?.Invoke("FFmpeg not found.");
+            return;
+        }
 
+        var s      = SettingsService.Instance.Settings;
+        var codec  = s.VideoCodec;          // "VP9" or "AV1"
+        var kbps   = s.VideoBitrateMbps;
+
+        var tempDir = Path.Combine(Path.GetTempPath(), "Clipsy");
+        Directory.CreateDirectory(tempDir);
+        _tempPath = Path.Combine(tempDir, $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mkv");
+
+        var args = BuildArgs(x, y, w, h, codec, kbps, _tempPath, withAudio: true);
+        _process = Launch(args);
+
+        if (_process == null)
+        {
+            RecordingFailed?.Invoke("Failed to start FFmpeg process.");
+        }
+    }
+
+    // ─── Stop / Pause / Resume / UpdateRegion ────────────────────────────────
+
+    public void Stop()
+    {
+        if (_stopping) return;
+        _stopping = true;
         try
         {
-            var ffmpegPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Clipsy", "ffmpeg", "bin", "ffmpeg.exe");
-
-            var args = BuildRecordingArgs(outputPath, x, y, width, height, codec, bitrateMbps);
-
-            var startInfo = new ProcessStartInfo
+            if (_process is { HasExited: false })
             {
-                FileName = ffmpegPath,
-                Arguments = args,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            using var process = new Process { StartInfo = startInfo };
-
-            process.ErrorDataReceived += (s, e) =>
-            {
-                if (!string.IsNullOrEmpty(e.Data))
-                {
-                    System.Diagnostics.Debug.WriteLine($"[FFmpeg] {e.Data}");
-                }
-            };
-
-            process.Start();
-            process.BeginErrorReadLine();
-
-            await process.WaitForExitAsync();
-
-            if (process.ExitCode == 0 && File.Exists(outputPath))
-            {
-                onComplete?.Invoke(outputPath);
-                return true;
-            }
-            else
-            {
-                onError?.Invoke($"FFmpeg recording failed with exit code {process.ExitCode}");
-                return false;
+                // Send 'q' – ffmpeg flushes and writes the file trailer cleanly
+                _process.StandardInput.WriteLine("q");
+                _process.StandardInput.Flush();
             }
         }
         catch (Exception ex)
         {
-            onError?.Invoke(ex.Message);
-            return false;
+            Debug.WriteLine($"[Clipsy] FFmpegRecordingService.Stop: {ex.Message}");
         }
     }
 
-    private static string BuildRecordingArgs(string output, int x, int y, int width, int height, string codec, int bitrateMbps)
+    /// <summary>Pause is not supported for gdigrab; recording continues uninterrupted.</summary>
+    public void Pause() { }
+    public void Resume() { }
+
+    /// <summary>FFmpeg cannot change region mid-recording; call is ignored.</summary>
+    public void UpdateRegion(int x, int y, int w, int h) { }
+
+    // ─── Internals ───────────────────────────────────────────────────────────
+
+    private Process? Launch(string args)
     {
-        var videoCodec = codec.ToLowerInvariant() switch
+        var psi = new ProcessStartInfo
         {
-            "vp9" => "libvpx-vp9",
-            "av1" => "libaom-av1",
-            _ => "libx264"
+            FileName               = FFmpegService.Instance.ExePath,
+            Arguments              = args,
+            UseShellExecute        = false,
+            CreateNoWindow         = true,
+            RedirectStandardInput  = true,   // for 'q' quit signal
+            RedirectStandardOutput = true,
+            RedirectStandardError  = true,
         };
 
-        // Windows screen capture using gdigrab
-        var args = $"-f gdigrab -framerate 30 -offset_x {x} -offset_y {y} -video_size {width}x{height} -i desktop";
-        args += $" -c:v {videoCodec} -b:v {bitrateMbps}M";
+        try
+        {
+            var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            p.Exited += OnExited;
+            p.ErrorDataReceived += (_, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                    Debug.WriteLine($"[FFmpeg] {e.Data}");
+            };
+            p.Start();
+            p.BeginErrorReadLine();
+            return p;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Clipsy] FFmpegRecordingService.Launch: {ex.Message}");
+            return null;
+        }
+    }
 
-        // Audio capture
-        args += " -f dshow -i audio=\"virtual-audio-capturer\"";
-        args += " -c:a aac -b:a 128k";
+    private static string BuildArgs(
+        int x, int y, int w, int h,
+        string codec, int bitrateMbps, string output,
+        bool withAudio)
+    {
+        // ── Video encoder flags ──────────────────────────────────────────────
+        string videoEncoder = codec switch
+        {
+            "AV1" => "libaom-av1 -usage realtime -cpu-used 8",
+            _     => "libvpx-vp9 -deadline realtime -cpu-used 8 -row-mt 1",
+        };
 
-        // Output settings
-        args += " -pix_fmt yuv420p -preset medium -crf 23";
-        args += $" -y \"{output}\"";
+        // ── Inputs ──────────────────────────────────────────────────────────
+        // gdigrab: Windows GDI screen capture (includes DWM-composited output)
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"-f gdigrab -framerate 30 -offset_x {x} -offset_y {y}");
+        sb.Append($" -video_size {w}x{h} -draw_mouse 1 -i desktop");
 
-        return args;
+        if (withAudio)
+        {
+            // wasapi loopback: system audio (no extra drivers required on Win10+)
+            sb.Append(" -f wasapi -loopback -i \"\"");
+        }
+
+        // ── Encoding ────────────────────────────────────────────────────────
+        sb.Append($" -c:v {videoEncoder} -b:v {bitrateMbps}M -r 30");
+
+        if (withAudio)
+            sb.Append(" -c:a libopus -b:a 128k");
+
+        sb.Append($" -y \"{output}\"");
+        return sb.ToString();
+    }
+
+    private void OnExited(object? sender, EventArgs e)
+    {
+        var path     = _tempPath;
+        var exitCode = _process?.ExitCode ?? -1;
+
+        bool hasFile = File.Exists(path) && new FileInfo(path).Length > 0;
+
+        if (hasFile)
+        {
+            // 'q' quit produces exit code 255 on Windows; that's fine.
+            RecordingComplete?.Invoke(path);
+        }
+        else
+        {
+            RecordingFailed?.Invoke(
+                $"FFmpeg exited with code {exitCode} and produced no output file.");
+        }
+    }
+
+    // ─── IDisposable ─────────────────────────────────────────────────────────
+
+    public void Dispose()
+    {
+        try
+        {
+            if (_process is { HasExited: false })
+                _process.Kill(entireProcessTree: true);
+            _process?.Dispose();
+            _process = null;
+        }
+        catch { }
     }
 }

@@ -21,7 +21,7 @@ public sealed class RecordingService : IDisposable
 
     public string TempPath => _tempPath;
 
-    public void Start(int x, int y, int width, int height)
+    public void Start(int x, int y, int width, int height, string? overrideCodec = null)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "Clipsy");
         Directory.CreateDirectory(tempDir);
@@ -42,7 +42,7 @@ public sealed class RecordingService : IDisposable
         var (outW, outH) = ResolveOutputSize(s.VideoResolution, width, height);
         int bitrate = s.VideoBitrateMbps * 1_000_000;
 
-        IVideoEncoder encoder = s.VideoCodec switch
+        IVideoEncoder encoder = (overrideCodec ?? s.VideoCodec) switch
         {
             "H.265" => new H265VideoEncoder(),
             _ => new H264VideoEncoder
