@@ -88,6 +88,7 @@ public static class Strings
         ["LblAutostart"]        = New("Start with Windows", "Запускать с Windows"),
         ["HelperAutostart"]     = New("Launch Clipsy when you sign in.", "Запускать Clipsy при входе в систему."),
         ["LblScreenshotFormat"] = New("Screenshot format",         "Формат скриншота"),
+        ["LblVideoFormat"]      = New("Video format",             "Формат видео"),
         ["LblJpgQuality"]       = New("JPEG quality",              "Качество JPEG"),
         ["LblAfterSave"]        = New("After save",                "После сохранения"),
         ["LblUpdates"]          = New("Updates",                   "Обновления"),
