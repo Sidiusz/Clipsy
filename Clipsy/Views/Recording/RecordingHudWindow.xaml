@@ -9,7 +9,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Grid Background="{StaticResource ClipsyBg1Brush}">
+    <Grid x:Name="HudRoot" Background="{StaticResource ClipsyBg1Brush}">
         <Border x:Name="Root" Style="{StaticResource ClipsyToolbar}" BorderThickness="0">
             <StackPanel Orientation="Horizontal" Spacing="2">
                 <!-- Timer + REC dot -->

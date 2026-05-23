@@ -175,6 +175,7 @@ public static class Strings
         ["LblTessLang"]           = New("Tesseract Languages", "Языки Tesseract"),
         ["HelperTessLang"]        = New("Download language files for offline text recognition (~4–22 MB each).", "Загрузите языковые файлы для распознавания текста (~4–22 МБ каждый)."),
         ["BtnInstall"]            = New("Install", "Установить"),
+        ["BtnDelete"]             = New("Delete",  "Удалить"),
         ["TessInstalling"]        = New("Downloading...", "Загрузка..."),
         ["TessInstalled"]         = New("Installed", "Установлено"),
         ["TessNoLangs"]           = New("No languages installed — falling back to Windows OCR.", "Языки не установлены — используется Windows OCR."),

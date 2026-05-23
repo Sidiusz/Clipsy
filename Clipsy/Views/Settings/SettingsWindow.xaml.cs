@@ -60,7 +60,11 @@ public sealed partial class SettingsWindow : Window
     private string? _listeningKey;
 
     private bool _firstActivated;
-    private bool _loading;
+    // Starts true so RangeBase / ComboBox handlers that fire during
+    // InitializeComponent (from XAML attribute setters like Value="8")
+    // don't run MarkChanged() before the XAML tree is populated. Load()
+    // flips this off once the initial draft has been applied.
+    private bool _loading = true;
 
     // Tessdata language management
     private readonly HashSet<string> _tessSelectedCodes = new();
@@ -328,8 +332,14 @@ public sealed partial class SettingsWindow : Window
         SelectSegment(_draft.Theme, ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight);
         SelectComboByTag(OcrEngineBox, _draft.OcrEngine);
         _tessSelectedCodes.Clear();
+        // Selection follows installation: every installed language is used
+        // for OCR. Persisted TesseractLanguages is still merged in for
+        // forward-compat with older configs.
         foreach (var c in _draft.TesseractLanguages.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             _tessSelectedCodes.Add(c);
+        foreach (var lang in TessdataService.Catalog)
+            if (TessdataService.IsInstalled(lang.Code))
+                _tessSelectedCodes.Add(lang.Code);
         BuildTessLangRows();
         UpdateTessLangSectionVisibility();
         BuildTranslateLangDropdowns();
@@ -767,35 +777,10 @@ public sealed partial class SettingsWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90, GridUnitType.Pixel) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        // Language name + status. For installed languages: a real CheckBox the
-        // user can toggle. For uninstalled languages: a faded download-pending
-        // glyph in the same slot, so the row never looks like an unchecked
-        // checkbox that "just won't tick".
-        var namePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
-        CheckBox? cb = null;
-        if (installed)
-        {
-            cb = new CheckBox
-            {
-                IsChecked = _tessSelectedCodes.Contains(lang.Code),
-                VerticalAlignment = VerticalAlignment.Center,
-                MinWidth = 0,
-            };
-            namePanel.Children.Add(cb);
-        }
-        else
-        {
-            var pendingIcon = new FontIcon
-            {
-                Glyph = "", // download glyph
-                FontSize = 14,
-                Opacity = 0.55,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(6, 0, 6, 0),
-            };
-            ToolTipService.SetToolTip(pendingIcon, Strings.Get("TessNotInstalledHint"));
-            namePanel.Children.Add(pendingIcon);
-        }
+        // One row, one action. Install / Delete is the only control; an
+        // installed language is automatically used for OCR, so there is no
+        // separate "selected" checkbox.
+        CheckBox? cb = null; // signature compatibility with DownloadTessLangAsync
         var nameBlock = new TextBlock
         {
             Text = lang.DisplayName,
@@ -803,8 +788,7 @@ public sealed partial class SettingsWindow : Window
             Style = (Style)Application.Current.Resources["ClipsyBody"],
             Opacity = installed ? 1.0 : 0.7,
         };
-        namePanel.Children.Add(nameBlock);
-        Grid.SetColumn(namePanel, 0);
+        Grid.SetColumn(nameBlock, 0);
 
         // Size label
         var sizeBlock = new TextBlock
@@ -836,25 +820,10 @@ public sealed partial class SettingsWindow : Window
         };
         Grid.SetColumn(btn, 3);
 
-        grid.Children.Add(namePanel);
+        grid.Children.Add(nameBlock);
         grid.Children.Add(sizeBlock);
         grid.Children.Add(progress);
         grid.Children.Add(btn);
-
-        // Checkbox handler (only present for installed languages)
-        if (cb != null)
-        {
-            cb.Checked += (_, _) =>
-            {
-                _tessSelectedCodes.Add(lang.Code);
-                MarkChanged();
-            };
-            cb.Unchecked += (_, _) =>
-            {
-                _tessSelectedCodes.Remove(lang.Code);
-                MarkChanged();
-            };
-        }
 
         // Button handler
         btn.Click += (_, _) =>
