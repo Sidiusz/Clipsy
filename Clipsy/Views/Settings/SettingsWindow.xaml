@@ -200,7 +200,7 @@
                                                        Text="Auto-detect uses the system locale."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ComboBox x:Name="LangBox" Grid.Column="1" MinWidth="220" VerticalAlignment="Center"
+                                        <ComboBox x:Name="LangBox" Grid.Column="1" Width="240" HorizontalAlignment="Right" VerticalAlignment="Center"
                                                   SelectionChanged="OnAnyControlChanged">
                                             <ComboBoxItem x:Name="LangAuto" Content="Auto-detect" Tag="auto" />
                                             <ComboBoxItem x:Name="LangEn" Content="English" Tag="en" />
@@ -267,7 +267,7 @@
                                                        Text="Tesseract is bundled. Windows OCR is faster but lower-quality."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ComboBox x:Name="OcrEngineBox" Grid.Column="1" MinWidth="220" VerticalAlignment="Center"
+                                        <ComboBox x:Name="OcrEngineBox" Grid.Column="1" Width="240" HorizontalAlignment="Right" VerticalAlignment="Center"
                                                   SelectionChanged="OnOcrEngineChanged">
                                             <ComboBoxItem x:Name="OcrTesseract" Content="Tesseract" Tag="Tesseract" />
                                             <ComboBoxItem x:Name="OcrWinRt" Content="Windows OCR" Tag="WinRT" />
@@ -307,7 +307,8 @@
                                                        Text="Service and language pair used when translating recognized text."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ComboBox x:Name="TranslateServiceBox" Grid.Column="1" MinWidth="220"
+                                        <ComboBox x:Name="TranslateServiceBox" Grid.Column="1" Width="240"
+                                                  HorizontalAlignment="Right"
                                                   VerticalAlignment="Center"
                                                   SelectionChanged="OnAnyControlChanged">
                                             <ComboBoxItem x:Name="TrSvcMyMemory" Content="MyMemory (free)" Tag="MyMemory" />
@@ -326,7 +327,8 @@
                                         <TextBlock Grid.Column="0" x:Name="LblTranslateFrom" Text="From"
                                                    Style="{StaticResource ClipsyBodyStrong}"
                                                    VerticalAlignment="Center" />
-                                        <ComboBox x:Name="TranslateFromBox" Grid.Column="1" MinWidth="220"
+                                        <ComboBox x:Name="TranslateFromBox" Grid.Column="1" Width="240"
+                                                  HorizontalAlignment="Right"
                                                   VerticalAlignment="Center"
                                                   SelectionChanged="OnAnyControlChanged" />
                                     </Grid>
@@ -342,7 +344,8 @@
                                         <TextBlock Grid.Column="0" x:Name="LblTranslateTo" Text="To"
                                                    Style="{StaticResource ClipsyBodyStrong}"
                                                    VerticalAlignment="Center" />
-                                        <ComboBox x:Name="TranslateToBox" Grid.Column="1" MinWidth="220"
+                                        <ComboBox x:Name="TranslateToBox" Grid.Column="1" Width="240"
+                                                  HorizontalAlignment="Right"
                                                   VerticalAlignment="Center"
                                                   SelectionChanged="OnAnyControlChanged" />
                                     </Grid>
@@ -435,7 +438,7 @@
                                         <TextBlock Grid.Column="0" x:Name="LblScreenshotFormat" Text="Screenshot format"
                                                    Style="{StaticResource ClipsyBodyStrong}"
                                                    VerticalAlignment="Center" />
-                                        <ComboBox x:Name="ScreenshotFormatBox" Grid.Column="1" MinWidth="260"
+                                        <ComboBox x:Name="ScreenshotFormatBox" Grid.Column="1" Width="260" HorizontalAlignment="Right"
                                                   SelectionChanged="OnScreenshotFormatChanged"
                                                   VerticalAlignment="Center">
                                             <ComboBoxItem x:Name="FmtPng" Content="PNG (lossless)" Tag="png" />
@@ -470,7 +473,7 @@
                                         <TextBlock Grid.Column="0" x:Name="LblAfterSave" Text="After save"
                                                    Style="{StaticResource ClipsyBodyStrong}"
                                                    VerticalAlignment="Center" />
-                                        <ComboBox x:Name="AfterSaveBox" Grid.Column="1" MinWidth="220"
+                                        <ComboBox x:Name="AfterSaveBox" Grid.Column="1" Width="240" HorizontalAlignment="Right"
                                                   VerticalAlignment="Center"
                                                   SelectionChanged="OnAnyControlChanged">
                                             <ComboBoxItem x:Name="AfterNothing" Content="Do nothing" Tag="nothing" />
@@ -491,7 +494,7 @@
                                                    Style="{StaticResource ClipsyHelper}" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <ComboBox x:Name="UpdateIntervalBox" MinWidth="200"
+                                        <ComboBox x:Name="UpdateIntervalBox" Width="220" HorizontalAlignment="Right"
                                                   SelectionChanged="OnAnyControlChanged">
                                             <ComboBoxItem x:Name="UpdHourly" Content="Hourly" Tag="hourly" />
                                             <ComboBoxItem x:Name="UpdDaily" Content="Daily" Tag="daily" />

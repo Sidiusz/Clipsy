@@ -82,7 +82,7 @@ public sealed partial class RecordingHudWindow : Window
         TimerText.Text = "00:00";
         PauseIcon.Glyph = GlyphPause;
         ApplyLockVisual();
-        Root.Opacity = 1.0;
+        HudRoot.Opacity = 1.0;
         _timer.Start();
         _hideTimer.Start();
     }
@@ -99,20 +99,53 @@ public sealed partial class RecordingHudWindow : Window
         var size = Root.DesiredSize;
         int hudW = (int)System.Math.Ceiling(size.Width);
         int hudH = (int)System.Math.Ceiling(size.Height);
+
+        var vb = Services.ScreenFreezeService.GetVirtualScreenBounds();
+        const int gap = 8;
+        const int edgePad = 8;
+
+        // Default: centered below the region.
         int hudX = regionX + (regionW - hudW) / 2;
-        int hudY = regionY + regionH + 8;
-        if (hudY + hudH > virtualScreenH - 8)
+        int hudY = regionY + regionH + gap;
+
+        bool fitsBelow = hudY + hudH <= vb.Bottom - edgePad;
+        if (!fitsBelow)
         {
-            hudY = regionY - hudH - 8;
+            int aboveY = regionY - hudH - gap;
+            if (aboveY >= vb.Top + edgePad)
+            {
+                // Falls back to above the region.
+                hudY = aboveY;
+            }
+            else
+            {
+                // Full-screen capture (or region touching both edges): tuck the
+                // HUD just inside the bottom of the region so it stays visible
+                // even though it'll be recorded into the MP4's pixel space —
+                // SetExcludeFromCapture keeps it out of the actual frame.
+                hudY = System.Math.Max(vb.Top + edgePad,
+                                       regionY + regionH - hudH - edgePad);
+            }
         }
+
+        // Clamp X so the HUD never lands off-screen on narrow regions / sides.
+        if (hudX < vb.Left + edgePad) hudX = vb.Left + edgePad;
+        if (hudX + hudW > vb.Right - edgePad) hudX = vb.Right - edgePad - hudW;
+
         _appWindow.MoveAndResize(new RectInt32(hudX, hudY, hudW, hudH));
     }
 
     private void SetWindowExStyle()
     {
         var ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
-        ex |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT;
+        // WS_EX_LAYERED + LWA_ALPHA lets the whole window (including its WinUI
+        // backdrop, not just XAML children) fade uniformly. WS_EX_TRANSPARENT
+        // is intentionally NOT set: with WS_EX_LAYERED it actually takes
+        // effect and would make the HUD buttons unclickable.
+        ex |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED;
+        ex &= ~WS_EX_TRANSPARENT;
         SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
+        SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
 
         // Strip resizable frame + caption that WinUI window inherits. Without
         // this, Win11 paints a 1-2px chrome border around the HUD even after
@@ -172,7 +205,12 @@ public sealed partial class RecordingHudWindow : Window
     private void ApplyHudFar(bool far)
     {
         _hudFar = far;
-        Root.Opacity = far ? 0.60 : 1.0;
+        // Fade the entire window (backdrop + content) via the layered-window
+        // alpha. XAML Opacity alone left the WinUI backdrop fully opaque
+        // behind the icons, so the panel looked solid while only the buttons
+        // dimmed.
+        byte alpha = (byte)(far ? 38 : 255); // 38/255 ≈ 15%
+        SetLayeredWindowAttributes(_hwnd, 0, alpha, LWA_ALPHA);
     }
 
     private void OnPauseClick(object sender, RoutedEventArgs e)

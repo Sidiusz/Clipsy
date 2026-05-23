@@ -210,8 +210,10 @@ public sealed class RecordingController
             }
             else
             {
+                // Keep existing strokes visible. User asked for explicit clear,
+                // not auto-wipe on toggle. RMB-drag erases; full clear requires
+                // a dedicated UI hook (TODO).
                 _drawWin?.SetActive(false);
-                _drawWin?.ClearAll();
             }
         }
         catch (Exception ex)

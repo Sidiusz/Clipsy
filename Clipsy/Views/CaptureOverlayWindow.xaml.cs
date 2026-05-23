@@ -124,12 +124,19 @@ public sealed partial class CaptureOverlayWindow : Window
         BuildScreenMenu();
         Activated += OnActivated;
         RootGrid.SizeChanged += OnRootGridSizeChanged;
-        RootGrid.Loaded += (_, _) =>
+        // Wait for the second composition tick before revealing the window —
+        // the first Rendering event fires before the swap chain has the
+        // frozen-frame image, so Low-priority dispatcher posting still flashed
+        // black on some machines.
+        int composed = 0;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFirstFrames;
+        void OnFirstFrames(object? s, object e)
         {
-            // Defer one tick so the frozen-frame image is on the swap chain
-            // before DWM reveals the window. Eliminates the black flash.
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Uncloak);
-        };
+            composed++;
+            if (composed < 2) return;
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFirstFrames;
+            Uncloak();
+        }
 
         // Start in region select mode (no drawing tool active)
         SetTool(ToolKind.None);
