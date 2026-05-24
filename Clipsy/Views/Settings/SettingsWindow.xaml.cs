@@ -311,7 +311,28 @@ public sealed partial class SettingsWindow : Window
         var wasLoading = _loading;
         _loading = true;
         BuildHotkeyRows();
+
+        // WinUI ComboBox caches the SelectedItem's rendered content, so
+        // mutating ComboBoxItem.Content above updates dropdown items but
+        // leaves the collapsed display showing the old text. Kick each box
+        // by toggling SelectedIndex so the ContentPresenter re-renders.
+        RefreshComboDisplay(LangBox);
+        RefreshComboDisplay(ScreenshotFormatBox);
+        RefreshComboDisplay(AfterSaveBox);
+        RefreshComboDisplay(UpdateIntervalBox);
+        RefreshComboDisplay(VideoFormatBox);
+        RefreshComboDisplay(OcrEngineBox);
+        RefreshComboDisplay(TranslateServiceBox);
         _loading = wasLoading;
+    }
+
+    private static void RefreshComboDisplay(ComboBox? cb)
+    {
+        if (cb == null) return;
+        int idx = cb.SelectedIndex;
+        if (idx < 0) return;
+        cb.SelectedIndex = -1;
+        cb.SelectedIndex = idx;
     }
 
     public static void ShowOrActivate()
