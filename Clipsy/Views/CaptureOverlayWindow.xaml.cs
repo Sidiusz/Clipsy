@@ -1750,27 +1750,22 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         _drawing.Settings.Tool = tool;
 
-        // Pull brushes from theme tokens so accent swaps propagate.
-        var selectedBg     = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentDimBrush"];
-        var selectedBorder = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentBrush"];
-        var selectedFg     = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentBrush"];
-        var normalBg       = (Microsoft.UI.Xaml.Media.Brush)new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        var normalBorder   = (Microsoft.UI.Xaml.Media.Brush)new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        var normalFg       = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyText2Brush"];
+        // Swap the Style instead of mutating brushes inline. The Selected
+        // style ships its own template + visual states with amber stops so
+        // PointerOver doesn't drop us back to grey.
+        var selectedStyle = (Microsoft.UI.Xaml.Style)Application.Current.Resources["ClipsyIconButtonSelected"];
+        var normalStyle   = (Microsoft.UI.Xaml.Style)Application.Current.Resources["ClipsyIconButton"];
 
-        void Apply(Button btn, bool active)
-        {
-            btn.Background = active ? selectedBg : normalBg;
-            btn.BorderBrush = active ? selectedBorder : normalBorder;
-            btn.Foreground = active ? selectedFg : normalFg;
-        }
-        Apply(PencilBtn, tool == ToolKind.Pencil);
-        Apply(TextBtn,   tool == ToolKind.Text);
-        Apply(ShapesBtn, tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line);
+        PencilBtn.Style = tool == ToolKind.Pencil ? selectedStyle : normalStyle;
+        TextBtn.Style   = tool == ToolKind.Text   ? selectedStyle : normalStyle;
+        ShapesBtn.Style = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line
+            ? selectedStyle : normalStyle;
+
         // The Shapes icon glyphs are Stroke-based shapes (not FontIcon
-        // glyphs that inherit Foreground), so swap their stroke too.
+        // glyphs that inherit Foreground), so swap their stroke explicitly.
         var shapesActive = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line;
-        var shapesStroke = shapesActive ? selectedFg : normalFg;
+        var shapesStroke = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[
+            shapesActive ? "ClipsyAccentBrush" : "ClipsyText2Brush"];
         if (ShapeIconRect    != null) ShapeIconRect.Stroke    = shapesStroke;
         if (ShapeIconEllipse != null) ShapeIconEllipse.Stroke = shapesStroke;
         if (ShapeIconLine    != null) ShapeIconLine.Stroke    = shapesStroke;
