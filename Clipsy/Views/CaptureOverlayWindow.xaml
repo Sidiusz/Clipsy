@@ -377,7 +377,8 @@
                              TextChanged="OnFontFilterChanged" />
                     <ScrollViewer Grid.Row="1"
                                   VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled">
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Padding="0,0,14,0">
                         <StackPanel x:Name="FontList" Spacing="0" />
                     </ScrollViewer>
                 </Grid>
