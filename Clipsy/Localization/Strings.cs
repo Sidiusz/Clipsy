@@ -16,13 +16,18 @@ public static class Strings
     {
         // Tray
         ["TrayTooltip"]      = New("Clipsy", "Clipsy"),
-        ["TrayCapture"]      = New("Capture screen",        "Захват экрана"),
-        ["TrayRecord"]       = New("Record region",         "Запись области"),
-        ["TrayOpenFolder"]   = New("Open captures folder",  "Открыть папку"),
-        ["TraySettings"]     = New("Settings",              "Настройки"),
-        ["TrayAbout"]        = New("About",                 "О программе"),
-        ["TrayExit"]         = New("Exit",                  "Выход"),
-        ["TrayReady"]        = New("ready",                 "готов"),
+        ["TrayCapture"]          = New("Capture screen",              "Захват экрана"),
+        ["TrayRecord"]           = New("Record region",               "Запись области"),
+        ["TrayOpenFolder"]       = New("Open captures folder",        "Открыть папку"),
+        ["TrayOpenScreenshots"]  = New("Open screenshots folder",     "Открыть папку скриншотов"),
+        ["TrayOpenVideos"]       = New("Open videos folder",          "Открыть папку с видео"),
+        ["TraySettings"]         = New("Settings",                    "Настройки"),
+        ["TrayAbout"]            = New("About",                       "О программе"),
+        ["TrayExit"]             = New("Exit",                        "Выход"),
+        ["TrayReady"]            = New("ready",                       "готов"),
+        ["TrayUpdateChecking"]   = New("Checking for updates…",       "Проверка обновлений…"),
+        ["TrayUpdateAvailable"]  = New("available",                   "доступно"),
+        ["TrayUpdateFailed"]     = New("Check failed — open settings","Ошибка — открыть настройки"),
 
         // Capture overlay
         ["HintSelectArea"]      = New("Select area", "Выделите область"),

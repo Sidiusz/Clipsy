@@ -56,13 +56,14 @@ public partial class App : Application
     {
         Strings.Initialize();
         HostWindow = new MainWindow();
-        HostWindow.CaptureRequested    += OnCaptureRequested;
-        HostWindow.RecordRequested     += OnRecordRequested;
-        HostWindow.OpenFolderRequested += OnOpenFolderRequested;
-        HostWindow.SettingsRequested   += OnSettingsRequested;
-        HostWindow.AboutRequested      += OnAboutRequested;
-        HostWindow.ExitRequested       += OnExitRequested;
-        HostWindow.MenuRequested       += OnMenuRequested;
+        HostWindow.CaptureRequested         += OnCaptureRequested;
+        HostWindow.RecordRequested          += OnRecordRequested;
+        HostWindow.OpenFolderRequested      += OnOpenFolderRequested;
+        HostWindow.OpenVideoFolderRequested += OnOpenVideoFolderRequested;
+        HostWindow.SettingsRequested        += OnSettingsRequested;
+        HostWindow.AboutRequested           += OnAboutRequested;
+        HostWindow.ExitRequested            += OnExitRequested;
+        HostWindow.MenuRequested            += OnMenuRequested;
 
         // Activate the host so the WinUI 3 XAML island starts. The window
         // is offscreen + tool-window so it's invisible, but it must be
@@ -71,12 +72,12 @@ public partial class App : Application
 
         // Pre-create the tray menu after the XAML island is live.
         _trayMenu = new Clipsy.Views.TrayMenuWindow();
-        _trayMenu.CaptureClicked    += OnCaptureRequested;
-        _trayMenu.RecordClicked     += OnRecordRequested;
-        _trayMenu.OpenFolderClicked += OnOpenFolderRequested;
-        _trayMenu.SettingsClicked   += OnSettingsRequested;
-        _trayMenu.AboutClicked      += OnAboutRequested;
-        _trayMenu.ExitClicked       += OnExitRequested;
+        _trayMenu.CaptureClicked              += OnCaptureRequested;
+        _trayMenu.OpenScreenshotsFolderClicked+= OnOpenFolderRequested;
+        _trayMenu.OpenVideoFolderClicked      += OnOpenVideoFolderRequested;
+        _trayMenu.SettingsClicked             += OnSettingsRequested;
+        _trayMenu.UpdateStatusClicked         += OnSettingsRequested;
+        _trayMenu.ExitClicked                 += OnExitRequested;
         ThemeService.Register(HostWindow.Content as Microsoft.UI.Xaml.FrameworkElement);
 
         Hotkey = new HotkeyService(HostWindow.DispatcherQueue);
@@ -119,25 +120,37 @@ public partial class App : Application
                 if (s.UpdateInterval == "never") return;
                 if (!UpdateService.ShouldCheckNow(s.UpdateInterval, s.LastUpdateCheckUtc)) return;
             }
+
+            _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Checking);
+
             var info = await UpdateService.CheckLatestAsync();
             s.LastUpdateCheckUtc = DateTime.UtcNow;
             SettingsService.Instance.Save();
+
             if (info == null)
             {
                 if (force) NotificationService.Warning("UpdateCheckFailed");
+                _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Failed);
                 return;
             }
             if (!UpdateService.IsNewer(info.Version, UpdateService.CurrentVersion()))
             {
                 if (force) NotificationService.Info("UpdateUpToDate");
+                _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.UpToDate);
                 return;
             }
-            if (!force && info.Version == s.SkippedVersion) return;
+            if (!force && info.Version == s.SkippedVersion)
+            {
+                _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.UpToDate);
+                return;
+            }
             NotificationService.InfoText($"Clipsy {info.Version}", Strings.Get("UpdateAvailable"));
+            _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Available, info.Version);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Update check pipeline failed: {ex.Message}");
+            _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Failed);
         }
     }
 
@@ -217,6 +230,29 @@ public partial class App : Application
             return;
         }
         CaptureOverlayHost.ShowOverlay();
+    }
+
+    private void OnOpenVideoFolderRequested()
+    {
+        try
+        {
+            var s = SettingsService.Instance;
+            var folder = string.IsNullOrEmpty(s.Settings.VideoFolder)
+                ? s.DefaultVideoFolder
+                : s.Settings.VideoFolder!;
+            if (System.IO.Directory.Exists(folder))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] OpenVideoFolder failed: {ex.Message}");
+        }
     }
 
     private void OnOpenFolderRequested()

@@ -460,8 +460,7 @@
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="H.264" FontSize="13" FontWeight="SemiBold" />
                                                 <TextBlock Text="Wide compatibility, hardware-accelerated"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource ClipsyText3Brush}" />
+                                                           FontSize="11" />
                                             </StackPanel>
                                         </RadioButton>
                                         <RadioButton x:Name="RadioCodecH265" Style="{StaticResource ClipsyRadioCard}"
@@ -469,8 +468,7 @@
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="H.265" FontSize="13" FontWeight="SemiBold" />
                                                 <TextBlock Text="Smaller files, slower encode"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource ClipsyText3Brush}" />
+                                                           FontSize="11" />
                                             </StackPanel>
                                         </RadioButton>
                                         <RadioButton x:Name="RadioCodecVp9" Style="{StaticResource ClipsyRadioCard}"
@@ -478,8 +476,7 @@
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="VP9" FontSize="13" FontWeight="SemiBold" />
                                                 <TextBlock Text="Web-friendly, open codec"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource ClipsyText3Brush}" />
+                                                           FontSize="11" />
                                             </StackPanel>
                                         </RadioButton>
                                         <RadioButton x:Name="RadioCodecAv1" Style="{StaticResource ClipsyRadioCard}"
@@ -487,8 +484,7 @@
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="AV1" FontSize="13" FontWeight="SemiBold" />
                                                 <TextBlock Text="Smallest, very slow encoder"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource ClipsyText3Brush}" />
+                                                           FontSize="11" />
                                             </StackPanel>
                                         </RadioButton>
                                     </StackPanel>
