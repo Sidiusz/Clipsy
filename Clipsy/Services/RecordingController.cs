@@ -28,7 +28,8 @@ public sealed class RecordingController
     private RecordingService? _service;
     private FFmpegRecordingService? _ffmpegRec;
     private bool _h265FallbackAttempted;
-    private string _outputFmt = "mp4";
+    private string _outputFmt = "mp4";  // user-chosen container for the final file
+    private string _nativeFmt = "mp4";  // actual container of the temp recording
     private int _x, _y, _w, _h;
     private bool _stopAndSave;
     private bool _stopping;
@@ -65,6 +66,10 @@ public sealed class RecordingController
         var settings = SettingsService.Instance.Settings;
         var codec = settings.VideoCodec;
         bool isFfmpegCodec = codec == "VP9" || codec == "AV1";
+        // Native container of the temp file (what the encoder actually writes).
+        _nativeFmt = isFfmpegCodec ? "mkv" : "mp4";
+        // Container the user wants on disk. For ffmpeg codecs we always stay
+        // in MKV; for H.264/H.265 we honour the format setting (mp4/avi/mkv/gif).
         _outputFmt = isFfmpegCodec ? "mkv" : (settings.VideoFormat ?? "mp4");
 
         _border = new Win32BorderOverlay();
@@ -301,7 +306,7 @@ public sealed class RecordingController
                     else
                     {
                         Diagnostics.Log("  → SilentSave");
-                        SilentSave(filePath);
+                        await SilentSaveAsync(filePath);
                         Diagnostics.Log("  ← SilentSave returned");
                     }
                 }
@@ -324,7 +329,7 @@ public sealed class RecordingController
         });
     }
 
-    private void SilentSave(string tempPath)
+    private async Task SilentSaveAsync(string tempPath)
     {
         Diagnostics.Log($"SilentSave ENTER tempPath='{tempPath}'");
         try
@@ -338,9 +343,11 @@ public sealed class RecordingController
             var fmt = _outputFmt;
             var name = SaveDialogService.MakeTimestampName("Clipsy", fmt);
             var dest = Path.Combine(folder, name);
-            Diagnostics.Log($"  dest='{dest}'");
-            File.Copy(tempPath, dest, overwrite: true);
-            Diagnostics.Log("  File.Copy OK");
+            Diagnostics.Log($"  dest='{dest}' native='{_nativeFmt}' target='{fmt}'");
+            // Container swap or GIF conversion when the user-chosen format
+            // differs from what the encoder wrote.
+            await ConvertOrCopyAsync(tempPath, dest, _nativeFmt, fmt);
+            Diagnostics.Log("  ConvertOrCopyAsync OK");
             TryDelete(tempPath);
             settings.Settings.LastVideoFolder = folder;
             settings.Save();
@@ -468,7 +475,7 @@ public sealed class RecordingController
 
         try
         {
-            await ConvertOrCopyAsync(tempPath, dest, preferredFmt, chosenFmt);
+            await ConvertOrCopyAsync(tempPath, dest, _nativeFmt, chosenFmt);
             TryDelete(tempPath);
             var dir = Path.GetDirectoryName(dest);
             if (!string.IsNullOrEmpty(dir))
@@ -503,7 +510,21 @@ public sealed class RecordingController
         }
         if (destFmt == "gif")
         {
-            await FFmpegService.Instance.ConvertToGifAsync(src, dest);
+            if (!FFmpegService.Instance.IsAvailable)
+            {
+                // Refuse to fall through to a plain copy — it would dump
+                // mp4 bytes into a .gif file (the bug behind the broken GIF
+                // reports). Surface the missing dependency instead.
+                NotificationService.Warning("WarnNoFfmpeg");
+                Diagnostics.Log("ConvertOrCopyAsync gif requested but FFmpeg missing");
+                throw new InvalidOperationException("FFmpeg is required to export GIF.");
+            }
+            var ok = await FFmpegService.Instance.ConvertToGifAsync(src, dest);
+            if (!ok || !File.Exists(dest) || new FileInfo(dest).Length == 0)
+            {
+                Diagnostics.Log("ConvertOrCopyAsync gif conversion failed");
+                throw new InvalidOperationException("GIF conversion failed.");
+            }
             return;
         }
         if (FFmpegService.Instance.IsAvailable)
