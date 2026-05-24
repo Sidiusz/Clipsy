@@ -26,6 +26,15 @@ public sealed class DrawingSettings
     public Color Color { get; set; } = Microsoft.UI.Colors.Red;
 
     /// <summary>
+    /// FontFamily string used by the Text tool. Defaults to the bundled
+    /// Onest variable font; falls back to Inter / Segoe UI if the .ttf is
+    /// missing for any reason. The capture overlay exposes a flyout next
+    /// to the Text button so the user can switch between bundled and
+    /// system fonts at any time.
+    /// </summary>
+    public string TextFont { get; set; } = "ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, Segoe UI, sans-serif";
+
+    /// <summary>
     /// Single size parameter that drives all drawing tools.
     /// Pencil/shape thickness, text size, and preview size derive from it.
     /// </summary>

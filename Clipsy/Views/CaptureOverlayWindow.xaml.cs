@@ -502,6 +502,124 @@ public sealed partial class CaptureOverlayWindow : Window
         }
     }
 
+    // ---------- Text / Fonts flyout (mirrors Shapes flyout) ----------
+
+    private bool _textClickHandled;
+
+    private void OnTextClick(object sender, RoutedEventArgs e)
+    {
+        _textClickHandled = true;
+
+        if (_hoverTimer != null)
+        {
+            _hoverTimer.Stop();
+            _hoverTimer.Tick -= OnHoverTimerTick;
+            _hoverTimer = null;
+        }
+
+        if (FontsFlyout != null) FontsFlyout.Visibility = Visibility.Collapsed;
+        SetTool(ToolKind.Text);
+
+        var resetTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        resetTimer.Tick += (s, args) => { _textClickHandled = false; resetTimer.Stop(); };
+        resetTimer.Start();
+    }
+
+    private void OnTextPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (FontsFlyout == null || TextBtn == null || _textClickHandled) return;
+
+        if (_hoverTimer != null)
+        {
+            _hoverTimer.Stop();
+            _hoverTimer.Tick -= OnHoverTimerTick;
+            _hoverTimer = null;
+        }
+
+        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        _hoverTimer.Tick += OnFontHoverTimerTick;
+        _hoverTimer.Start();
+    }
+
+    private void OnFontHoverTimerTick(object? sender, object e)
+    {
+        if (_hoverTimer != null)
+        {
+            _hoverTimer.Stop();
+            _hoverTimer.Tick -= OnFontHoverTimerTick;
+            _hoverTimer = null;
+        }
+        if (FontsFlyout == null || TextBtn == null) return;
+        // Make sure the shapes flyout doesn't sit on top.
+        if (ShapesFlyout != null) ShapesFlyout.Visibility = Visibility.Collapsed;
+        FontsFlyout.Visibility = Visibility.Visible;
+        PositionFontsFlyout();
+    }
+
+    private void PositionFontsFlyout()
+    {
+        if (FontsFlyout == null || TextBtn == null) return;
+        FontsFlyout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var flyoutSize = FontsFlyout.DesiredSize;
+        var transform = TextBtn.TransformToVisual(RootGrid);
+        var buttonPos = transform.TransformPoint(new Point(0, 0));
+        double x = buttonPos.X + TextBtn.ActualWidth + 8;
+        double y = buttonPos.Y + (TextBtn.ActualHeight - flyoutSize.Height) / 2;
+        if (x + flyoutSize.Width > RootGrid.ActualWidth - 8)
+            x = buttonPos.X - flyoutSize.Width - 8;
+        y = System.Math.Clamp(y, 8, System.Math.Max(8, RootGrid.ActualHeight - flyoutSize.Height - 8));
+        Canvas.SetLeft(FontsFlyout, x);
+        Canvas.SetTop(FontsFlyout, y);
+    }
+
+    private void OnTextPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (_hoverTimer != null)
+        {
+            _hoverTimer.Stop();
+            _hoverTimer.Tick -= OnFontHoverTimerTick;
+            _hoverTimer.Tick -= OnHoverTimerTick;
+            _hoverTimer = null;
+        }
+        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        _hoverTimer.Tick += (s, args) =>
+        {
+            if (FontsFlyout != null) FontsFlyout.Visibility = Visibility.Collapsed;
+            _hoverTimer?.Stop();
+            _hoverTimer = null;
+        };
+        _hoverTimer.Start();
+    }
+
+    private void OnFontsFlyoutPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (_hoverTimer != null)
+        {
+            _hoverTimer.Stop();
+            _hoverTimer.Tick -= OnHoverTimerTick;
+            _hoverTimer.Tick -= OnFontHoverTimerTick;
+            _hoverTimer = null;
+        }
+    }
+
+    private void OnFontsFlyoutPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (FontsFlyout != null) FontsFlyout.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnFontPick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement fe || fe.Tag is not string family) return;
+        _drawing.Settings.TextFont = family;
+        SetTool(ToolKind.Text);
+        // Reflect choice on the toolbar T glyph so the user sees current font.
+        if (TextBtnGlyph != null)
+        {
+            try { TextBtnGlyph.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(family); }
+            catch { /* fallback to inherited font */ }
+        }
+    }
+
     private void OnShapePick(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.Tag is not string tag) return;
@@ -1203,10 +1321,17 @@ public sealed partial class CaptureOverlayWindow : Window
         _activeRectVisual = null;
     }
 
+    // Padding inside the active TextBox. Extracted so StartTextEntry and
+    // CommitText agree on the visual offset between the box and the glyph.
+    private static readonly Thickness TextEntryPadding = new(4, 2, 4, 2);
+
     private void StartTextEntry(Point pos)
     {
         // Commit any prior entry before opening a new one.
         if (_activeTextBox != null) CommitText();
+
+        var family = new Microsoft.UI.Xaml.Media.FontFamily(_drawing.Settings.TextFont);
+        var (glyphW, glyphH) = MeasureGlyph("M", _drawing.Settings.TextSize, family);
 
         var tb = new TextBox
         {
@@ -1216,19 +1341,26 @@ public sealed partial class CaptureOverlayWindow : Window
             Foreground = new SolidColorBrush(_drawing.Settings.Color),
             BorderBrush = new SolidColorBrush(_drawing.Settings.Color),
             BorderThickness = new Thickness(1),
+            FontFamily = family,
             FontSize = _drawing.Settings.TextSize,
-            Padding = new Thickness(4, 2, 4, 2),
+            Padding = TextEntryPadding,
         };
-        Canvas.SetLeft(tb, pos.X);
-        Canvas.SetTop(tb, pos.Y);
+        // Offset so the first glyph's optical center sits on the click point
+        // instead of the TextBox top-left corner. Adjusts again on the first
+        // keystroke once the actual typed character is known.
+        Canvas.SetLeft(tb, pos.X - TextEntryPadding.Left - glyphW / 2);
+        Canvas.SetTop(tb,  pos.Y - TextEntryPadding.Top  - glyphH / 2);
         DrawingCanvas.Children.Add(tb);
         _activeTextBox = tb;
+        _activeTextAnchor = pos;
+        _activeTextAnchorApplied = false;
         tb.LostFocus += (_, _) => CommitText();
         tb.KeyDown += (_, ke) =>
         {
             if (ke.Key == VirtualKey.Enter) { ke.Handled = true; CommitText(); }
             else if (ke.Key == VirtualKey.Escape) { ke.Handled = true; CancelText(); }
         };
+        tb.TextChanged += OnActiveTextBoxTextChanged;
         // Eat pointer events so RootGrid handlers don't re-trigger StartToolPress
         // when the user clicks inside the active text box.
         tb.PointerPressed += (_, ev) => ev.Handled = true;
@@ -1237,13 +1369,47 @@ public sealed partial class CaptureOverlayWindow : Window
         tb.Focus(FocusState.Programmatic);
     }
 
+    private Point _activeTextAnchor;
+    private bool  _activeTextAnchorApplied;
+
+    private void OnActiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_activeTextBox == null || _activeTextAnchorApplied) return;
+        var text = _activeTextBox.Text;
+        if (string.IsNullOrEmpty(text)) return;
+        // Re-measure with the actual first character so off-width glyphs
+        // (e.g. "i" vs "M") still end up centered on the click point.
+        var family = _activeTextBox.FontFamily;
+        var (gw, gh) = MeasureGlyph(text[0].ToString(), _activeTextBox.FontSize, family);
+        Canvas.SetLeft(_activeTextBox, _activeTextAnchor.X - TextEntryPadding.Left - gw / 2);
+        Canvas.SetTop(_activeTextBox,  _activeTextAnchor.Y - TextEntryPadding.Top  - gh / 2);
+        _activeTextAnchorApplied = true;
+    }
+
+    private static (double w, double h) MeasureGlyph(string ch, double size, Microsoft.UI.Xaml.Media.FontFamily family)
+    {
+        var probe = new TextBlock
+        {
+            Text = ch,
+            FontSize = size,
+            FontFamily = family,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+        };
+        probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        return (probe.DesiredSize.Width, probe.DesiredSize.Height);
+    }
+
     private void CommitText()
     {
         if (_activeTextBox == null) return;
         var text = _activeTextBox.Text ?? string.Empty;
-        double x = Canvas.GetLeft(_activeTextBox);
-        double y = Canvas.GetTop(_activeTextBox);
+        // Preserve the TextBox's internal padding so the committed TextBlock
+        // glyph sits at the same on-screen position as it did during entry.
+        double x = Canvas.GetLeft(_activeTextBox) + TextEntryPadding.Left;
+        double y = Canvas.GetTop(_activeTextBox)  + TextEntryPadding.Top;
         var owning = _activeTextBox;
+        var family = owning.FontFamily;
+        owning.TextChanged -= OnActiveTextBoxTextChanged;
         _activeTextBox = null;
         DrawingCanvas.Children.Remove(owning);
         DrawingCanvas.IsHitTestVisible = false;
@@ -1251,6 +1417,7 @@ public sealed partial class CaptureOverlayWindow : Window
         var tb = new TextBlock
         {
             Text = text,
+            FontFamily = family,
             FontSize = _drawing.Settings.TextSize,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             Foreground = new SolidColorBrush(_drawing.Settings.Color),

@@ -12,6 +12,25 @@
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
     <!-- ============================================================
+         Implicit font application
+         ============================================================
+         WinUI 3 does not inherit FontFamily down arbitrary visual trees,
+         so apply the Clipsy font as the implicit default for every
+         text-bearing control. Named TextBlock styles override this — so
+         each named TextBlock style below also re-sets FontFamily to the
+         same token (mono style keeps its monospace family).
+    -->
+    <Style TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
+    </Style>
+    <Style TargetType="TextBox">
+        <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
+    </Style>
+    <Style TargetType="ContentPresenter">
+        <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
+    </Style>
+
+    <!-- ============================================================
          Buttons
          ============================================================
          ClipsyButton          : default button, neutral bg-3 surface
@@ -462,6 +481,7 @@
 
     <!-- 11 / 600 uppercase label -->
     <Style x:Key="ClipsyLabel" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyText3Brush}" />
         <Setter Property="FontSize" Value="11" />
         <Setter Property="FontWeight" Value="SemiBold" />
@@ -470,6 +490,7 @@
 
     <!-- 13 / 500 strong body -->
     <Style x:Key="ClipsyBodyStrong" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyTextBrush}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="FontWeight" Value="SemiBold" />
@@ -477,12 +498,14 @@
 
     <!-- 13 body -->
     <Style x:Key="ClipsyBody" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyText2Brush}" />
         <Setter Property="FontSize" Value="13" />
     </Style>
 
     <!-- 11 helper (parameter descriptions) -->
     <Style x:Key="ClipsyHelper" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyText3Brush}" />
         <Setter Property="FontSize" Value="11" />
         <Setter Property="TextWrapping" Value="Wrap" />
@@ -490,6 +513,7 @@
 
     <!-- 20 section title -->
     <Style x:Key="ClipsySectionTitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyTextBrush}" />
         <Setter Property="FontSize" Value="20" />
         <Setter Property="FontWeight" Value="SemiBold" />
