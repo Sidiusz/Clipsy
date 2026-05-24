@@ -63,3 +63,6 @@ new design/
 *.full
 *.zip
 Clipsy UI _ standalone.html
+
+# Scratch / quarantined files awaiting deletion
+_trash/
