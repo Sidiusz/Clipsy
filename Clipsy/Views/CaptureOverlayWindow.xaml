@@ -469,7 +469,7 @@
                 <MenuFlyoutItem x:Name="MenuClear" Text="Clear drawings" Visibility="Collapsed"
                                 Click="OnMenuClear">
                     <MenuFlyoutItem.Icon>
-                        <FontIcon Glyph="&#xEE0F;" />
+                        <FontIcon Glyph="&#xE75C;" />
                     </MenuFlyoutItem.Icon>
                 </MenuFlyoutItem>
 
