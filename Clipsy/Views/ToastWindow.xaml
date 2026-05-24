@@ -64,7 +64,7 @@
                             Visibility="Collapsed"
                             Click="OnAction1Click" />
                     <Button x:Name="Action2Btn"
-                            Style="{StaticResource ClipsyButtonAccent}"
+                            Style="{StaticResource ClipsyButtonPrimary}"
                             FontSize="12"
                             Padding="8,4"
                             Visibility="Collapsed"
