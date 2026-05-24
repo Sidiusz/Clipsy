@@ -11,6 +11,7 @@
                 BorderThickness="1"
                 CornerRadius="8"
                 Width="380"
+                Opacity="0"
                 PointerEntered="OnPointerEntered"
                 PointerExited="OnPointerExited">
             <Border.RenderTransform>
