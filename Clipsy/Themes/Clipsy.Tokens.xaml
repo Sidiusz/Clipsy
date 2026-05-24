@@ -34,7 +34,7 @@
          right-click context menu mockup. Hover/Pressed go progressively
          darker; Dim is the same hue at low alpha for subtle backgrounds. -->
     <Color x:Key="ClipsyAccent">#FFF59E0B</Color>
-    <Color x:Key="ClipsyAccentHover">#FFD97706</Color>
+    <Color x:Key="ClipsyAccentHover">#FFE87D0D</Color>
     <Color x:Key="ClipsyAccentPressed">#FFB45309</Color>
     <Color x:Key="ClipsyAccentDim">#28F59E0B</Color>
     <Color x:Key="ClipsyAccentDimStrong">#3DF59E0B</Color>
@@ -155,5 +155,26 @@
     <StaticResource x:Key="ComboBoxItemBackgroundSelected"        ResourceKey="ClipsyBg3Brush" />
     <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="ClipsyBg3Brush" />
     <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed"     ResourceKey="ClipsyBgActiveBrush" />
+
+    <!-- MenuFlyoutItem / MenuFlyoutSubItem: paint hover/press with the
+         brand accent and flip foreground + icon to black so the text
+         reads cleanly on the amber fill. Default WinUI uses a subtle
+         grey tint that ignored our accent. -->
+    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver"   Color="{StaticResource ClipsyAccentHover}" />
+    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed"       Color="{StaticResource ClipsyAccentPressed}" />
+    <SolidColorBrush x:Key="MenuFlyoutItemForegroundPointerOver"   Color="Black" />
+    <SolidColorBrush x:Key="MenuFlyoutItemForegroundPressed"       Color="Black" />
+    <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPointerOver" Color="Black" />
+    <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPressed"     Color="Black" />
+
+    <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPointerOver"     Color="{StaticResource ClipsyAccentHover}" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPressed"         Color="{StaticResource ClipsyAccentPressed}" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened"   Color="{StaticResource ClipsyAccentHover}" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPointerOver"     Color="Black" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPressed"         Color="Black" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundSubMenuOpened"   Color="Black" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemChevronPointerOver"        Color="Black" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemChevronPressed"            Color="Black" />
+    <SolidColorBrush x:Key="MenuFlyoutSubItemChevronSubMenuOpened"      Color="Black" />
 
 </ResourceDictionary>
