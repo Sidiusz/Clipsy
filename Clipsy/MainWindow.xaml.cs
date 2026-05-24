@@ -19,6 +19,7 @@ public sealed partial class MainWindow : Window
     public event Action? CaptureRequested;
     public event Action? RecordRequested;
     public event Action? OpenFolderRequested;
+    public event Action? OpenVideoFolderRequested;
     public event Action? SettingsRequested;
     public event Action? AboutRequested;
     public event Action? ExitRequested;

@@ -17,7 +17,7 @@
                 </Grid.ColumnDefinitions>
                 <Border Width="34" Height="34" CornerRadius="8"
                         Background="{StaticResource ClipsyAccentBrush}"
-                        VerticalAlignment="Center">
+                        VerticalAlignment="Top" Margin="0,2,0,0">
                     <FontIcon Glyph="&#xE722;" FontSize="16" Foreground="White"
                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
@@ -26,9 +26,22 @@
                     <TextBlock Text="Clipsy" FontSize="13" FontWeight="SemiBold"
                                Foreground="{StaticResource ClipsyTextBrush}"
                                FontFamily="{StaticResource ClipsyFontFamily}"/>
-                    <TextBlock x:Name="HeaderStatus" Text="ready" FontSize="11"
+                    <TextBlock x:Name="HeaderVersion" FontSize="11"
                                Foreground="{StaticResource ClipsyText3Brush}"
                                FontFamily="{StaticResource ClipsyFontFamily}"/>
+                    <!-- Update status row — visible only when Checking / Available / Failed -->
+                    <Grid x:Name="UpdateRow" Margin="0,3,0,0" Visibility="Collapsed"
+                          Tapped="OnUpdateRowTapped" IsHitTestVisible="False">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <FontIcon x:Name="UpdateRowIcon" FontSize="11"
+                                  Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="UpdateRowText" Grid.Column="1"
+                                   FontSize="11" VerticalAlignment="Center"
+                                   FontFamily="{StaticResource ClipsyFontFamily}"/>
+                    </Grid>
                 </StackPanel>
             </Grid>
 
@@ -60,44 +73,39 @@
                            VerticalAlignment="Center" Margin="0,0,10,0"/>
             </Grid>
 
-            <!-- ── Record region ── -->
-            <Grid x:Name="RecordRow" Height="34" Margin="0,1" CornerRadius="6"
+            <!-- ── Open screenshots folder ── -->
+            <Grid x:Name="ScreenshotsFolderRow" Height="34" Margin="0,1" CornerRadius="6"
                   Background="Transparent"
-                  Tapped="OnRecordClick"
+                  Tapped="OnOpenScreenshotsFolderClick"
                   PointerEntered="OnItemPointerEntered" PointerExited="OnItemPointerExited"
                   PointerPressed="OnItemPointerPressed" PointerReleased="OnItemPointerReleased">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="36"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Ellipse x:Name="RecordDot" Width="10" Height="10"
-                         Fill="{StaticResource ClipsyText2Brush}"
-                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                <TextBlock x:Name="RecordTxt" Grid.Column="1" Text="Record region"
+                <FontIcon x:Name="ScreenshotsFolderIcon" Glyph="&#xE8B7;" FontSize="15"
+                          Foreground="{StaticResource ClipsyText2Brush}"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <TextBlock x:Name="ScreenshotsFolderTxt" Grid.Column="1"
                            FontSize="13" Foreground="{StaticResource ClipsyTextBrush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center"/>
-                <TextBlock x:Name="RecordShortcut" Grid.Column="2" Text="Ctrl &#x21E7; R"
-                           FontSize="11" Foreground="{StaticResource ClipsyText3Brush}"
-                           FontFamily="{StaticResource ClipsyFontFamily}"
-                           VerticalAlignment="Center" Margin="0,0,10,0"/>
             </Grid>
 
-            <!-- ── Open captures folder ── -->
-            <Grid x:Name="FolderRow" Height="34" Margin="0,1" CornerRadius="6"
+            <!-- ── Open videos folder ── -->
+            <Grid x:Name="VideoFolderRow" Height="34" Margin="0,1" CornerRadius="6"
                   Background="Transparent"
-                  Tapped="OnOpenFolderClick"
+                  Tapped="OnOpenVideoFolderClick"
                   PointerEntered="OnItemPointerEntered" PointerExited="OnItemPointerExited"
                   PointerPressed="OnItemPointerPressed" PointerReleased="OnItemPointerReleased">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="36"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <FontIcon x:Name="FolderIcon" Glyph="&#xE8B7;" FontSize="15"
+                <FontIcon x:Name="VideoFolderIcon" Glyph="&#xE8B2;" FontSize="15"
                           Foreground="{StaticResource ClipsyText2Brush}"
                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                <TextBlock x:Name="FolderTxt" Grid.Column="1" Text="Open captures folder"
+                <TextBlock x:Name="VideoFolderTxt" Grid.Column="1"
                            FontSize="13" Foreground="{StaticResource ClipsyTextBrush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center"/>
@@ -129,25 +137,6 @@
                            FontSize="11" Foreground="{StaticResource ClipsyText3Brush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center" Margin="0,0,10,0"/>
-            </Grid>
-
-            <!-- ── About ── -->
-            <Grid x:Name="AboutRow" Height="34" Margin="0,1" CornerRadius="6"
-                  Background="Transparent"
-                  Tapped="OnAboutClick"
-                  PointerEntered="OnItemPointerEntered" PointerExited="OnItemPointerExited"
-                  PointerPressed="OnItemPointerPressed" PointerReleased="OnItemPointerReleased">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="36"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <FontIcon x:Name="AboutIcon" Glyph="&#xE946;" FontSize="15"
-                          Foreground="{StaticResource ClipsyText2Brush}"
-                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                <TextBlock x:Name="AboutTxt" Grid.Column="1" Text="About"
-                           FontSize="13" Foreground="{StaticResource ClipsyTextBrush}"
-                           FontFamily="{StaticResource ClipsyFontFamily}"
-                           VerticalAlignment="Center"/>
             </Grid>
 
             <!-- ── Separator 3 ── -->
