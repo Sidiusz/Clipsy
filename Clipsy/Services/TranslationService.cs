@@ -17,7 +17,7 @@ public sealed record TranslationLang(string Code, string En, string Ru);
 public static class TranslationService
 {
     private const int ChunkLimitMyMemory = 480;
-    private const int ChunkLimitGoogle   = 4000;
+    private const int ChunkLimitGoogle   = 4500;
 
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
@@ -48,17 +48,47 @@ public static class TranslationService
         {
             bool google = string.Equals(service, "Google", StringComparison.OrdinalIgnoreCase);
             int limit = google ? ChunkLimitGoogle : ChunkLimitMyMemory;
-            var chunks = SplitIntoChunks(text.Trim(), limit);
-            var results = new List<string>(chunks.Count);
-            foreach (var chunk in chunks)
+
+            // Translate paragraph-by-paragraph so the original line structure
+            // (which carries meaning — bullet lists, code, multi-line headings)
+            // is preserved. Sentence-level chunking only kicks in for a single
+            // paragraph that on its own exceeds the per-request limit.
+            var paragraphs = text.Split('\n');
+            var translated = new string[paragraphs.Length];
+
+            for (int i = 0; i < paragraphs.Length; i++)
             {
-                var translated = google
-                    ? await TranslateChunkGoogleAsync(chunk, from, to)
-                    : await TranslateChunkMyMemoryAsync(chunk, from, to);
-                if (translated == null) return null;
-                results.Add(translated);
+                var p = paragraphs[i];
+                if (string.IsNullOrWhiteSpace(p))
+                {
+                    translated[i] = p;
+                    continue;
+                }
+                if (p.Length <= limit)
+                {
+                    var t = google
+                        ? await TranslateChunkGoogleAsync(p, from, to)
+                        : await TranslateChunkMyMemoryAsync(p, from, to);
+                    if (t == null) return null;
+                    translated[i] = t;
+                }
+                else
+                {
+                    var chunks = SplitIntoChunks(p, limit);
+                    var parts = new List<string>(chunks.Count);
+                    foreach (var c in chunks)
+                    {
+                        var t = google
+                            ? await TranslateChunkGoogleAsync(c, from, to)
+                            : await TranslateChunkMyMemoryAsync(c, from, to);
+                        if (t == null) return null;
+                        parts.Add(t);
+                    }
+                    translated[i] = string.Join(" ", parts);
+                }
             }
-            return string.Join(" ", results);
+
+            return string.Join("\n", translated);
         }
         catch (Exception ex)
         {

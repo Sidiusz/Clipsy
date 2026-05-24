@@ -2610,15 +2610,24 @@ public sealed partial class CaptureOverlayWindow : Window
         await FadeOutLaterAsync(OcrStatusLabel, 1200);
     }
 
+    private string? _lastTranslateSource;
+
     private async void OnOcrTranslate(object sender, RoutedEventArgs e)
     {
         string text = OcrTextBox.SelectionLength > 0
             ? OcrTextBox.SelectedText
             : OcrTextBox.Text;
         if (string.IsNullOrWhiteSpace(text)) return;
+        await DoTranslateAsync(text);
+    }
+
+    private async System.Threading.Tasks.Task DoTranslateAsync(string text)
+    {
+        _lastTranslateSource = text;
         TranslateTarget.Text = "...";
         TranslatePanel.Width = OcrTextPanel.ActualWidth;
         TranslatePanel.Visibility = Visibility.Visible;
+        UpdateTranslateButtons();
 
         var cfg = SettingsService.Instance.Settings;
         string from = cfg.TranslateFrom;
@@ -2634,6 +2643,69 @@ public sealed partial class CaptureOverlayWindow : Window
 
         var translated = await TranslationService.TranslateAsync(text, from, to, cfg.TranslateService);
         TranslateTarget.Text = translated ?? Strings.Get("TranslateUnavailable");
+    }
+
+    private void UpdateTranslateButtons()
+    {
+        if (TranslateFromBtn == null || TranslateToBtn == null) return;
+        var s = SettingsService.Instance.Settings;
+        TranslateFromBtn.Content = LangBadge(s.TranslateFrom);
+        TranslateToBtn.Content   = LangBadge(s.TranslateTo == "ui" ? Strings.Lang : s.TranslateTo);
+    }
+
+    private static string LangBadge(string code) => code.ToLowerInvariant() switch
+    {
+        "auto" => "AUTO",
+        "ui"   => Strings.Lang.ToUpperInvariant(),
+        _      => code.ToUpperInvariant()
+    };
+
+    private void OnTranslateFromBtnClick(object sender, RoutedEventArgs e)
+        => ShowLangFlyout((Button)sender, isFrom: true);
+
+    private void OnTranslateToBtnClick(object sender, RoutedEventArgs e)
+        => ShowLangFlyout((Button)sender, isFrom: false);
+
+    private void ShowLangFlyout(Button anchor, bool isFrom)
+    {
+        var flyout = new MenuFlyout();
+        var cfg = SettingsService.Instance.Settings;
+        bool google = string.Equals(cfg.TranslateService, "Google", StringComparison.OrdinalIgnoreCase);
+
+        if (isFrom && google)
+        {
+            var auto = new MenuFlyoutItem { Text = Strings.Get("LangAutoDetect") };
+            auto.Click += async (_, _) => await SetTranslateLangAsync("auto", isFrom);
+            flyout.Items.Add(auto);
+            flyout.Items.Add(new MenuFlyoutSeparator());
+        }
+        if (!isFrom)
+        {
+            var ui = new MenuFlyoutItem { Text = Strings.Get("LangUiDefault") };
+            ui.Click += async (_, _) => await SetTranslateLangAsync("ui", isFrom);
+            flyout.Items.Add(ui);
+            flyout.Items.Add(new MenuFlyoutSeparator());
+        }
+        foreach (var lang in TranslationService.LangCatalog)
+        {
+            var code = lang.Code;
+            string label = (Strings.Lang == "ru" ? lang.Ru : lang.En) + $"  ({code.ToUpperInvariant()})";
+            var item = new MenuFlyoutItem { Text = label };
+            item.Click += async (_, _) => await SetTranslateLangAsync(code, isFrom);
+            flyout.Items.Add(item);
+        }
+        flyout.ShowAt(anchor);
+    }
+
+    private async System.Threading.Tasks.Task SetTranslateLangAsync(string code, bool isFrom)
+    {
+        var s = SettingsService.Instance.Settings;
+        if (isFrom) s.TranslateFrom = code;
+        else        s.TranslateTo   = code;
+        SettingsService.Instance.Save();
+        UpdateTranslateButtons();
+        if (!string.IsNullOrEmpty(_lastTranslateSource))
+            await DoTranslateAsync(_lastTranslateSource);
     }
 
     private void OnOcrPanelDragStart(object sender, PointerRoutedEventArgs e)
