@@ -14,6 +14,8 @@ public partial class App : Application
     public MainWindow? HostWindow { get; private set; }
     public HotkeyService? Hotkey { get; private set; }
 
+    private Clipsy.Views.TrayMenuWindow? _trayMenu;
+
     public App()
     {
         InitializeComponent();
@@ -60,11 +62,21 @@ public partial class App : Application
         HostWindow.SettingsRequested   += OnSettingsRequested;
         HostWindow.AboutRequested      += OnAboutRequested;
         HostWindow.ExitRequested       += OnExitRequested;
+        HostWindow.MenuRequested       += OnMenuRequested;
 
         // Activate the host so the WinUI 3 XAML island starts. The window
         // is offscreen + tool-window so it's invisible, but it must be
-        // active or the TaskbarIcon's commands and ContextFlyout never wire.
+        // active or the TaskbarIcon's commands never wire.
         HostWindow.Activate();
+
+        // Pre-create the tray menu after the XAML island is live.
+        _trayMenu = new Clipsy.Views.TrayMenuWindow();
+        _trayMenu.CaptureClicked    += OnCaptureRequested;
+        _trayMenu.RecordClicked     += OnRecordRequested;
+        _trayMenu.OpenFolderClicked += OnOpenFolderRequested;
+        _trayMenu.SettingsClicked   += OnSettingsRequested;
+        _trayMenu.AboutClicked      += OnAboutRequested;
+        _trayMenu.ExitClicked       += OnExitRequested;
         ThemeService.Register(HostWindow.Content as Microsoft.UI.Xaml.FrameworkElement);
 
         Hotkey = new HotkeyService(HostWindow.DispatcherQueue);
@@ -127,6 +139,11 @@ public partial class App : Application
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Update check pipeline failed: {ex.Message}");
         }
+    }
+
+    private void OnMenuRequested()
+    {
+        _trayMenu?.ShowAtCursor();
     }
 
     private void OnCaptureRequested()
