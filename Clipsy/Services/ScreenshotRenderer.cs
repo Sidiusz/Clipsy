@@ -220,11 +220,100 @@ public static class ScreenshotRenderer
     {
         var color = ExtractTextColor(t);
         using var brush = new SolidBrush(color);
-        using var font = new Font("Segoe UI", (float)(t.FontSize * scale * 0.75), FontStyle.Bold, GraphicsUnit.Point);
+
+        var familyName = ExtractTextFamily(t);
+        var family = ResolveFontFamily(familyName);
+        // FontSize in DIPs; GDI Font wants points (75% of DIPs at 96 DPI).
+        var size = (float)(t.FontSize * scale * 0.75);
+        Font? font = null;
+        try
+        {
+            font = new Font(family, size, FontStyle.Bold, GraphicsUnit.Point);
+        }
+        catch
+        {
+            // Some families only ship a Regular face — Bold throws.
+            try { font = new Font(family, size, FontStyle.Regular, GraphicsUnit.Point); }
+            catch { font = new Font(FontFamily.GenericSansSerif, size, FontStyle.Bold, GraphicsUnit.Point); }
+        }
         var pos = new PointF(
             (float)((t.Position.X - ox) * scale),
             (float)((t.Position.Y - oy) * scale));
         g.DrawString(t.Text, font, brush, pos);
+        font.Dispose();
+    }
+
+    private static string ExtractTextFamily(TextElement t)
+    {
+        if (t.Visual is Microsoft.UI.Xaml.Controls.TextBlock tb && tb.FontFamily != null)
+            return tb.FontFamily.Source ?? string.Empty;
+        return string.Empty;
+    }
+
+    // PrivateFontCollection for bundled .ttf files (Onest). GDI does not see
+    // ms-appx:// URIs and won't render fonts that aren't system-installed,
+    // so register the file ourselves once and pull the family by name.
+    private static readonly System.Drawing.Text.PrivateFontCollection _privateFonts = new();
+    private static FontFamily? _onestFamily;
+    private static bool _onestLoaded;
+
+    private static FontFamily ResolveFontFamily(string source)
+    {
+        // FontFamily.Source might look like:
+        //   "Arial"
+        //   "Segoe UI Variable, Segoe UI, sans-serif"
+        //   "ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, ..."
+        if (string.IsNullOrWhiteSpace(source)) return FontFamily.GenericSansSerif;
+
+        // Walk the fallback chain left→right, return the first family GDI can resolve.
+        foreach (var rawPart in source.Split(','))
+        {
+            var part = rawPart.Trim();
+            if (string.IsNullOrEmpty(part)) continue;
+
+            // ms-appx URI: extract postscript family after '#' and load the
+            // referenced .ttf into our private collection.
+            if (part.StartsWith("ms-appx:", StringComparison.OrdinalIgnoreCase))
+            {
+                int hash = part.IndexOf('#');
+                if (hash < 0) continue;
+                string family = part.Substring(hash + 1).Trim();
+                EnsureBundledOnestLoaded();
+                if (_onestFamily != null &&
+                    string.Equals(_onestFamily.Name, family, StringComparison.OrdinalIgnoreCase))
+                    return _onestFamily;
+                continue;
+            }
+
+            // Strip CSS-style generic ("sans-serif", "serif", "monospace").
+            if (part.Equals("sans-serif", StringComparison.OrdinalIgnoreCase)) return FontFamily.GenericSansSerif;
+            if (part.Equals("serif", StringComparison.OrdinalIgnoreCase))      return FontFamily.GenericSerif;
+            if (part.Equals("monospace", StringComparison.OrdinalIgnoreCase))  return FontFamily.GenericMonospace;
+
+            try { return new FontFamily(part); } catch { /* not installed, try next */ }
+        }
+        return FontFamily.GenericSansSerif;
+    }
+
+    private static void EnsureBundledOnestLoaded()
+    {
+        if (_onestLoaded) return;
+        _onestLoaded = true;
+        try
+        {
+            var dir = AppContext.BaseDirectory;
+            var path = Path.Combine(dir, "Assets", "Fonts", "Onest-VariableFont_wght.ttf");
+            if (File.Exists(path))
+            {
+                _privateFonts.AddFontFile(path);
+                if (_privateFonts.Families.Length > 0)
+                    _onestFamily = _privateFonts.Families[0];
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Onest font load failed: {ex.Message}");
+        }
     }
 
     private static Color ExtractStrokeColor(DrawElement el)

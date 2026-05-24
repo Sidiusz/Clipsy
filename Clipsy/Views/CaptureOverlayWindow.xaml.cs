@@ -1275,6 +1275,16 @@ public sealed partial class CaptureOverlayWindow : Window
     private void FinishStroke()
     {
         if (_activeStroke == null || _activeStrokeVisual == null) return;
+        // Single click → zero-distance stroke. Polyline with one point (or two
+        // identical points) renders nothing even with Round caps. Add a 0.01-px
+        // sibling so the round end-cap paints a visible dot.
+        if (_activeStroke.Points.Count == 1)
+        {
+            var only = _activeStroke.Points[0];
+            var twin = new Point(only.X + 0.01, only.Y + 0.01);
+            _activeStroke.Points.Add(twin);
+            _activeStrokeVisual.Points.Add(twin);
+        }
         DrawingCanvas.Children.Remove(_activeStrokeVisual);
         _drawing.Add(_activeStroke);
         _activeStroke = null;
@@ -1399,6 +1409,15 @@ public sealed partial class CaptureOverlayWindow : Window
     // CommitText agree on the visual offset between the box and the glyph.
     private static readonly Thickness TextEntryPadding = new(4, 2, 4, 2);
 
+    // Drag handle that sits above the active TextBox so the user can move
+    // the in-progress text around the screen before committing it. Tracked
+    // so CancelText / CommitText can find and remove it.
+    private Border? _activeDragHandle;
+    private bool _draggingActiveText;
+    private Point _dragStartPointer;
+    private double _dragStartTbLeft;
+    private double _dragStartTbTop;
+
     private void StartTextEntry(Point pos)
     {
         // Commit any prior entry before opening a new one.
@@ -1422,13 +1441,21 @@ public sealed partial class CaptureOverlayWindow : Window
         // Offset so the first glyph's optical center sits on the click point
         // instead of the TextBox top-left corner. Adjusts again on the first
         // keystroke once the actual typed character is known.
-        Canvas.SetLeft(tb, pos.X - TextEntryPadding.Left - glyphW / 2);
-        Canvas.SetTop(tb,  pos.Y - TextEntryPadding.Top  - glyphH / 2);
+        double tbLeft = pos.X - TextEntryPadding.Left - glyphW / 2;
+        double tbTop  = pos.Y - TextEntryPadding.Top  - glyphH / 2;
+        Canvas.SetLeft(tb, tbLeft);
+        Canvas.SetTop(tb,  tbTop);
         DrawingCanvas.Children.Add(tb);
         _activeTextBox = tb;
         _activeTextAnchor = pos;
         _activeTextAnchorApplied = false;
-        tb.LostFocus += (_, _) => CommitText();
+        tb.LostFocus += (_, _) =>
+        {
+            // Don't commit while the user is dragging the handle — focus moves
+            // off the textbox during drag.
+            if (_draggingActiveText) return;
+            CommitText();
+        };
         tb.KeyDown += (_, ke) =>
         {
             if (ke.Key == VirtualKey.Enter) { ke.Handled = true; CommitText(); }
@@ -1440,7 +1467,79 @@ public sealed partial class CaptureOverlayWindow : Window
         tb.PointerPressed += (_, ev) => ev.Handled = true;
         tb.PointerReleased += (_, ev) => ev.Handled = true;
         DrawingCanvas.IsHitTestVisible = true;
+
+        // Drag handle: small pill above the textbox. Click-drag moves the
+        // textbox to a new screen position. Anchor (used for centering on
+        // future keystroke updates) follows the move.
+        var handle = new Border
+        {
+            Background = new SolidColorBrush(_drawing.Settings.Color),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(6, 1, 6, 2),
+            Child = new TextBlock
+            {
+                Text = "✥",     // four-direction arrow glyph (Segoe Fluent)
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
+                FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
+                FontSize = 10,
+            },
+        };
+        ToolTipService.SetToolTip(handle, "Drag to reposition");
+        Canvas.SetLeft(handle, tbLeft);
+        Canvas.SetTop(handle, tbTop - 18); // sit just above the box
+        DrawingCanvas.Children.Add(handle);
+        _activeDragHandle = handle;
+
+        handle.PointerPressed += OnDragHandlePressed;
+        handle.PointerMoved   += OnDragHandleMoved;
+        handle.PointerReleased += OnDragHandleReleased;
+        handle.PointerCaptureLost += (_, _) => _draggingActiveText = false;
+
         tb.Focus(FocusState.Programmatic);
+    }
+
+    private void OnDragHandlePressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (_activeTextBox == null || sender is not UIElement el) return;
+        _draggingActiveText = true;
+        _dragStartPointer = e.GetCurrentPoint(DrawingCanvas).Position;
+        _dragStartTbLeft = Canvas.GetLeft(_activeTextBox);
+        _dragStartTbTop  = Canvas.GetTop(_activeTextBox);
+        el.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnDragHandleMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_draggingActiveText || _activeTextBox == null || _activeDragHandle == null) return;
+        var p = e.GetCurrentPoint(DrawingCanvas).Position;
+        double dx = p.X - _dragStartPointer.X;
+        double dy = p.Y - _dragStartPointer.Y;
+        double newLeft = _dragStartTbLeft + dx;
+        double newTop  = _dragStartTbTop  + dy;
+        Canvas.SetLeft(_activeTextBox, newLeft);
+        Canvas.SetTop(_activeTextBox,  newTop);
+        Canvas.SetLeft(_activeDragHandle, newLeft);
+        Canvas.SetTop(_activeDragHandle, newTop - 18);
+        // Move the anchor too so future re-centering on first keystroke
+        // (if it hasn't fired yet) stays consistent with the new position.
+        _activeTextAnchor = new Point(
+            _activeTextAnchor.X + dx,
+            _activeTextAnchor.Y + dy);
+        _dragStartPointer = p;
+        _dragStartTbLeft = newLeft;
+        _dragStartTbTop  = newTop;
+        e.Handled = true;
+    }
+
+    private void OnDragHandleReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is UIElement el) el.ReleasePointerCaptures();
+        _draggingActiveText = false;
+        // Return focus to the textbox so the user can keep typing without
+        // an extra click.
+        _activeTextBox?.Focus(FocusState.Programmatic);
+        e.Handled = true;
     }
 
     private Point _activeTextAnchor;
@@ -1486,6 +1585,11 @@ public sealed partial class CaptureOverlayWindow : Window
         owning.TextChanged -= OnActiveTextBoxTextChanged;
         _activeTextBox = null;
         DrawingCanvas.Children.Remove(owning);
+        if (_activeDragHandle != null)
+        {
+            DrawingCanvas.Children.Remove(_activeDragHandle);
+            _activeDragHandle = null;
+        }
         DrawingCanvas.IsHitTestVisible = false;
         if (string.IsNullOrWhiteSpace(text)) return;
         var tb = new TextBlock
@@ -1517,6 +1621,11 @@ public sealed partial class CaptureOverlayWindow : Window
         if (_activeTextBox == null) return;
         DrawingCanvas.Children.Remove(_activeTextBox);
         _activeTextBox = null;
+        if (_activeDragHandle != null)
+        {
+            DrawingCanvas.Children.Remove(_activeDragHandle);
+            _activeDragHandle = null;
+        }
         DrawingCanvas.IsHitTestVisible = false;
     }
 
