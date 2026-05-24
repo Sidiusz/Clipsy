@@ -1469,19 +1469,21 @@ public sealed partial class CaptureOverlayWindow : Window
         DrawingCanvas.IsHitTestVisible = true;
 
         // Drag handle: small pill above the textbox. Click-drag moves the
-        // textbox to a new screen position. Anchor (used for centering on
-        // future keystroke updates) follows the move.
+        // textbox to a new screen position. Neutral dark grey + Fluent Move
+        // glyph so it doesn't read as a close/danger button.
         var handle = new Border
         {
-            Background = new SolidColorBrush(_drawing.Settings.Color),
+            Background = new SolidColorBrush(Color.FromArgb(0xE0, 0x2E, 0x2E, 0x32)),
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x60, 0x60, 0x66)),
+            BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(6, 1, 6, 2),
-            Child = new TextBlock
+            Padding = new Thickness(6, 2, 6, 2),
+            Child = new FontIcon
             {
-                Text = "✥",     // four-direction arrow glyph (Segoe Fluent)
-                Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
+                Glyph = "", // Move (Segoe Fluent Icons)
                 FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
-                FontSize = 10,
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
             },
         };
         ToolTipService.SetToolTip(handle, "Drag to reposition");
