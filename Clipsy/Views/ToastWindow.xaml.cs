@@ -7,7 +7,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Foundation;
 using Windows.Graphics;
 using Windows.UI;
@@ -26,17 +25,19 @@ public sealed partial class ToastWindow : Window
     private const int MinH        = 50;
     private const int ToastGap    = 8;
     private const int ToastMargin = 16;
-    private const int FadeInMs    = 200;
-    private const int FadeOutMs   = 150;
+    private const int FadeInMs    = 220;
+    private const int FadeOutMs   = 160;
 
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
     private readonly Action? _action1;
     private readonly Action? _action2;
     private DispatcherTimer? _dismissTimer;
+    private DispatcherTimer? _slideTimer;
     private bool _isHovered;
     private bool _fadeInDone;
     private bool _isFadingOut;
+    private int _targetX, _targetY, _w, _h, _offscreenX;
 
     public ToastWindow(ToastService.ToastOptions opts)
     {
@@ -57,25 +58,31 @@ public sealed partial class ToastWindow : Window
     internal void PositionAtSlot(int index)
     {
         double scale = DpiScale();
-        int w = (int)(ToastW * scale);
-        int h = ComputeHeightPx(scale);
+        _w = (int)(ToastW * scale);
+        _h = ComputeHeightPx(scale);
         int gap = (int)(ToastGap * scale);
         int margin = (int)(ToastMargin * scale);
 
         var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
         GetMonitorInfo(MonitorFromWindow(_hwnd, MONITOR_DEFAULTTOPRIMARY), ref mi);
 
-        int x = mi.rcWork.right - w - margin;
-        int y = mi.rcWork.bottom - h - margin - index * (h + gap);
-
-        _appWindow.MoveAndResize(new RectInt32(x, y, w, h));
-        _appWindow.Show(false);
-        SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        _targetX = mi.rcWork.right - _w - margin;
+        _targetY = mi.rcWork.bottom - _h - margin - index * (_h + gap);
+        _offscreenX = mi.rcWork.right; // window left edge sits exactly at work-area right edge
 
         if (!_fadeInDone)
         {
             _fadeInDone = true;
+            // Show offscreen to the right, then animate left into place.
+            _appWindow.MoveAndResize(new RectInt32(_offscreenX, _targetY, _w, _h));
+            _appWindow.Show(false);
+            SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             BeginFadeIn();
+        }
+        else
+        {
+            // Re-stack snap when another toast closes — no animation.
+            SetWindowPos(_hwnd, HWND_TOPMOST, _targetX, _targetY, _w, _h, SWP_NOACTIVATE);
         }
     }
 
@@ -94,16 +101,11 @@ public sealed partial class ToastWindow : Window
         return (int)(fallback * scale);
     }
 
-    // ── Animation ────────────────────────────────────────────────
+    // ── Animation (animates the WINDOW position via Win32) ──────
 
     private void BeginFadeIn()
     {
-        // Slide only — WinUI 3 Window can't easily fade Opacity without
-        // breaking content (layered windows kill DComp, transparent HWND
-        // backgrounds reveal black). Slide gives motion without transparency.
-        var sb = new Storyboard();
-        AddAnim(sb, SlideTransform, "X", 380, 0, FadeInMs, new CubicEase { EasingMode = EasingMode.EaseOut });
-        sb.Begin();
+        AnimateX(_offscreenX, _targetX, FadeInMs, EaseOutCubic);
     }
 
     private void BeginFadeOut()
@@ -112,27 +114,36 @@ public sealed partial class ToastWindow : Window
         _isFadingOut = true;
         _dismissTimer?.Stop();
         _dismissTimer = null;
-
-        var sb = new Storyboard();
-        AddAnim(sb, SlideTransform, "X", 0, 380, FadeOutMs, new QuadraticEase { EasingMode = EasingMode.EaseIn });
-        sb.Completed += (_, _) => { try { Close(); } catch { } };
-        sb.Begin();
-    }
-
-    private static void AddAnim(Storyboard sb, DependencyObject target, string prop,
-        double from, double to, double ms, EasingFunctionBase? ease = null)
-    {
-        var anim = new DoubleAnimation
+        AnimateX(_targetX, _offscreenX, FadeOutMs, EaseInQuad, onComplete: () =>
         {
-            From           = from,
-            To             = to,
-            Duration       = new Duration(TimeSpan.FromMilliseconds(ms)),
-            EasingFunction = ease,
-        };
-        Storyboard.SetTarget(anim, target);
-        Storyboard.SetTargetProperty(anim, prop);
-        sb.Children.Add(anim);
+            try { Close(); } catch { }
+        });
     }
+
+    private void AnimateX(int from, int to, int durationMs, Func<double, double> easing, Action? onComplete = null)
+    {
+        _slideTimer?.Stop();
+        _slideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        double elapsed = 0;
+        _slideTimer.Tick += (_, _) =>
+        {
+            elapsed += 16;
+            double t = Math.Min(elapsed / durationMs, 1.0);
+            double eased = easing(t);
+            int x = (int)(from + (to - from) * eased);
+            SetWindowPos(_hwnd, HWND_TOPMOST, x, _targetY, _w, _h, SWP_NOACTIVATE);
+            if (t >= 1.0)
+            {
+                _slideTimer?.Stop();
+                _slideTimer = null;
+                onComplete?.Invoke();
+            }
+        };
+        _slideTimer.Start();
+    }
+
+    private static double EaseOutCubic(double t) => 1 - Math.Pow(1 - t, 3);
+    private static double EaseInQuad(double t)   => t * t;
 
     // ── Hover pause ──────────────────────────────────────────────
 
@@ -167,8 +178,6 @@ public sealed partial class ToastWindow : Window
         style |= WS_POPUP;
         SetWindowLong(_hwnd, GWL_STYLE, unchecked((int)style));
 
-        // NO WS_EX_LAYERED — breaks WinUI 3 DComp rendering (XAML doesn't
-        // composite through layered windows; user gets a black rectangle).
         int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
         exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
         SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle);
@@ -176,7 +185,6 @@ public sealed partial class ToastWindow : Window
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
-        // Solid window — no transparency tricks. DWM rounds corners.
         int round = 2; // DWMWCP_ROUND
         DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
     }
@@ -279,10 +287,10 @@ public sealed partial class ToastWindow : Window
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
 
-    private const int SWP_NOMOVE      = 0x0002;
-    private const int SWP_NOSIZE      = 0x0001;
-    private const int SWP_NOZORDER    = 0x0004;
-    private const int SWP_NOACTIVATE  = 0x0010;
+    private const int SWP_NOMOVE       = 0x0002;
+    private const int SWP_NOSIZE       = 0x0001;
+    private const int SWP_NOZORDER     = 0x0004;
+    private const int SWP_NOACTIVATE   = 0x0010;
     private const int SWP_FRAMECHANGED = 0x0020;
 
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
@@ -300,13 +308,13 @@ public sealed partial class ToastWindow : Window
         public uint dwFlags;
     }
 
-    [DllImport("user32.dll")] private static extern int   GetWindowLong(IntPtr h, int n);
-    [DllImport("user32.dll")] private static extern int   SetWindowLong(IntPtr h, int n, int v);
-    [DllImport("user32.dll")] private static extern bool  SetWindowPos(IntPtr h, IntPtr z, int x, int y, int cx, int cy, int flags);
+    [DllImport("user32.dll")] private static extern int    GetWindowLong(IntPtr h, int n);
+    [DllImport("user32.dll")] private static extern int    SetWindowLong(IntPtr h, int n, int v);
+    [DllImport("user32.dll")] private static extern bool   SetWindowPos(IntPtr h, IntPtr z, int x, int y, int cx, int cy, int flags);
     [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr h, int flags);
-    [DllImport("user32.dll")] private static extern bool  GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
-    [DllImport("user32.dll")] private static extern uint  GetDpiForWindow(IntPtr h);
-    [DllImport("user32.dll")] private static extern uint  GetDpiForSystem();
+    [DllImport("user32.dll")] private static extern bool   GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
+    [DllImport("user32.dll")] private static extern uint   GetDpiForWindow(IntPtr h);
+    [DllImport("user32.dll")] private static extern uint   GetDpiForSystem();
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
