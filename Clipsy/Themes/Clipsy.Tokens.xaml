@@ -83,7 +83,10 @@
     <SolidColorBrush x:Key="ClipsyOverlayPanelBrush"   Color="{StaticResource ClipsyOverlayPanel}" />
 
     <!-- ===== Type tokens ===== -->
-    <x:String x:Key="ClipsyFontFamily">Inter, Segoe UI, Segoe UI Variable, sans-serif</x:String>
+    <!-- Bundled Onest variable font. ms-appx URI lets WinUI 3 resolve the
+         .ttf shipped under Assets/Fonts/ without a system install. Fallbacks
+         keep the UI legible if the font file is missing for any reason. -->
+    <x:String x:Key="ClipsyFontFamily">ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, Segoe UI, sans-serif</x:String>
     <x:String x:Key="ClipsyFontFamilyMono">JetBrains Mono, Cascadia Mono, Consolas, monospace</x:String>
 
     <x:Double x:Key="ClipsyFontSizeBody">13</x:Double>
