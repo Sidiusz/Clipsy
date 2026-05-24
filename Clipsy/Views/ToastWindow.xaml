@@ -9,7 +9,7 @@
             BorderBrush="{StaticResource ClipsyBorderBrush}"
             BorderThickness="1"
             CornerRadius="0"
-            Opacity="0"
+            Width="380"
             PointerEntered="OnPointerEntered"
             PointerExited="OnPointerExited">
         <Border.RenderTransform>
@@ -26,20 +26,12 @@
             <!-- Main content -->
             <Grid Margin="20,12,12,12">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Level icon -->
-                <FontIcon x:Name="LevelIcon"
-                          Grid.Column="0"
-                          FontSize="16"
-                          VerticalAlignment="Top"
-                          Margin="0,1,10,0" />
-
                 <!-- Title + body -->
-                <StackPanel Grid.Column="1"
+                <StackPanel Grid.Column="0"
                             Spacing="2"
                             VerticalAlignment="Center">
                     <TextBlock x:Name="TitleText"
@@ -47,19 +39,17 @@
                                FontSize="13"
                                FontWeight="SemiBold"
                                Foreground="{StaticResource ClipsyTextBrush}"
-                               TextTrimming="CharacterEllipsis" />
+                               TextWrapping="Wrap" />
                     <TextBlock x:Name="BodyText"
                                FontFamily="{StaticResource ClipsyFontFamily}"
                                FontSize="12"
                                Foreground="{StaticResource ClipsyText3Brush}"
                                TextWrapping="Wrap"
-                               MaxLines="2"
-                               TextTrimming="CharacterEllipsis"
                                Visibility="Collapsed" />
                 </StackPanel>
 
                 <!-- Action buttons + close -->
-                <StackPanel Grid.Column="2"
+                <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             Spacing="4"
                             VerticalAlignment="Center"

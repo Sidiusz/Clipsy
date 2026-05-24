@@ -4,7 +4,7 @@ using Clipsy.Views;
 
 namespace Clipsy.Services;
 
-public enum ToastCategory { Screenshot, Error, Update, Hint }
+public enum ToastCategory { Screenshot, Video, Clipboard, Error, Update, Hint }
 
 public static class ToastService
 {
@@ -32,6 +32,8 @@ public static class ToastService
         var s = SettingsService.Instance.Settings;
         if (!s.NotificationsEnabled) return;
         if (opts.Category == ToastCategory.Screenshot && !s.NotifyScreenshotSaved) return;
+        if (opts.Category == ToastCategory.Video      && !s.NotifyVideoSaved)       return;
+        if (opts.Category == ToastCategory.Clipboard  && !s.NotifyClipboard)        return;
         if (opts.Category == ToastCategory.Error      && !s.NotifyErrors)           return;
         if (opts.Category == ToastCategory.Update     && !s.NotifyUpdateAvailable)  return;
         if (opts.Category == ToastCategory.Hint       && !s.NotifyHints)            return;

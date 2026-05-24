@@ -149,6 +149,23 @@
                             </Grid>
                         </RadioButton>
 
+                        <RadioButton x:Name="NavNotifications" Tag="notifications"
+                                     Style="{StaticResource ClipsyNavRadio}"
+                                     GroupName="ClipsyNav"
+                                     Checked="OnNavChecked">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon x:Name="IconNavNotifications" Grid.Column="0"
+                                          Glyph="&#xEA8F;" FontSize="16"
+                                          VerticalAlignment="Center" />
+                                <TextBlock x:Name="NavNotificationsLabel" Grid.Column="1"
+                                           Text="Notifications" FontSize="13" VerticalAlignment="Center" />
+                            </Grid>
+                        </RadioButton>
+
                         <RadioButton x:Name="NavInfo" Tag="info"
                                      Style="{StaticResource ClipsyNavRadio}"
                                      GroupName="ClipsyNav"
@@ -432,95 +449,6 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Style="{StaticResource ClipsyGroupCard}">
-                                <StackPanel Spacing="16">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock x:Name="LblNotifications" Text="Notifications"
-                                                   Style="{StaticResource ClipsyBodyStrong}" />
-                                        <TextBlock x:Name="HelperNotifications"
-                                                   Text="Custom pop-ups shown bottom-right, auto-dismiss in 4 s."
-                                                   Style="{StaticResource ClipsyHelper}" />
-                                    </StackPanel>
-
-                                    <!-- Master toggle -->
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" x:Name="LblNotifyMaster"
-                                                   Text="Show notifications"
-                                                   Style="{StaticResource ClipsyBodyStrong}"
-                                                   VerticalAlignment="Center" />
-                                        <ToggleButton x:Name="NotifyMasterSwitch" Grid.Column="1"
-                                                      Style="{StaticResource ClipsyMiniToggle}"
-                                                      Click="OnNotifyMasterToggled"
-                                                      VerticalAlignment="Center" />
-                                    </Grid>
-
-                                    <Border Style="{StaticResource ClipsyHairline}" />
-
-                                    <!-- Per-type toggles -->
-                                    <StackPanel x:Name="NotifySubPanel" Spacing="12">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" x:Name="LblNotifyScreenshot"
-                                                       Text="Screenshot saved"
-                                                       Style="{StaticResource ClipsyBodyStrong}"
-                                                       VerticalAlignment="Center" />
-                                            <ToggleButton x:Name="NotifyScreenshotSwitch" Grid.Column="1"
-                                                          Style="{StaticResource ClipsyMiniToggle}"
-                                                          Click="OnAnyToggleChanged"
-                                                          VerticalAlignment="Center" />
-                                        </Grid>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" x:Name="LblNotifyErrors"
-                                                       Text="Errors"
-                                                       Style="{StaticResource ClipsyBodyStrong}"
-                                                       VerticalAlignment="Center" />
-                                            <ToggleButton x:Name="NotifyErrorsSwitch" Grid.Column="1"
-                                                          Style="{StaticResource ClipsyMiniToggle}"
-                                                          Click="OnAnyToggleChanged"
-                                                          VerticalAlignment="Center" />
-                                        </Grid>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" x:Name="LblNotifyUpdate"
-                                                       Text="Update available"
-                                                       Style="{StaticResource ClipsyBodyStrong}"
-                                                       VerticalAlignment="Center" />
-                                            <ToggleButton x:Name="NotifyUpdateSwitch" Grid.Column="1"
-                                                          Style="{StaticResource ClipsyMiniToggle}"
-                                                          Click="OnAnyToggleChanged"
-                                                          VerticalAlignment="Center" />
-                                        </Grid>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" x:Name="LblNotifyHints"
-                                                       Text="Hints and info"
-                                                       Style="{StaticResource ClipsyBodyStrong}"
-                                                       VerticalAlignment="Center" />
-                                            <ToggleButton x:Name="NotifyHintsSwitch" Grid.Column="1"
-                                                          Style="{StaticResource ClipsyMiniToggle}"
-                                                          Click="OnAnyToggleChanged"
-                                                          VerticalAlignment="Center" />
-                                        </Grid>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
                         </StackPanel>
 
                         <!-- ===== Video ===== -->
@@ -1004,6 +932,133 @@
                                         </ListView.ItemTemplate>
                                     </ListView>
                                 </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- ===== Notifications ===== -->
+                        <StackPanel x:Name="PaneNotifications" Spacing="16" HorizontalAlignment="Stretch" Visibility="Collapsed">
+                            <StackPanel Spacing="4">
+                                <TextBlock x:Name="HdrNotifications" Text="Notifications"
+                                           Style="{StaticResource ClipsySectionTitle}" />
+                                <TextBlock x:Name="SubNotifications"
+                                           Text="Choose which events show a toast."
+                                           Style="{StaticResource ClipsyHelper}" />
+                            </StackPanel>
+
+                            <Border Style="{StaticResource ClipsyGroupCard}">
+                                <StackPanel Spacing="16">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock x:Name="LblNotifications" Text="Notifications"
+                                                   Style="{StaticResource ClipsyBodyStrong}" />
+                                        <TextBlock x:Name="HelperNotifications"
+                                                   Text="Custom pop-ups shown bottom-right, auto-dismiss in 4 s."
+                                                   Style="{StaticResource ClipsyHelper}" />
+                                    </StackPanel>
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="LblNotifyMaster"
+                                                   Text="Show notifications"
+                                                   Style="{StaticResource ClipsyBodyStrong}"
+                                                   VerticalAlignment="Center" />
+                                        <ToggleButton x:Name="NotifyMasterSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnNotifyMasterToggled"
+                                                      VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <StackPanel x:Name="NotifySubPanel" Spacing="12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" x:Name="LblNotifyScreenshot"
+                                                       Text="Screenshot saved"
+                                                       Style="{StaticResource ClipsyBodyStrong}"
+                                                       VerticalAlignment="Center" />
+                                            <ToggleButton x:Name="NotifyScreenshotSwitch" Grid.Column="1"
+                                                          Style="{StaticResource ClipsyMiniToggle}"
+                                                          Click="OnAnyToggleChanged"
+                                                          VerticalAlignment="Center" />
+                                        </Grid>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" x:Name="LblNotifyVideo"
+                                                       Text="Recording saved"
+                                                       Style="{StaticResource ClipsyBodyStrong}"
+                                                       VerticalAlignment="Center" />
+                                            <ToggleButton x:Name="NotifyVideoSwitch" Grid.Column="1"
+                                                          Style="{StaticResource ClipsyMiniToggle}"
+                                                          Click="OnAnyToggleChanged"
+                                                          VerticalAlignment="Center" />
+                                        </Grid>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" x:Name="LblNotifyClipboard"
+                                                       Text="Copied to clipboard"
+                                                       Style="{StaticResource ClipsyBodyStrong}"
+                                                       VerticalAlignment="Center" />
+                                            <ToggleButton x:Name="NotifyClipboardSwitch" Grid.Column="1"
+                                                          Style="{StaticResource ClipsyMiniToggle}"
+                                                          Click="OnAnyToggleChanged"
+                                                          VerticalAlignment="Center" />
+                                        </Grid>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" x:Name="LblNotifyErrors"
+                                                       Text="Errors"
+                                                       Style="{StaticResource ClipsyBodyStrong}"
+                                                       VerticalAlignment="Center" />
+                                            <ToggleButton x:Name="NotifyErrorsSwitch" Grid.Column="1"
+                                                          Style="{StaticResource ClipsyMiniToggle}"
+                                                          Click="OnAnyToggleChanged"
+                                                          VerticalAlignment="Center" />
+                                        </Grid>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" x:Name="LblNotifyUpdate"
+                                                       Text="Update available"
+                                                       Style="{StaticResource ClipsyBodyStrong}"
+                                                       VerticalAlignment="Center" />
+                                            <ToggleButton x:Name="NotifyUpdateSwitch" Grid.Column="1"
+                                                          Style="{StaticResource ClipsyMiniToggle}"
+                                                          Click="OnAnyToggleChanged"
+                                                          VerticalAlignment="Center" />
+                                        </Grid>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" x:Name="LblNotifyHints"
+                                                       Text="Hints and info"
+                                                       Style="{StaticResource ClipsyBodyStrong}"
+                                                       VerticalAlignment="Center" />
+                                            <ToggleButton x:Name="NotifyHintsSwitch" Grid.Column="1"
+                                                          Style="{StaticResource ClipsyMiniToggle}"
+                                                          Click="OnAnyToggleChanged"
+                                                          VerticalAlignment="Center" />
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
                             </Border>
                         </StackPanel>
 

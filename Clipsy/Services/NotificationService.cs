@@ -82,7 +82,7 @@ public static class NotificationService
             NotificationLevel.Info,
             Strings.Get("ToastVideoSaved"),
             $"{fileName} · {FormatSize(sizeKb)}",
-            ToastCategory.Screenshot,
+            ToastCategory.Video,
             action1Icon:    "\xE8E5",
             action1Tooltip: Strings.Get("ToastOpenFile"),
             action1:        () => OpenFile(filePath),
@@ -94,7 +94,7 @@ public static class NotificationService
     // ── Clipboard ────────────────────────────────────────────────
 
     public static void CopiedToClipboard()
-        => Post(NotificationLevel.Info, Strings.Get("ToastCopied"), null, ToastCategory.Screenshot);
+        => Post(NotificationLevel.Info, Strings.Get("ToastCopied"), null, ToastCategory.Clipboard);
 
     // ── Update available ─────────────────────────────────────────
 
