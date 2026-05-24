@@ -4,74 +4,74 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Border x:Name="CardBorder"
-            Background="{StaticResource ClipsyBg2Brush}"
-            BorderBrush="{StaticResource ClipsyBorderBrush}"
-            BorderThickness="1"
-            CornerRadius="0"
-            Width="380"
-            PointerEntered="OnPointerEntered"
-            PointerExited="OnPointerExited">
-        <Border.RenderTransform>
-            <TranslateTransform x:Name="SlideTransform" X="20" />
-        </Border.RenderTransform>
+    <Grid x:Name="RootGrid" Background="Transparent">
+        <Border x:Name="CardBorder"
+                Background="{StaticResource ClipsyBg2Brush}"
+                BorderBrush="{StaticResource ClipsyBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Width="380"
+                PointerEntered="OnPointerEntered"
+                PointerExited="OnPointerExited">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="SlideTransform" X="20" />
+            </Border.RenderTransform>
 
-        <Grid>
-            <!-- Left accent strip -->
-            <Rectangle x:Name="AccentBar"
-                       Width="4"
-                       HorizontalAlignment="Left"
-                       VerticalAlignment="Stretch" />
+            <Grid>
+                <!-- Left accent strip (clipped to border radius by the parent) -->
+                <Rectangle x:Name="AccentBar"
+                           Width="4"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Stretch" />
 
-            <!-- Main content -->
-            <Grid Margin="20,12,12,12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+                <!-- Main content -->
+                <Grid Margin="20,12,12,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                <!-- Title + body -->
-                <StackPanel Grid.Column="0"
-                            Spacing="2"
-                            VerticalAlignment="Center">
-                    <TextBlock x:Name="TitleText"
-                               FontFamily="{StaticResource ClipsyFontFamily}"
-                               FontSize="13"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource ClipsyTextBrush}"
-                               TextWrapping="Wrap" />
-                    <TextBlock x:Name="BodyText"
-                               FontFamily="{StaticResource ClipsyFontFamily}"
-                               FontSize="12"
-                               Foreground="{StaticResource ClipsyText3Brush}"
-                               TextWrapping="Wrap"
-                               Visibility="Collapsed" />
-                </StackPanel>
+                    <StackPanel Grid.Column="0"
+                                Spacing="2"
+                                VerticalAlignment="Center">
+                        <TextBlock x:Name="TitleText"
+                                   FontFamily="{StaticResource ClipsyFontFamily}"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource ClipsyTextBrush}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock x:Name="BodyText"
+                                   FontFamily="{StaticResource ClipsyFontFamily}"
+                                   FontSize="12"
+                                   Foreground="{StaticResource ClipsyText3Brush}"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+                    </StackPanel>
 
-                <!-- Action buttons + close -->
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
-                            Spacing="4"
-                            VerticalAlignment="Center"
-                            Margin="8,0,0,0">
-                    <Button x:Name="Action1Btn"
-                            Style="{StaticResource ClipsyButtonGhost}"
-                            Width="28" Height="28" Padding="0"
-                            Visibility="Collapsed"
-                            Click="OnAction1Click" />
-                    <Button x:Name="Action2Btn"
-                            Style="{StaticResource ClipsyButtonGhost}"
-                            Width="28" Height="28" Padding="0"
-                            Visibility="Collapsed"
-                            Click="OnAction2Click" />
-                    <Button x:Name="CloseBtn"
-                            Style="{StaticResource ClipsyButtonGhost}"
-                            Width="28" Height="28" Padding="0"
-                            Click="OnCloseClick">
-                        <FontIcon Glyph="&#xE711;" FontSize="10" />
-                    </Button>
-                </StackPanel>
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="4"
+                                VerticalAlignment="Center"
+                                Margin="8,0,0,0">
+                        <Button x:Name="Action1Btn"
+                                Style="{StaticResource ClipsyButtonGhost}"
+                                Width="28" Height="28" Padding="0"
+                                Visibility="Collapsed"
+                                Click="OnAction1Click" />
+                        <Button x:Name="Action2Btn"
+                                Style="{StaticResource ClipsyButtonGhost}"
+                                Width="28" Height="28" Padding="0"
+                                Visibility="Collapsed"
+                                Click="OnAction2Click" />
+                        <Button x:Name="CloseBtn"
+                                Style="{StaticResource ClipsyButtonGhost}"
+                                Width="28" Height="28" Padding="0"
+                                Click="OnCloseClick">
+                            <FontIcon Glyph="&#xE711;" FontSize="10" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
             </Grid>
-        </Grid>
-    </Border>
+        </Border>
+    </Grid>
 </Window>

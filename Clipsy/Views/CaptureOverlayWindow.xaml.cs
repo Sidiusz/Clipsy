@@ -105,8 +105,11 @@ public sealed partial class CaptureOverlayWindow : Window
 
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = GetAppWindowForCurrentWindow();
-        ConfigureAsOverlay();
+        // DisableDwmDecorations BEFORE ConfigureAsOverlay so WS_EX_TOOLWINDOW
+        // is in place before SetWindowPos(SWP_SHOWWINDOW) — otherwise Windows
+        // briefly registers the HWND in the taskbar.
         DisableDwmDecorations();
+        ConfigureAsOverlay();
         // Load the frozen frame synchronously into the Image source so the
         // very first frame the compositor renders already shows the desktop
         // snapshot instead of black-then-desktop.
