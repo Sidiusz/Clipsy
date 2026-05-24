@@ -91,6 +91,7 @@ public sealed partial class SettingsWindow : Window
         ["jpg-q"] = "general",
         ["after-save"] = "general",
         ["update-int"] = "general",
+        ["notif"] = "general",
         ["translate-svc"]  = "ocr",
         ["translate-from"] = "ocr",
         ["translate-to"]   = "ocr",
@@ -253,6 +254,13 @@ public sealed partial class SettingsWindow : Window
         LblJpgQuality.Text       = Strings.Get("LblJpgQuality");
         LblAfterSave.Text        = Strings.Get("LblAfterSave");
         LblUpdates.Text          = Strings.Get("LblUpdates");
+        LblNotifications.Text    = Strings.Get("LblNotifications");
+        HelperNotifications.Text = Strings.Get("HelperNotifications");
+        LblNotifyMaster.Text     = Strings.Get("LblNotifyMaster");
+        LblNotifyScreenshot.Text = Strings.Get("LblNotifyScreenshot");
+        LblNotifyErrors.Text     = Strings.Get("LblNotifyErrors");
+        LblNotifyUpdate.Text     = Strings.Get("LblNotifyUpdate");
+        LblNotifyHints.Text      = Strings.Get("LblNotifyHints");
 
         if (LblAuthor != null)        LblAuthor.Text        = Strings.Get("LblAuthorHeader");
         if (LblMit != null)           LblMit.Text           = Strings.Get("LblMit");
@@ -405,6 +413,13 @@ public sealed partial class SettingsWindow : Window
         SelectComboByTag(AfterSaveBox, _draft.AfterSaveAction);
         SelectComboByTag(UpdateIntervalBox, _draft.UpdateInterval);
 
+        NotifyMasterSwitch.IsChecked    = _draft.NotificationsEnabled;
+        NotifyScreenshotSwitch.IsChecked= _draft.NotifyScreenshotSaved;
+        NotifyErrorsSwitch.IsChecked    = _draft.NotifyErrors;
+        NotifyUpdateSwitch.IsChecked    = _draft.NotifyUpdateAvailable;
+        NotifyHintsSwitch.IsChecked     = _draft.NotifyHints;
+        UpdateNotifySubPanelState();
+
         SelectRadio(_draft.VideoCodec, RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
         SelectSegment(_draft.VideoResolution, ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal);
         UpdateBitrateBounds(_draft.VideoResolution);
@@ -467,6 +482,12 @@ public sealed partial class SettingsWindow : Window
         _draft.JpgQuality = (int)JpgQualitySlider.Value;
         _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
         _draft.UpdateInterval = SelectedComboTag(UpdateIntervalBox);
+
+        _draft.NotificationsEnabled   = NotifyMasterSwitch.IsChecked  == true;
+        _draft.NotifyScreenshotSaved  = NotifyScreenshotSwitch.IsChecked == true;
+        _draft.NotifyErrors           = NotifyErrorsSwitch.IsChecked   == true;
+        _draft.NotifyUpdateAvailable  = NotifyUpdateSwitch.IsChecked   == true;
+        _draft.NotifyHints            = NotifyHintsSwitch.IsChecked    == true;
 
         _draft.VideoCodec = SelectedRadioTag(RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
         _draft.VideoResolution = SelectedSegmentTag(ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal);
@@ -1073,6 +1094,19 @@ public sealed partial class SettingsWindow : Window
         MarkChanged();
     }
 
+    private void OnNotifyMasterToggled(object sender, RoutedEventArgs e)
+    {
+        UpdateNotifySubPanelState();
+        MarkChanged();
+    }
+
+    private void UpdateNotifySubPanelState()
+    {
+        bool on = NotifyMasterSwitch.IsChecked == true;
+        NotifySubPanel.Opacity = on ? 1.0 : 0.4;
+        NotifySubPanel.IsHitTestVisible = on;
+    }
+
     private void MarkChanged()
     {
         if (_loading) return;
@@ -1100,6 +1134,12 @@ public sealed partial class SettingsWindow : Window
         if (_draft.JpgQuality != _initial.JpgQuality) _dirty.Add("jpg-q");
         if (_draft.AfterSaveAction != _initial.AfterSaveAction) _dirty.Add("after-save");
         if (_draft.UpdateInterval != _initial.UpdateInterval) _dirty.Add("update-int");
+        if (_draft.NotificationsEnabled  != _initial.NotificationsEnabled  ||
+            _draft.NotifyScreenshotSaved != _initial.NotifyScreenshotSaved ||
+            _draft.NotifyErrors          != _initial.NotifyErrors          ||
+            _draft.NotifyUpdateAvailable != _initial.NotifyUpdateAvailable ||
+            _draft.NotifyHints           != _initial.NotifyHints)
+            _dirty.Add("notif");
         if (_draft.VideoCodec != _initial.VideoCodec) _dirty.Add("codec");
         if (_draft.VideoResolution != _initial.VideoResolution) _dirty.Add("resolution");
         if (_draft.VideoBitrateMbps != _initial.VideoBitrateMbps) _dirty.Add("bitrate");
@@ -1135,6 +1175,7 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblJpgQuality, "LblJpgQuality", _dirty.Contains("jpg-q"));
         SetLabel(LblAfterSave, "LblAfterSave", _dirty.Contains("after-save"));
         SetLabel(LblUpdates, "LblUpdates", _dirty.Contains("update-int"));
+        SetLabel(LblNotifications, "LblNotifications", _dirty.Contains("notif"));
         SetLabel(LblCodec, "LblCodec", _dirty.Contains("codec"));
         SetLabel(LblResolution, "LblResolution", _dirty.Contains("resolution"));
         SetLabel(LblBitrate, "LblBitrate", _dirty.Contains("bitrate"));
