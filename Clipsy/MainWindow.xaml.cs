@@ -17,16 +17,17 @@ public sealed partial class MainWindow : Window
     public IntPtr Hwnd { get; }
 
     public event Action? CaptureRequested;
+    public event Action? RecordRequested;
+    public event Action? OpenFolderRequested;
     public event Action? SettingsRequested;
+    public event Action? AboutRequested;
     public event Action? ExitRequested;
 
     public ICommand CaptureCommand { get; }
-    public ICommand TrayRightClickCommand { get; }
 
     public MainWindow()
     {
         CaptureCommand = new RelayCommand(() => CaptureRequested?.Invoke());
-        TrayRightClickCommand = new RelayCommand(ShowTrayMenu);
         InitializeComponent();
         ThemeService.Register(Content as Microsoft.UI.Xaml.FrameworkElement);
         Hwnd = WindowNative.GetWindowHandle(this);
@@ -40,15 +41,39 @@ public sealed partial class MainWindow : Window
 
     private void WireTrayCommands()
     {
+        // LMB still triggers capture. RMB opens the WinUI ContextFlyout
+        // declared in MainWindow.xaml — H.NotifyIcon shows it at the cursor.
         TrayIcon.LeftClickCommand = CaptureCommand;
-        TrayIcon.RightClickCommand = TrayRightClickCommand;
         TrayIcon.ForceCreate();
     }
 
     private void ApplyLocalization()
     {
         TrayIcon.ToolTipText = Strings.Get("TrayTooltip");
+        try
+        {
+            if (TrayCaptureItem    != null) TrayCaptureItem.Text    = Strings.Get("TrayCapture");
+            if (TrayRecordItem     != null) TrayRecordItem.Text     = Strings.Get("TrayRecord");
+            if (TrayOpenFolderItem != null) TrayOpenFolderItem.Text = Strings.Get("TrayOpenFolder");
+            if (TraySettingsItem   != null) TraySettingsItem.Text   = Strings.Get("TraySettings");
+            if (TrayAboutItem      != null) TrayAboutItem.Text      = Strings.Get("TrayAbout");
+            if (TrayExitItem       != null) TrayExitItem.Text       = Strings.Get("TrayExit");
+            if (TrayHeaderItem != null)
+                TrayHeaderItem.KeyboardAcceleratorTextOverride =
+                    $"v{UpdateService.CurrentVersion()} · {Strings.Get("TrayReady")}";
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("MainWindow.ApplyLocalization", ex);
+        }
     }
+
+    private void OnTrayCapture(object sender, RoutedEventArgs e)    => CaptureRequested?.Invoke();
+    private void OnTrayRecord(object sender, RoutedEventArgs e)     => RecordRequested?.Invoke();
+    private void OnTrayOpenFolder(object sender, RoutedEventArgs e) => OpenFolderRequested?.Invoke();
+    private void OnTraySettings(object sender, RoutedEventArgs e)   => SettingsRequested?.Invoke();
+    private void OnTrayAbout(object sender, RoutedEventArgs e)      => AboutRequested?.Invoke();
+    private void OnTrayExit(object sender, RoutedEventArgs e)       => ExitRequested?.Invoke();
 
     private void TrySetTrayIcon()
     {
@@ -66,48 +91,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Build the tray context menu via native TrackPopupMenu so we don't
-    /// depend on XAML MenuFlyout/SecondWindow re-parenting. Items go
-    /// straight to the corresponding event raisers.
-    /// </summary>
-    private void ShowTrayMenu()
-    {
-        const uint MF_STRING = 0x00000000;
-        const uint MF_SEPARATOR = 0x00000800;
-        const uint TPM_RETURNCMD = 0x0100;
-        const uint TPM_RIGHTBUTTON = 0x0002;
-        const uint TPM_NONOTIFY = 0x0080;
-
-        if (!GetCursorPos(out var pt)) return;
-        var menu = CreatePopupMenu();
-        if (menu == IntPtr.Zero) return;
-        try
-        {
-            AppendMenuW(menu, MF_STRING, 1, Strings.Get("TrayCapture"));
-            AppendMenuW(menu, MF_STRING, 2, Strings.Get("TraySettings"));
-            AppendMenuW(menu, MF_SEPARATOR, 0, null);
-            AppendMenuW(menu, MF_STRING, 3, Strings.Get("TrayExit"));
-
-            SetForegroundWindow(Hwnd);
-            uint cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
-                pt.X, pt.Y, 0, Hwnd, IntPtr.Zero);
-            switch (cmd)
-            {
-                case 1: CaptureRequested?.Invoke(); break;
-                case 2: SettingsRequested?.Invoke(); break;
-                case 3: ExitRequested?.Invoke(); break;
-            }
-        }
-        finally
-        {
-            DestroyMenu(menu);
-            // Quirk: WM_NULL post is the canonical way to dismiss the menu
-            // properly when TrackPopupMenu returns synchronously.
-            PostMessageW(Hwnd, 0x0000, IntPtr.Zero, IntPtr.Zero);
-        }
-    }
-
     private void HideAsTrayHost()
     {
         const int GWL_EXSTYLE = -20;
@@ -119,16 +102,8 @@ public sealed partial class MainWindow : Window
 
     // ---------- Win32 ----------
 
-    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X; public int Y; }
     [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
-    [DllImport("user32.dll")] private static extern IntPtr CreatePopupMenu();
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool AppendMenuW(IntPtr hMenu, uint uFlags, uint uIDNewItem, string? lpNewItem);
-    [DllImport("user32.dll")] private static extern bool DestroyMenu(IntPtr hMenu);
-    [DllImport("user32.dll")] private static extern uint TrackPopupMenu(IntPtr hMenu, uint uFlags, int x, int y, int nReserved, IntPtr hWnd, IntPtr prcRect);
-    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool PostMessageW(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 }
 
 internal sealed class RelayCommand : ICommand

@@ -54,9 +54,12 @@ public partial class App : Application
     {
         Strings.Initialize();
         HostWindow = new MainWindow();
-        HostWindow.CaptureRequested += OnCaptureRequested;
-        HostWindow.SettingsRequested += OnSettingsRequested;
-        HostWindow.ExitRequested += OnExitRequested;
+        HostWindow.CaptureRequested    += OnCaptureRequested;
+        HostWindow.RecordRequested     += OnRecordRequested;
+        HostWindow.OpenFolderRequested += OnOpenFolderRequested;
+        HostWindow.SettingsRequested   += OnSettingsRequested;
+        HostWindow.AboutRequested      += OnAboutRequested;
+        HostWindow.ExitRequested       += OnExitRequested;
 
         // Activate the host so the WinUI 3 XAML island starts. The window
         // is offscreen + tool-window so it's invisible, but it must be
@@ -185,5 +188,50 @@ public partial class App : Application
         SettingsService.Instance.SettingsChanged -= OnSettingsChangedRewireHotkeys;
         Hotkey?.Dispose();
         Application.Current.Exit();
+    }
+
+    private void OnRecordRequested()
+    {
+        // Reuses the same capture overlay — user picks a region, then the
+        // record button on the floating toolbar starts recording.
+        if (RecordingController.IsRecording)
+        {
+            RecordingController.Current?.StopFromHotkey();
+            return;
+        }
+        CaptureOverlayHost.ShowOverlay();
+    }
+
+    private void OnOpenFolderRequested()
+    {
+        try
+        {
+            var s = SettingsService.Instance;
+            var folder = string.IsNullOrEmpty(s.Settings.ScreenshotFolder)
+                ? s.DefaultScreenshotFolder
+                : s.Settings.ScreenshotFolder!;
+            if (System.IO.Directory.Exists(folder))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] OpenFolder failed: {ex.Message}");
+        }
+    }
+
+    private void OnAboutRequested()
+    {
+        // Reuse Settings with the Info pane preselected.
+        var dq = HostWindow?.DispatcherQueue;
+        if (dq != null)
+            dq.TryEnqueue(() => Clipsy.Views.Settings.SettingsWindow.ShowOrActivate());
+        else
+            Clipsy.Views.Settings.SettingsWindow.ShowOrActivate();
     }
 }
