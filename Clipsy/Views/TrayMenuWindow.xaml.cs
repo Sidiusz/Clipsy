@@ -88,12 +88,14 @@ public sealed partial class TrayMenuWindow : Window
         if (y < work.top)        y = pt.y + 4;
 
         _appWindow.MoveAndResize(new RectInt32(x, y, w, h));
+        LayeredFade.ResetHidden(_hwnd);
         Activate();
         // H.NotifyIcon's right-click handler runs inside a tray nested
         // message pump; without an explicit foreground request the window
         // shows but Windows never marks it active, so the Deactivated event
         // never fires when the user clicks elsewhere and the menu sticks.
         SetForegroundWindow(_hwnd);
+        LayeredFade.FadeIn(_hwnd, durationMs: 140);
     }
 
     public void SetUpdateStatus(TrayUpdateStatus status, string? newVersion = null)
@@ -172,6 +174,7 @@ public sealed partial class TrayMenuWindow : Window
 
         int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
         SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+        LayeredFade.EnableHidden(_hwnd);
 
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
