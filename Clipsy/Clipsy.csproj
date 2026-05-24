@@ -16,7 +16,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationIcon>Assets\clipsy.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\Icons\clipsy.ico</ApplicationIcon>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <!-- Trim per-locale satellite assemblies (en + ru only). Drops 80+
          Microsoft.UI.Xaml.dll.mui folders from output. -->
@@ -36,6 +36,12 @@
 
   <ItemGroup>
     <Content Include="Assets\clipsy.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Icons\*.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Icons\*.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Assets\Fonts\*.ttf">

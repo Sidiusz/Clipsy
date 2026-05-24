@@ -15,12 +15,9 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Border Width="34" Height="34" CornerRadius="8"
-                        Background="{StaticResource ClipsyAccentBrush}"
-                        VerticalAlignment="Top" Margin="0,2,0,0">
-                    <FontIcon Glyph="&#xE722;" FontSize="16" Foreground="White"
-                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
+                <Image Width="34" Height="34"
+                       Source="ms-appx:///Assets/Icons/clipsy-64.png"
+                       VerticalAlignment="Top" Margin="0,2,0,0" />
                 <StackPanel Grid.Column="1" Margin="10,0,0,0"
                             VerticalAlignment="Center" Spacing="1">
                     <TextBlock Text="Clipsy" FontSize="13" FontWeight="SemiBold"

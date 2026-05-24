@@ -19,10 +19,8 @@
             <StackPanel Orientation="Horizontal"
                         Spacing="8" Margin="12,0" VerticalAlignment="Center"
                         HorizontalAlignment="Left">
-                <Border Width="20" Height="20" CornerRadius="4"
-                        Background="{StaticResource ClipsyAccentBrush}">
-                    <FontIcon Glyph="&#xE722;" FontSize="11" Foreground="White" />
-                </Border>
+                <Image Width="20" Height="20"
+                       Source="ms-appx:///Assets/Icons/clipsy-32.png" />
                 <TextBlock Text="Clipsy" FontSize="13" FontWeight="SemiBold"
                            Foreground="{StaticResource ClipsyTextBrush}"
                            VerticalAlignment="Center" />

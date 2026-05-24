@@ -59,7 +59,12 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var path = Path.Combine(AppContext.BaseDirectory, "Assets", "clipsy.ico");
+            // Prefer the new branded icon under Assets\Icons; fall back to the
+            // legacy Assets\clipsy.ico so older builds keep showing a tray icon
+            // if the new folder is missing.
+            var newPath    = Path.Combine(AppContext.BaseDirectory, "Assets", "Icons", "clipsy.ico");
+            var legacyPath = Path.Combine(AppContext.BaseDirectory, "Assets", "clipsy.ico");
+            var path = File.Exists(newPath) ? newPath : legacyPath;
             if (File.Exists(path))
             {
                 TrayIcon.IconSource = new BitmapImage(new Uri(path));
