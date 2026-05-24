@@ -43,6 +43,9 @@ public static class Strings
 
         // Capture overlay - right toolbar tooltips
         ["TipColor"]            = New("Color", "Цвет"),
+        ["TipColorApply"]       = New("Apply", "Применить"),
+        ["TipColorCancel"]      = New("Cancel", "Отмена"),
+        ["TipEyedropper"]       = New("Pick color from screen", "Взять цвет с экрана"),
         ["TipPencil"]           = New("Pencil. LMB draw, RMB erase", "Карандаш. ЛКМ рисовать, ПКМ стирать"),
         ["TipRectangle"]        = New("Rectangle", "Прямоугольник"),
         ["TipEllipse"]          = New("Ellipse", "Эллипс"),

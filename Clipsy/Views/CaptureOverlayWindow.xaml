@@ -264,14 +264,49 @@
                                  Fill="{StaticResource ClipsyDangerBrush}"
                                  Stroke="White" StrokeThickness="1.5" />
                         <Button.Flyout>
-                            <Flyout Placement="Left">
-                                <ColorPicker x:Name="ColorPickerCtl"
-                                             Color="#FFF23F42"
-                                             IsColorChannelTextInputVisible="True"
-                                             IsHexInputVisible="True"
-                                             IsAlphaEnabled="False"
-                                             IsMoreButtonVisible="True"
-                                             ColorChanged="OnColorPickerChanged" />
+                            <Flyout x:Name="ColorFlyout" Placement="Left"
+                                    Opened="OnColorFlyoutOpened">
+                                <StackPanel Spacing="8" Width="240">
+                                    <ColorPicker x:Name="ColorPickerCtl"
+                                                 Color="#FFF23F42"
+                                                 ColorSpectrumShape="Box"
+                                                 IsColorChannelTextInputVisible="False"
+                                                 IsHexInputVisible="True"
+                                                 IsAlphaEnabled="False"
+                                                 IsMoreButtonVisible="False"
+                                                 Width="240"
+                                                 MinWidth="240"
+                                                 MaxWidth="240"
+                                                 ColorChanged="OnColorPickerChanged" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="EyedropperBtn" Grid.Column="0"
+                                                Click="OnEyedropperBtnClick"
+                                                Style="{StaticResource ClipsyIconButton}"
+                                                ToolTipService.ToolTip="Pick color from screen">
+                                            <FontIcon Glyph="&#xEF3C;" FontSize="14" />
+                                        </Button>
+                                        <Button x:Name="ColorCancelBtn" Grid.Column="2"
+                                                Click="OnColorCancelClick"
+                                                Style="{StaticResource ClipsyIconButton}"
+                                                Margin="0,0,6,0"
+                                                ToolTipService.ToolTip="Cancel">
+                                            <FontIcon Glyph="&#xE711;" FontSize="14" />
+                                        </Button>
+                                        <Button x:Name="ColorConfirmBtn" Grid.Column="3"
+                                                Click="OnColorConfirmClick"
+                                                Style="{StaticResource ClipsyIconButton}"
+                                                Background="{StaticResource ClipsyAccentBrush}"
+                                                ToolTipService.ToolTip="Apply">
+                                            <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="Black" />
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
                             </Flyout>
                         </Button.Flyout>
                     </Button>
@@ -424,6 +459,30 @@
                 </StackPanel>
             </StackPanel>
         </Border>
+
+        <!-- ============== Eyedropper magnifier ============== -->
+        <Grid x:Name="EyedropperMagnifier"
+              Width="128" Height="128"
+              Visibility="Collapsed"
+              IsHitTestVisible="False"
+              HorizontalAlignment="Left"
+              VerticalAlignment="Top">
+            <Ellipse Width="128" Height="128" Fill="Black" />
+            <Image x:Name="MagImage" Stretch="None"
+                   HorizontalAlignment="Left" VerticalAlignment="Top">
+                <Image.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="MagScale" ScaleX="10" ScaleY="10" />
+                        <TranslateTransform x:Name="MagTranslate" X="0" Y="0" />
+                    </TransformGroup>
+                </Image.RenderTransform>
+            </Image>
+            <Ellipse Width="128" Height="128" Stroke="White" StrokeThickness="2" Fill="Transparent" />
+            <Border Width="14" Height="14" BorderBrush="Black" BorderThickness="1"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Border Width="12" Height="12" BorderBrush="White" BorderThickness="1.5"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Grid>
 
         <!-- Context menu (RMB) — selection / actions / cancel grouped with
              separators. Icons left, accelerator hint right. -->

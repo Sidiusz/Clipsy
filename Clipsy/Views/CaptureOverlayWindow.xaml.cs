@@ -165,7 +165,10 @@ public sealed partial class CaptureOverlayWindow : Window
         ToolTipService.SetToolTip(CopyBtn,       Strings.Get("TipCopy"));
         ToolTipService.SetToolTip(CancelBtn,     Strings.Get("TipCancel"));
 
-        ToolTipService.SetToolTip(ColorBtn,  Strings.Get("TipColor"));
+        ToolTipService.SetToolTip(ColorBtn,        Strings.Get("TipColor"));
+        ToolTipService.SetToolTip(EyedropperBtn,   Strings.Get("TipEyedropper"));
+        ToolTipService.SetToolTip(ColorCancelBtn,  Strings.Get("TipColorCancel"));
+        ToolTipService.SetToolTip(ColorConfirmBtn, Strings.Get("TipColorApply"));
         ToolTipService.SetToolTip(PencilBtn, Strings.Get("TipPencil"));
         ToolTipService.SetToolTip(EllipseBtn, Strings.Get("TipEllipse"));
         ToolTipService.SetToolTip(LineBtn,    Strings.Get("TipLine"));
@@ -803,6 +806,15 @@ public sealed partial class CaptureOverlayWindow : Window
         bool rmb = cp.Properties.IsRightButtonPressed;
         bool lmb = cp.Properties.IsLeftButtonPressed;
 
+        if (_eyedropperActive)
+        {
+            if (lmb)
+                ApplyPickedColor(SamplePixel(pos));
+            ExitEyedropperMode();
+            e.Handled = true;
+            return;
+        }
+
         if (_inOcrMode)
         {
             // OCR mode owns the overlay. Text selection happens inside the
@@ -874,6 +886,11 @@ public sealed partial class CaptureOverlayWindow : Window
     private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         var pos = e.GetCurrentPoint(RootGrid).Position;
+        if (_eyedropperActive)
+        {
+            UpdateMagnifier(pos);
+            return;
+        }
         var local = new Point(pos.X - _selectionRect.X, pos.Y - _selectionRect.Y);
         if (_drawing.Settings.Tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
         {
@@ -1695,6 +1712,11 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void HandleEscape()
     {
+        if (_eyedropperActive)
+        {
+            ExitEyedropperMode();
+            return;
+        }
         if (_inOcrMode)
         {
             ExitOcrMode();
@@ -1818,13 +1840,152 @@ public sealed partial class CaptureOverlayWindow : Window
     }
 
 
+    // Cached swatch brush — mutating its Color avoids per-tick allocation.
+    private SolidColorBrush? _swatchBrush;
+    private Color _colorBeforeFlyout;
+
+    private void OnColorFlyoutOpened(object sender, object e)
+    {
+        // Snapshot current color so Cancel can revert.
+        _colorBeforeFlyout = _drawing.Settings.Color;
+        ColorPickerCtl.Color = _colorBeforeFlyout;
+        EnsureSwatchBrush().Color = _colorBeforeFlyout;
+    }
+
     private void OnColorPickerChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
-        if (_drawing == null) return;
+        // Live preview only — defer writing to _drawing.Settings.Color until
+        // Confirm. Mutating the cached brush avoids GC churn that drove the
+        // visible drag lag.
         var c = Color.FromArgb(0xFF, args.NewColor.R, args.NewColor.G, args.NewColor.B);
-        _drawing.Settings.Color = c;
-        ColorSwatch.Fill = new SolidColorBrush(c);
+        EnsureSwatchBrush().Color = c;
     }
+
+    private void OnColorConfirmClick(object sender, RoutedEventArgs e)
+    {
+        var c = ColorPickerCtl.Color;
+        _drawing.Settings.Color = Color.FromArgb(0xFF, c.R, c.G, c.B);
+        ColorFlyout?.Hide();
+    }
+
+    private void OnColorCancelClick(object sender, RoutedEventArgs e)
+    {
+        // Revert swatch to original color; do not touch _drawing.Settings.Color.
+        EnsureSwatchBrush().Color = _colorBeforeFlyout;
+        ColorPickerCtl.Color = _colorBeforeFlyout;
+        ColorFlyout?.Hide();
+    }
+
+    private SolidColorBrush EnsureSwatchBrush()
+    {
+        if (_swatchBrush == null)
+        {
+            _swatchBrush = new SolidColorBrush(_drawing.Settings.Color);
+            ColorSwatch.Fill = _swatchBrush;
+        }
+        return _swatchBrush;
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Eyedropper
+    // ──────────────────────────────────────────────────────────────────
+
+    private bool _eyedropperActive;
+    private System.Drawing.Bitmap? _eyedropperBitmap;
+    private const double MagZoom = 10.0;
+    private const double MagHalf = 64.0; // half of 128px magnifier
+
+    private void OnEyedropperBtnClick(object sender, RoutedEventArgs e)
+    {
+        ColorFlyout?.Hide();
+        EnsureEyedropperBitmap();
+        if (_eyedropperBitmap == null) return;
+
+        // Share the FrozenImage's BitmapImage as the magnifier source so we
+        // don't decode the PNG twice.
+        MagImage.Source = FrozenImage.Source;
+
+        _eyedropperActive = true;
+        EyedropperMagnifier.Visibility = Visibility.Visible;
+        RootGrid.Focus(FocusState.Programmatic);
+
+        // Position magnifier at current cursor immediately.
+        try
+        {
+            GetCursorPos(out var pt);
+            var scale = DpiScale;
+            var dip = new Point((pt.X - _frame.VirtualBounds.X) / scale,
+                                (pt.Y - _frame.VirtualBounds.Y) / scale);
+            UpdateMagnifier(dip);
+        }
+        catch { /* no-op */ }
+    }
+
+    private void ExitEyedropperMode()
+    {
+        _eyedropperActive = false;
+        EyedropperMagnifier.Visibility = Visibility.Collapsed;
+    }
+
+    private void EnsureEyedropperBitmap()
+    {
+        if (_eyedropperBitmap != null) return;
+        try
+        {
+            using var ms = new MemoryStream(_frame.PngBytes);
+            _eyedropperBitmap = new System.Drawing.Bitmap(ms);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("Eyedropper bitmap decode", ex);
+        }
+    }
+
+    private void UpdateMagnifier(Point cursorDip)
+    {
+        // Place magnifier near cursor, offset to avoid covering target pixel.
+        double offset = 24;
+        double x = cursorDip.X + offset;
+        double y = cursorDip.Y + offset;
+        double w = RootGrid.Width > 0 ? RootGrid.Width : RootGrid.ActualWidth;
+        double h = RootGrid.Height > 0 ? RootGrid.Height : RootGrid.ActualHeight;
+        if (x + 128 > w) x = cursorDip.X - 128 - offset;
+        if (y + 128 > h) y = cursorDip.Y - 128 - offset;
+        if (x < 0) x = 0;
+        if (y < 0) y = 0;
+        EyedropperMagnifier.Margin = new Thickness(x, y, 0, 0);
+
+        // Translate so the source pixel under the cursor lands at the magnifier centre.
+        MagTranslate.X = MagHalf - cursorDip.X * MagZoom;
+        MagTranslate.Y = MagHalf - cursorDip.Y * MagZoom;
+    }
+
+    private Color SamplePixel(Point cursorDip)
+    {
+        if (_eyedropperBitmap == null) return Microsoft.UI.Colors.Black;
+        var scale = DpiScale;
+        int px = (int)(cursorDip.X * scale);
+        int py = (int)(cursorDip.Y * scale);
+        if (px < 0) px = 0;
+        if (py < 0) py = 0;
+        if (px >= _eyedropperBitmap.Width)  px = _eyedropperBitmap.Width  - 1;
+        if (py >= _eyedropperBitmap.Height) py = _eyedropperBitmap.Height - 1;
+        var c = _eyedropperBitmap.GetPixel(px, py);
+        return Color.FromArgb(0xFF, c.R, c.G, c.B);
+    }
+
+    private void ApplyPickedColor(Color c)
+    {
+        _drawing.Settings.Color = c;
+        ColorPickerCtl.Color = c;
+        EnsureSwatchBrush().Color = c;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT { public int X, Y; }
 
     private static Color ParseHexColor(string hex)
     {
