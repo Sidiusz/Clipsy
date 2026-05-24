@@ -1040,7 +1040,7 @@
                                                                         Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0">
                                                 <DiscreteObjectKeyFrame.Value>
-                                                    <SolidColorBrush Color="#FF6C76F4" />
+                                                    <SolidColorBrush Color="#FFE87D0D" />
                                                 </DiscreteObjectKeyFrame.Value>
                                             </DiscreteObjectKeyFrame>
                                         </ObjectAnimationUsingKeyFrames>
@@ -1048,7 +1048,7 @@
                                                                         Storyboard.TargetProperty="BorderBrush">
                                             <DiscreteObjectKeyFrame KeyTime="0">
                                                 <DiscreteObjectKeyFrame.Value>
-                                                    <SolidColorBrush Color="#FF6C76F4" />
+                                                    <SolidColorBrush Color="#FFE87D0D" />
                                                 </DiscreteObjectKeyFrame.Value>
                                             </DiscreteObjectKeyFrame>
                                         </ObjectAnimationUsingKeyFrames>
@@ -1072,7 +1072,7 @@
                                                                         Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0">
                                                 <DiscreteObjectKeyFrame.Value>
-                                                    <SolidColorBrush Color="#FF6C76F4" />
+                                                    <SolidColorBrush Color="#FFE87D0D" />
                                                 </DiscreteObjectKeyFrame.Value>
                                             </DiscreteObjectKeyFrame>
                                         </ObjectAnimationUsingKeyFrames>
@@ -1080,7 +1080,7 @@
                                                                         Storyboard.TargetProperty="BorderBrush">
                                             <DiscreteObjectKeyFrame KeyTime="0">
                                                 <DiscreteObjectKeyFrame.Value>
-                                                    <SolidColorBrush Color="#FF6C76F4" />
+                                                    <SolidColorBrush Color="#FFE87D0D" />
                                                 </DiscreteObjectKeyFrame.Value>
                                             </DiscreteObjectKeyFrame>
                                         </ObjectAnimationUsingKeyFrames>
@@ -1104,7 +1104,7 @@
                                                                         Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0">
                                                 <DiscreteObjectKeyFrame.Value>
-                                                    <SolidColorBrush Color="#FF6C76F4" />
+                                                    <SolidColorBrush Color="#FFE87D0D" />
                                                 </DiscreteObjectKeyFrame.Value>
                                             </DiscreteObjectKeyFrame>
                                         </ObjectAnimationUsingKeyFrames>
@@ -1112,7 +1112,7 @@
                                                                         Storyboard.TargetProperty="BorderBrush">
                                             <DiscreteObjectKeyFrame KeyTime="0">
                                                 <DiscreteObjectKeyFrame.Value>
-                                                    <SolidColorBrush Color="#FF6C76F4" />
+                                                    <SolidColorBrush Color="#FFE87D0D" />
                                                 </DiscreteObjectKeyFrame.Value>
                                             </DiscreteObjectKeyFrame>
                                         </ObjectAnimationUsingKeyFrames>

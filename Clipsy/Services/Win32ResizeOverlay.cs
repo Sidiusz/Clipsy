@@ -24,7 +24,7 @@ public sealed class Win32ResizeOverlay
     // on the region's corners are not clipped by the window edge.
     private const int HandleMargin = 8;
     private static readonly System.Drawing.Color AccentBlue =
-        System.Drawing.Color.FromArgb(0xFF, 0x1F, 0x6F, 0xEB);
+        System.Drawing.Color.FromArgb(0xFF, 0xE8, 0x7D, 0x0D); // ClipsyAccent #E87D0D
 
     private IntPtr _hwnd;
     private bool _created;

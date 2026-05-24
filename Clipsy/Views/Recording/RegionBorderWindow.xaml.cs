@@ -111,7 +111,7 @@ public sealed partial class RegionBorderWindow : Window
                 Width = HandleSize,
                 Height = HandleSize,
                 Fill = new SolidColorBrush(Microsoft.UI.Colors.White),
-                Stroke = new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x1F, 0x6F, 0xEB)),
+                Stroke = new SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0xE8, 0x7D, 0x0D)),
                 StrokeThickness = 1,
                 Visibility = Visibility.Collapsed,
                 IsHitTestVisible = false,
