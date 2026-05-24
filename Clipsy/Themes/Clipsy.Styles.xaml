@@ -185,6 +185,7 @@
 
     <Style x:Key="ClipsyButtonDanger" TargetType="Button" BasedOn="{StaticResource ClipsyButtonPrimary}">
         <Setter Property="Background" Value="{StaticResource ClipsyDangerBrush}" />
+        <Setter Property="Foreground" Value="White" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">

@@ -261,8 +261,6 @@ public sealed partial class SettingsWindow : Window
         if (LblLikeClipsy != null)    LblLikeClipsy.Text    = Strings.Get("LblLikeClipsy");
         if (LblLikeClipsyHint != null) LblLikeClipsyHint.Text = Strings.Get("LblLikeClipsyHint");
         if (LblStarBtn != null)       LblStarBtn.Text       = Strings.Get("BtnStar");
-        if (UpdateStatusLabel != null) UpdateStatusLabel.Text = Strings.Get("LblUpdateStatus");
-
         LangAuto.Content   = Strings.Get("OptAuto");
         LangEn.Content     = Strings.Get("OptEnglish");
         LangRu.Content     = Strings.Get("OptRussian");
@@ -299,7 +297,6 @@ public sealed partial class SettingsWindow : Window
 
         LblHotkeyHint.Text = Strings.Get("LblHotkeyHint");
 
-        BtnCheckForUpdates.Content = Strings.Get("BtnCheckForUpdates");
         ScreenshotFolderPick.Content = Strings.Get("BtnBrowse");
         VideoFolderPick.Content      = Strings.Get("BtnBrowse");
         BtnCheckNow.Content          = Strings.Get("BtnCheckNow");
