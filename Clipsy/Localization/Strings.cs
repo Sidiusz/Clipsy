@@ -265,6 +265,21 @@ public static class Strings
         ["NotifyUpdateFailed"]    = New("Update check failed.",                            "Проверка обновлений не удалась."),
         ["NotifySaveFailed"]      = New("Could not save settings.",                        "Не удалось сохранить настройки."),
 
+        // Notification settings labels
+        ["LblNotifications"]        = New("Notifications",                                 "Уведомления"),
+        ["HelperNotifications"]     = New("Custom pop-ups shown bottom-right, auto-dismiss in 4 s.", "Всплывающие сообщения снизу справа, закрываются через 4 с."),
+        ["LblNotifyMaster"]         = New("Show notifications",                            "Показывать уведомления"),
+        ["LblNotifyScreenshot"]     = New("Screenshot saved",                              "Скриншот сохранён"),
+        ["LblNotifyErrors"]         = New("Errors",                                        "Ошибки"),
+        ["LblNotifyUpdate"]         = New("Update available",                              "Доступно обновление"),
+        ["LblNotifyHints"]          = New("Hints and info",                                "Подсказки и информация"),
+
+        // Toast content
+        ["ToastScreenshotSaved"]    = New("Screenshot saved",                              "Скриншот сохранён"),
+        ["ToastOpen"]               = New("Open",                                          "Открыть"),
+        ["ToastSkip"]               = New("Skip",                                          "Пропустить"),
+        ["ToastUpdate"]             = New("Update",                                        "Обновить"),
+
         // Bitrate label
         ["BitrateMbps"]           = New("{0} Mbps",                                        "{0} Мбит/с"),
         ["BitrateEstimate"]       = New("Est. ~{0} MB per minute",                         "Прибл. ~{0} МБ в минуту"),

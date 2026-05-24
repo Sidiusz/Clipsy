@@ -52,6 +52,13 @@ public sealed class AppSettings
     public string TranslateFrom { get; set; } = "auto";
     public string TranslateTo { get; set; } = "ui"; // "ui" = current interface language
 
+    // Notifications
+    public bool NotificationsEnabled { get; set; } = true;
+    public bool NotifyScreenshotSaved { get; set; } = true;
+    public bool NotifyErrors { get; set; } = true;
+    public bool NotifyUpdateAvailable { get; set; } = true;
+    public bool NotifyHints { get; set; } = true;
+
     // Pro v1 stubs
     public bool ProEnabled { get; set; } = false;
 

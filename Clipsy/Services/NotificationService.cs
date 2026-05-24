@@ -1,55 +1,71 @@
 using System;
 using Clipsy.Localization;
-using H.NotifyIcon;
-using H.NotifyIcon.Core;
 
 namespace Clipsy.Services;
 
 public enum NotificationLevel { Info, Warning, Error }
 
-/// <summary>
-/// Shows lightweight notifications. Falls back to the system tray
-/// balloon (H.NotifyIcon NotificationIcon) when no foreground window
-/// is available. Code-behind that owns an InfoBar can subscribe to
-/// Posted and render in-window.
-/// </summary>
 public static class NotificationService
 {
     public sealed record Notification(NotificationLevel Level, string Title, string Body);
 
     public static event Action<Notification>? Posted;
 
-    public static void Post(NotificationLevel level, string title, string body)
+    public static void Post(
+        NotificationLevel level, string title, string body,
+        ToastCategory category = ToastCategory.Hint,
+        string? action1Label = null, Action? action1 = null,
+        string? action2Label = null, Action? action2 = null)
     {
-        var n = new Notification(level, title, body);
-        Posted?.Invoke(n);
-        TryTrayBalloon(n);
+        Posted?.Invoke(new Notification(level, title, body));
+
+        ToastService.Show(new ToastService.ToastOptions
+        {
+            Category        = category,
+            Level           = level,
+            Title           = title,
+            Body            = body,
+            Action1Label    = action1Label,
+            Action1Callback = action1,
+            Action2Label    = action2Label,
+            Action2Callback = action2,
+        });
     }
 
-    public static void Error(string bodyKey)        => Post(NotificationLevel.Error,   "Clipsy", Strings.Get(bodyKey));
-    public static void Warning(string bodyKey)      => Post(NotificationLevel.Warning, "Clipsy", Strings.Get(bodyKey));
-    public static void Info(string bodyKey)         => Post(NotificationLevel.Info,    "Clipsy", Strings.Get(bodyKey));
-    public static void InfoText(string title, string body) => Post(NotificationLevel.Info, title, body);
+    public static void Error(string bodyKey)
+        => Post(NotificationLevel.Error,   "Clipsy", Strings.Get(bodyKey), ToastCategory.Error);
 
-    private static void TryTrayBalloon(Notification n)
+    public static void Warning(string bodyKey)
+        => Post(NotificationLevel.Warning, "Clipsy", Strings.Get(bodyKey), ToastCategory.Hint);
+
+    public static void Info(string bodyKey)
+        => Post(NotificationLevel.Info,    "Clipsy", Strings.Get(bodyKey), ToastCategory.Hint);
+
+    public static void InfoText(string title, string body)
+        => Post(NotificationLevel.Info, title, body, ToastCategory.Hint);
+
+    public static void ScreenshotSaved(string fileName, long sizeKb, string filePath)
     {
-        try
-        {
-            var host = App.Current.HostWindow;
-            if (host == null) return;
-            var tray = host.TrayIconControl;
-            if (tray == null) return;
-            var icon = n.Level switch
+        var sizeText = sizeKb >= 1024
+            ? $"{sizeKb / 1024.0:F1} MB"
+            : $"{sizeKb} KB";
+        Post(
+            NotificationLevel.Info,
+            Strings.Get("ToastScreenshotSaved"),
+            $"{fileName} · {sizeText}",
+            ToastCategory.Screenshot,
+            action1Label: Strings.Get("ToastOpen"),
+            action1: () =>
             {
-                NotificationLevel.Error => NotificationIcon.Error,
-                NotificationLevel.Warning => NotificationIcon.Warning,
-                _ => NotificationIcon.Info,
-            };
-            tray.ShowNotification(n.Title, n.Body, icon);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Tray balloon failed: {ex.Message}");
-        }
+                try
+                {
+                    System.Diagnostics.Process.Start(
+                        new System.Diagnostics.ProcessStartInfo(filePath) { UseShellExecute = true });
+                }
+                catch { }
+            });
     }
+
+    public static void UpdateAvailable(string version, string notes)
+        => Post(NotificationLevel.Info, $"Clipsy {version}", notes, ToastCategory.Update);
 }

@@ -144,7 +144,7 @@ public partial class App : Application
                 _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.UpToDate);
                 return;
             }
-            NotificationService.InfoText($"Clipsy {info.Version}", Strings.Get("UpdateAvailable"));
+            NotificationService.UpdateAvailable(info.Version, Strings.Get("UpdateAvailable"));
             _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Available, info.Version);
         }
         catch (Exception ex)

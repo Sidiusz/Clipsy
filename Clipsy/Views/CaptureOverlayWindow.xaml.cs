@@ -2073,6 +2073,7 @@ public sealed partial class CaptureOverlayWindow : Window
             var bytes = ScreenshotRenderer.RenderEncoded(_frame, _selectionRect, _drawing.Elements,
                 DpiScale, fmt, settings.Settings.JpgQuality);
             await File.WriteAllBytesAsync(fullPath, bytes);
+            NotificationService.ScreenshotSaved(name, bytes.LongLength / 1024L, fullPath);
             AfterSaveAction.Run(fullPath, settings.Settings.AfterSaveAction);
             Close();
         }
