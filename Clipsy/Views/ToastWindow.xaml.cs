@@ -204,11 +204,19 @@ public sealed partial class ToastWindow : Window
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
-        int round = 2; // DWMWCP_ROUND
-        DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
+        // Don't let DWM round — XAML's CornerRadius="8" on CardBorder handles
+        // corners; DWM rounding plus our layered-alpha window produced a hard
+        // black rectangle outside the rounded XAML region.
+        int donotround = 1; // DWMWCP_DONOTROUND
+        DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref donotround, sizeof(int));
 
         uint noBorder = DWMWA_COLOR_NONE;
         DwmSetWindowAttributeU(_hwnd, DWMWA_BORDER_COLOR, ref noBorder, sizeof(uint));
+
+        // Kill the non-client drop shadow / border rendering — popup shadow
+        // composited as opaque under our transparent rounded corners.
+        int ncDisabled = 1; // DWMNCRP_DISABLED
+        DwmSetWindowAttribute(_hwnd, DWMWA_NCRENDERING_POLICY, ref ncDisabled, sizeof(int));
     }
 
     private void ApplyOptions(ToastService.ToastOptions opts)
@@ -318,6 +326,7 @@ public sealed partial class ToastWindow : Window
     private const int SWP_NOACTIVATE  = 0x0010;
     private const int SWP_FRAMECHANGED = 0x0020;
 
+    private const int DWMWA_NCRENDERING_POLICY      = 2;
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int DWMWA_BORDER_COLOR             = 34;
     private const uint DWMWA_COLOR_NONE              = 0xFFFFFFFE;
