@@ -22,12 +22,15 @@ public sealed partial class MainWindow : Window
     public event Action? SettingsRequested;
     public event Action? AboutRequested;
     public event Action? ExitRequested;
+    public event Action? MenuRequested;
 
-    public ICommand CaptureCommand { get; }
+    public ICommand CaptureCommand  { get; }
+    public ICommand ShowMenuCommand { get; }
 
     public MainWindow()
     {
-        CaptureCommand = new RelayCommand(() => CaptureRequested?.Invoke());
+        CaptureCommand  = new RelayCommand(() => CaptureRequested?.Invoke());
+        ShowMenuCommand = new RelayCommand(() => MenuRequested?.Invoke());
         InitializeComponent();
         ThemeService.Register(Content as Microsoft.UI.Xaml.FrameworkElement);
         Hwnd = WindowNative.GetWindowHandle(this);
@@ -41,39 +44,15 @@ public sealed partial class MainWindow : Window
 
     private void WireTrayCommands()
     {
-        // LMB still triggers capture. RMB opens the WinUI ContextFlyout
-        // declared in MainWindow.xaml — H.NotifyIcon shows it at the cursor.
-        TrayIcon.LeftClickCommand = CaptureCommand;
+        TrayIcon.LeftClickCommand  = CaptureCommand;
+        TrayIcon.RightClickCommand = ShowMenuCommand;
         TrayIcon.ForceCreate();
     }
 
     private void ApplyLocalization()
     {
         TrayIcon.ToolTipText = Strings.Get("TrayTooltip");
-        try
-        {
-            if (TrayCaptureItem    != null) TrayCaptureItem.Text    = Strings.Get("TrayCapture");
-            if (TrayRecordItem     != null) TrayRecordItem.Text     = Strings.Get("TrayRecord");
-            if (TrayOpenFolderItem != null) TrayOpenFolderItem.Text = Strings.Get("TrayOpenFolder");
-            if (TraySettingsItem   != null) TraySettingsItem.Text   = Strings.Get("TraySettings");
-            if (TrayAboutItem      != null) TrayAboutItem.Text      = Strings.Get("TrayAbout");
-            if (TrayExitItem       != null) TrayExitItem.Text       = Strings.Get("TrayExit");
-            if (TrayHeaderItem != null)
-                TrayHeaderItem.KeyboardAcceleratorTextOverride =
-                    $"v{UpdateService.CurrentVersion()} · {Strings.Get("TrayReady")}";
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log("MainWindow.ApplyLocalization", ex);
-        }
     }
-
-    private void OnTrayCapture(object sender, RoutedEventArgs e)    => CaptureRequested?.Invoke();
-    private void OnTrayRecord(object sender, RoutedEventArgs e)     => RecordRequested?.Invoke();
-    private void OnTrayOpenFolder(object sender, RoutedEventArgs e) => OpenFolderRequested?.Invoke();
-    private void OnTraySettings(object sender, RoutedEventArgs e)   => SettingsRequested?.Invoke();
-    private void OnTrayAbout(object sender, RoutedEventArgs e)      => AboutRequested?.Invoke();
-    private void OnTrayExit(object sender, RoutedEventArgs e)       => ExitRequested?.Invoke();
 
     private void TrySetTrayIcon()
     {

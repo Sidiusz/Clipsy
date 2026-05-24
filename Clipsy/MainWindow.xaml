@@ -8,58 +8,6 @@
         <tb:TaskbarIcon
             x:Name="TrayIcon"
             ToolTipText="Clipsy"
-            NoLeftClickDelay="True">
-            <tb:TaskbarIcon.ContextFlyout>
-                <MenuFlyout x:Name="TrayMenuFlyout">
-                    <MenuFlyoutItem x:Name="TrayHeaderItem" IsEnabled="False" Text="Clipsy">
-                        <MenuFlyoutItem.Icon>
-                            <FontIcon Glyph="&#xE722;" Foreground="{StaticResource ClipsyAccentBrush}" />
-                        </MenuFlyoutItem.Icon>
-                    </MenuFlyoutItem>
-                    <MenuFlyoutSeparator />
-                    <MenuFlyoutItem x:Name="TrayCaptureItem" Text="Capture screen"
-                                    KeyboardAcceleratorTextOverride="PrtSc"
-                                    Click="OnTrayCapture">
-                        <MenuFlyoutItem.Icon>
-                            <FontIcon Glyph="&#xE722;" />
-                        </MenuFlyoutItem.Icon>
-                    </MenuFlyoutItem>
-                    <MenuFlyoutItem x:Name="TrayRecordItem" Text="Record region"
-                                    KeyboardAcceleratorTextOverride="Ctrl+Shift+R"
-                                    Click="OnTrayRecord">
-                        <MenuFlyoutItem.Icon>
-                            <FontIcon Glyph="&#xE7C8;" />
-                        </MenuFlyoutItem.Icon>
-                    </MenuFlyoutItem>
-                    <MenuFlyoutItem x:Name="TrayOpenFolderItem" Text="Open captures folder"
-                                    Click="OnTrayOpenFolder">
-                        <MenuFlyoutItem.Icon>
-                            <FontIcon Glyph="&#xE8B7;" />
-                        </MenuFlyoutItem.Icon>
-                    </MenuFlyoutItem>
-                    <MenuFlyoutSeparator />
-                    <MenuFlyoutItem x:Name="TraySettingsItem" Text="Settings"
-                                    KeyboardAcceleratorTextOverride="Ctrl+,"
-                                    Click="OnTraySettings">
-                        <MenuFlyoutItem.Icon>
-                            <FontIcon Glyph="&#xE713;" />
-                        </MenuFlyoutItem.Icon>
-                    </MenuFlyoutItem>
-                    <MenuFlyoutItem x:Name="TrayAboutItem" Text="About"
-                                    Click="OnTrayAbout">
-                        <MenuFlyoutItem.Icon>
-                            <FontIcon Glyph="&#xE946;" />
-                        </MenuFlyoutItem.Icon>
-                    </MenuFlyoutItem>
-                    <MenuFlyoutSeparator />
-                    <MenuFlyoutItem x:Name="TrayExitItem" Text="Exit"
-                                    Click="OnTrayExit">
-                        <MenuFlyoutItem.Icon>
-                            <FontIcon Glyph="&#xE711;" />
-                        </MenuFlyoutItem.Icon>
-                    </MenuFlyoutItem>
-                </MenuFlyout>
-            </tb:TaskbarIcon.ContextFlyout>
-        </tb:TaskbarIcon>
+            NoLeftClickDelay="True" />
     </Grid>
 </Window>
