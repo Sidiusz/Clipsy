@@ -411,28 +411,41 @@ public sealed class RecordingController
             ? settings.Settings.LastVideoFolder!
             : (settings.Settings.VideoFolder ?? settings.DefaultVideoFolder);
         Directory.CreateDirectory(initialDir);
-        var fmt = _outputFmt;
-        var name = SaveDialogService.MakeTimestampName("Clipsy", fmt);
+        var preferredFmt = _outputFmt;
+        var name = SaveDialogService.MakeTimestampName("Clipsy", preferredFmt);
         // Prefer HostWindow over HUD hwnd: HUD is a TOOLWINDOW + NOACTIVATE +
         // TRANSPARENT click-through window — invalid modal owner for common dialogs.
         var hwnd = App.Current?.HostWindow?.Hwnd ?? _hudHwnd;
-        var (filterLabel, filterPattern) = fmt switch
-        {
-            "avi" => ("AVI video (*.avi)", "*.avi"),
-            "mkv" => ("MKV video (*.mkv)", "*.mkv"),
-            "gif" => ("GIF animation (*.gif)", "*.gif"),
-            _     => ("MP4 video (*.mp4)", "*.mp4"),
-        };
+
+        // List every supported video format. Preferred (whatever the codec
+        // emitted natively) floats to the top so the dialog defaults to it.
         var filters = new System.Collections.Generic.List<SaveDialogService.SaveFilter>
         {
-            new(filterLabel, filterPattern),
+            new("MP4 video (*.mp4)",    "*.mp4"),
+            new("MKV video (*.mkv)",    "*.mkv"),
+            new("AVI video (*.avi)",    "*.avi"),
+            new("GIF animation (*.gif)", "*.gif"),
         };
-        Diagnostics.Log($"  hwnd=0x{hwnd.ToInt64():X}, initialDir='{initialDir}', suggested='{name}', fmt='{fmt}'");
+        int preferredIdx = preferredFmt switch
+        {
+            "mkv" => 1,
+            "avi" => 2,
+            "gif" => 3,
+            _     => 0,
+        };
+        if (preferredIdx > 0)
+        {
+            var picked = filters[preferredIdx];
+            filters.RemoveAt(preferredIdx);
+            filters.Insert(0, picked);
+        }
+
+        Diagnostics.Log($"  hwnd=0x{hwnd.ToInt64():X}, initialDir='{initialDir}', suggested='{name}', preferred='{preferredFmt}'");
         SaveDialogService.SavePickResult? pick = null;
         try
         {
-            pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir!, name, filters, "." + fmt);
-            Diagnostics.Log($"  PickSaveAsync returned pick={(pick == null ? "null" : "'" + pick.Path + "'")}");
+            pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir!, name, filters, "." + preferredFmt);
+            Diagnostics.Log($"  PickSaveAsync returned pick={(pick == null ? "null" : $"'{pick.Path}' filter={pick.FilterIndex}")}");
         }
         catch (Exception ex)
         {
@@ -444,15 +457,18 @@ public sealed class RecordingController
             Diagnostics.Log("OfferSaveAsync EXIT (no pick)");
             return;
         }
+
+        // Figure out chosen extension from filter index (fall back to file ext).
+        var chosenFilter = filters[System.Math.Max(0, pick.FilterIndex - 1)];
+        var chosenExt = SaveDialogService.ExtensionFromPattern(chosenFilter.Pattern); // ".mp4"/...
+        var chosenFmt = chosenExt.TrimStart('.').ToLowerInvariant();
         var dest = pick.Path;
-        if (!dest.EndsWith("." + fmt, StringComparison.OrdinalIgnoreCase))
-        {
-            dest = Path.ChangeExtension(dest, "." + fmt);
-        }
+        if (!dest.EndsWith(chosenExt, StringComparison.OrdinalIgnoreCase))
+            dest = Path.ChangeExtension(dest, chosenExt);
+
         try
         {
-            Diagnostics.Log($"  File.Copy → '{dest}'");
-            File.Copy(tempPath, dest, overwrite: true);
+            await ConvertOrCopyAsync(tempPath, dest, preferredFmt, chosenFmt);
             TryDelete(tempPath);
             var dir = Path.GetDirectoryName(dest);
             if (!string.IsNullOrEmpty(dir))
@@ -466,8 +482,41 @@ public sealed class RecordingController
         }
         catch (Exception ex)
         {
-            Diagnostics.Log("OfferSaveAsync File.Copy", ex);
+            Diagnostics.Log("OfferSaveAsync save", ex);
+            NotificationService.Error("ErrSaveFailed");
         }
+    }
+
+    /// <summary>
+    /// Move the temp recording to <paramref name="dest"/>, converting between
+    /// container formats if the user picked a different one in the dialog.
+    /// GIF goes through ConvertToGifAsync; mp4/mkv/avi cross-conversion uses
+    /// `ffmpeg -c copy` (no re-encode). If FFmpeg isn't available the file
+    /// is copied with the new extension and a warning is logged.
+    /// </summary>
+    private static async Task ConvertOrCopyAsync(string src, string dest, string srcFmt, string destFmt)
+    {
+        if (string.Equals(srcFmt, destFmt, StringComparison.OrdinalIgnoreCase))
+        {
+            File.Copy(src, dest, overwrite: true);
+            return;
+        }
+        if (destFmt == "gif")
+        {
+            await FFmpegService.Instance.ConvertToGifAsync(src, dest);
+            return;
+        }
+        if (FFmpegService.Instance.IsAvailable)
+        {
+            // Stream copy — no re-encode, fast container swap.
+            var args = $"-i \"{src}\" -c copy -y \"{dest}\"";
+            var ok = await FFmpegService.Instance.RunAsync(args);
+            if (ok && File.Exists(dest)) return;
+            Diagnostics.Log($"ConvertOrCopyAsync ffmpeg remux failed src='{src}' dest='{dest}'");
+        }
+        // No ffmpeg or remux failed → fall back to plain copy. Container
+        // mismatch may break playback for some codec/extension combos.
+        File.Copy(src, dest, overwrite: true);
     }
 
     private void Cleanup(bool discardTemp)
