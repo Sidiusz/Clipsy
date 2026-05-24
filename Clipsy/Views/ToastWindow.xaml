@@ -13,10 +13,6 @@
                 Width="380"
                 PointerEntered="OnPointerEntered"
                 PointerExited="OnPointerExited">
-            <Border.RenderTransform>
-                <TranslateTransform x:Name="SlideTransform" X="20" />
-            </Border.RenderTransform>
-
             <Grid>
                 <!-- Left accent strip (clipped to border radius by the parent) -->
                 <Rectangle x:Name="AccentBar"
