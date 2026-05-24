@@ -112,7 +112,7 @@ public class Win32BorderOverlay
                 var bgRc = new RECT { Left = 0, Top = 0, Right = _w, Bottom = _h };
                 FillRect(hdc, ref bgRc, _magentaBrush);
 
-                var pen = CreatePen(PS_SOLID, 2, RGB(31, 111, 235)); // #1F6FEB
+                var pen = CreatePen(PS_SOLID, 2, RGB(232, 125, 13)); // ClipsyAccent #E87D0D
                 var oldPen = SelectObject(hdc, pen);
                 MoveToEx(hdc, 0, 0, IntPtr.Zero);
                 LineTo(hdc, _w - 1, 0);

@@ -74,7 +74,9 @@
     <SolidColorBrush x:Key="ClipsyAccentPressedBrush"  Color="{StaticResource ClipsyAccentPressed}" />
     <SolidColorBrush x:Key="ClipsyAccentDimBrush"      Color="{StaticResource ClipsyAccentDim}" />
     <SolidColorBrush x:Key="ClipsyAccentDimStrongBrush" Color="{StaticResource ClipsyAccentDimStrong}" />
-    <SolidColorBrush x:Key="ClipsyCodecSelectedBrush"  Color="#FF323650" />
+    <!-- Codec / RadioCard checked fill — amber tint at low alpha so the
+         selected card reads as branded, not as the old indigo state. -->
+    <SolidColorBrush x:Key="ClipsyCodecSelectedBrush"  Color="#33E87D0D" />
 
     <SolidColorBrush x:Key="ClipsyDangerBrush"         Color="{StaticResource ClipsyDanger}" />
     <SolidColorBrush x:Key="ClipsyDangerHoverBrush"    Color="{StaticResource ClipsyDangerHover}" />
