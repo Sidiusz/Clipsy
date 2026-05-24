@@ -31,6 +31,7 @@ public static class CaptureOverlayHost
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Overlay show failed: {ex}");
+            Diagnostics.Log("CaptureOverlayHost.ShowOverlay", ex);
             _current = null;
         }
     }

@@ -165,10 +165,14 @@ public sealed partial class CaptureOverlayWindow : Window
         ToolTipService.SetToolTip(CopyBtn,       Strings.Get("TipCopy"));
         ToolTipService.SetToolTip(CancelBtn,     Strings.Get("TipCancel"));
 
-        ToolTipService.SetToolTip(ColorBtn,        Strings.Get("TipColor"));
-        ToolTipService.SetToolTip(EyedropperBtn,   Strings.Get("TipEyedropper"));
-        ToolTipService.SetToolTip(ColorCancelBtn,  Strings.Get("TipColorCancel"));
-        ToolTipService.SetToolTip(ColorConfirmBtn, Strings.Get("TipColorApply"));
+        ToolTipService.SetToolTip(ColorBtn, Strings.Get("TipColor"));
+        // Flyout-hosted buttons may not be materialized at ctor time in
+        // WinUI 3; guard against null so a failed SetToolTip doesn't kill
+        // the overlay ctor (which would also swallow PrintScreen via the
+        // already-installed LL keyboard hook).
+        if (EyedropperBtn   != null) ToolTipService.SetToolTip(EyedropperBtn,   Strings.Get("TipEyedropper"));
+        if (ColorCancelBtn  != null) ToolTipService.SetToolTip(ColorCancelBtn,  Strings.Get("TipColorCancel"));
+        if (ColorConfirmBtn != null) ToolTipService.SetToolTip(ColorConfirmBtn, Strings.Get("TipColorApply"));
         ToolTipService.SetToolTip(PencilBtn, Strings.Get("TipPencil"));
         ToolTipService.SetToolTip(EllipseBtn, Strings.Get("TipEllipse"));
         ToolTipService.SetToolTip(LineBtn,    Strings.Get("TipLine"));
