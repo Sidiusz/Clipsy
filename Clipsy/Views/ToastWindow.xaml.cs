@@ -5,6 +5,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using Windows.Graphics;
 using Windows.UI;
 using WinRT.Interop;
 
@@ -58,7 +59,11 @@ public sealed partial class ToastWindow : Window
         int x = mi.rcWork.right - w - margin;
         int y = mi.rcWork.bottom - h - margin - index * (h + gap);
 
-        SetWindowPos(_hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        _appWindow.MoveAndResize(new Windows.Graphics.RectInt32(x, y, w, h));
+        _appWindow.Show(false);
+
+        // Keep topmost; MoveAndResize can reset z-order on some builds.
+        SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     // ── Setup ────────────────────────────────────────────────────
@@ -169,6 +174,7 @@ public sealed partial class ToastWindow : Window
     private double DpiScale()
     {
         uint dpi = GetDpiForWindow(_hwnd);
+        if (dpi == 0) dpi = GetDpiForSystem();
         return dpi == 0 ? 1.0 : dpi / 96.0;
     }
 
@@ -219,6 +225,7 @@ public sealed partial class ToastWindow : Window
     [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr h, int flags);
     [DllImport("user32.dll")] private static extern bool  GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
     [DllImport("user32.dll")] private static extern uint  GetDpiForWindow(IntPtr h);
+    [DllImport("user32.dll")] private static extern uint  GetDpiForSystem();
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
