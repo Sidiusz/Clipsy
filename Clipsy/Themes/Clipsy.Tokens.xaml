@@ -30,11 +30,14 @@
     <Color x:Key="ClipsyText4">#FF5C5E66</Color>
 
     <!-- Accent (Discord blurple) -->
-    <Color x:Key="ClipsyAccent">#FF6C76F4</Color>
-    <Color x:Key="ClipsyAccentHover">#FF4752C4</Color>
-    <Color x:Key="ClipsyAccentPressed">#FF3C45A5</Color>
-    <Color x:Key="ClipsyAccentDim">#285865F2</Color>
-    <Color x:Key="ClipsyAccentDimStrong">#3D5865F2</Color>
+    <!-- Brand accent: amber/orange. Matches the highlight tone in the
+         right-click context menu mockup. Hover/Pressed go progressively
+         darker; Dim is the same hue at low alpha for subtle backgrounds. -->
+    <Color x:Key="ClipsyAccent">#FFF59E0B</Color>
+    <Color x:Key="ClipsyAccentHover">#FFD97706</Color>
+    <Color x:Key="ClipsyAccentPressed">#FFB45309</Color>
+    <Color x:Key="ClipsyAccentDim">#28F59E0B</Color>
+    <Color x:Key="ClipsyAccentDimStrong">#3DF59E0B</Color>
 
     <!-- Semantic -->
     <Color x:Key="ClipsyDanger">#FFF23F42</Color>

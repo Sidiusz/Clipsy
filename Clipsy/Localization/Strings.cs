@@ -57,8 +57,8 @@ public static class Strings
         ["MenuSelectAll"]       = New("Select all",    "Выбрать все"),
         ["MenuCopy"]            = New("Copy",          "Копировать"),
         ["MenuSave"]            = New("Save",          "Сохранить"),
-        ["MenuSaveAs"]          = New("Save As",       "Сохранить как"),
-        ["MenuClear"]           = New("Clear",         "Очистить"),
+        ["MenuSaveAs"]          = New("Save As…",      "Сохранить как…"),
+        ["MenuClear"]           = New("Clear drawings","Очистить рисунки"),
         ["MenuCancel"]          = New("Cancel",        "Отмена"),
 
         // Recording HUD

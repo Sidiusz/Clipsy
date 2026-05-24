@@ -425,18 +425,63 @@
             </StackPanel>
         </Border>
 
-        <!-- Context menu (unchanged shape; styles inherit from theme) -->
+        <!-- Context menu (RMB) — selection / actions / cancel grouped with
+             separators. Icons left, accelerator hint right. -->
         <Grid.ContextFlyout>
             <MenuFlyout x:Name="OverlayMenu">
-                <MenuFlyoutSubItem x:Name="SelectScreenMenu" Text="Select screen" />
-                <MenuFlyoutItem x:Name="MenuSelectAll" Text="Select all" Click="OnMenuSelectAll" />
+                <!-- Selection group -->
+                <MenuFlyoutSubItem x:Name="SelectScreenMenu" Text="Select screen">
+                    <MenuFlyoutSubItem.Icon>
+                        <FontIcon Glyph="&#xE91B;" />
+                    </MenuFlyoutSubItem.Icon>
+                </MenuFlyoutSubItem>
+                <MenuFlyoutItem x:Name="MenuSelectAll" Text="Select all"
+                                KeyboardAcceleratorTextOverride="Ctrl+A"
+                                Click="OnMenuSelectAll">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE739;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+
+                <!-- Actions group (visible only with a selection) -->
                 <MenuFlyoutSeparator x:Name="SelectionMenuSeparator" Visibility="Collapsed" />
-                <MenuFlyoutItem x:Name="MenuCopy" Text="Copy" Click="OnMenuCopy" Visibility="Collapsed" />
-                <MenuFlyoutItem x:Name="MenuSave" Text="Save" Click="OnMenuSave" Visibility="Collapsed" />
-                <MenuFlyoutItem x:Name="MenuSaveAs" Text="Save As" Click="OnMenuSaveAs" Visibility="Collapsed" />
-                <MenuFlyoutItem x:Name="MenuClear" Text="Clear" Click="OnMenuClear" Visibility="Collapsed" />
+                <MenuFlyoutItem x:Name="MenuCopy" Text="Copy" Visibility="Collapsed"
+                                KeyboardAcceleratorTextOverride="Ctrl+C"
+                                Click="OnMenuCopy">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE8C8;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="MenuSave" Text="Save" Visibility="Collapsed"
+                                KeyboardAcceleratorTextOverride="Ctrl+S"
+                                Click="OnMenuSave">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE74E;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="MenuSaveAs" Text="Save As…" Visibility="Collapsed"
+                                KeyboardAcceleratorTextOverride="Ctrl+Shift+S"
+                                Click="OnMenuSaveAs">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE792;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="MenuClear" Text="Clear drawings" Visibility="Collapsed"
+                                Click="OnMenuClear">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xEE0F;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+
+                <!-- Cancel group -->
                 <MenuFlyoutSeparator />
-                <MenuFlyoutItem x:Name="MenuCancel" Text="Cancel" Click="OnMenuCancel" />
+                <MenuFlyoutItem x:Name="MenuCancel" Text="Cancel"
+                                KeyboardAcceleratorTextOverride="Esc"
+                                Click="OnMenuCancel">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE711;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
             </MenuFlyout>
         </Grid.ContextFlyout>
     </Grid>
