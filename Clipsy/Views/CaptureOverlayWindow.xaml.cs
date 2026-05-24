@@ -17,6 +17,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 using Windows.Graphics;
@@ -397,8 +398,8 @@ public sealed partial class CaptureOverlayWindow : Window
             ShapesFlyout.Visibility = Visibility.Collapsed;
         }
 
-        // Select current shape tool on shapes button click
-        SetTool(_currentShapeTool);
+        // Toggle: re-click active shape deselects
+        SetTool(_drawing.Settings.Tool == _currentShapeTool ? ToolKind.None : _currentShapeTool);
 
         // Reset flag after short delay
         var resetTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
@@ -406,9 +407,35 @@ public sealed partial class CaptureOverlayWindow : Window
         resetTimer.Start();
     }
 
+    private static void FadeOutFlyout(FrameworkElement flyout)
+    {
+        if (flyout.Visibility == Visibility.Collapsed) return;
+        var anim = new DoubleAnimation { From = 1.0, To = 0.0, Duration = new Duration(TimeSpan.FromMilliseconds(100)), EnableDependentAnimation = true };
+        var sb = new Storyboard();
+        Storyboard.SetTarget(anim, flyout);
+        Storyboard.SetTargetProperty(anim, "Opacity");
+        sb.Children.Add(anim);
+        sb.Completed += (_, _) => { flyout.Visibility = Visibility.Collapsed; flyout.Opacity = 1.0; };
+        sb.Begin();
+    }
+
+    private static void ShowFlyout(FrameworkElement flyout)
+    {
+        flyout.Opacity = 0.0;
+        flyout.Visibility = Visibility.Visible;
+        var anim = new DoubleAnimation { From = 0.0, To = 1.0, Duration = new Duration(TimeSpan.FromMilliseconds(120)), EnableDependentAnimation = true };
+        var sb = new Storyboard();
+        Storyboard.SetTarget(anim, flyout);
+        Storyboard.SetTargetProperty(anim, "Opacity");
+        sb.Children.Add(anim);
+        sb.Begin();
+    }
+
     private void OnShapesPointerEntered(object sender, PointerRoutedEventArgs e)
     {
         if (ShapesFlyout == null || ShapesBtn == null || _shapesClickHandled) return;
+        // Close font flyout if open
+        if (FontsFlyout != null) FadeOutFlyout(FontsFlyout);
 
         // Cancel any existing timer
         if (_hoverTimer != null)
@@ -435,9 +462,8 @@ public sealed partial class CaptureOverlayWindow : Window
 
         if (ShapesFlyout == null || ShapesBtn == null) return;
 
-        // Show flyout and position it next to shapes button
-        ShapesFlyout.Visibility = Visibility.Visible;
         PositionShapesFlyout();
+        ShowFlyout(ShapesFlyout);
     }
 
     private void PositionShapesFlyout()
@@ -480,16 +506,9 @@ public sealed partial class CaptureOverlayWindow : Window
         // This allows cursor to move to flyout without closing it
         _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _hoverTimer.Tick += (s, args) => {
-            if (ShapesFlyout != null)
-            {
-                ShapesFlyout.Visibility = Visibility.Collapsed;
-            }
+            if (ShapesFlyout != null) FadeOutFlyout(ShapesFlyout);
             _hoverTimer?.Stop();
-            if (_hoverTimer != null)
-            {
-                _hoverTimer.Tick -= OnHoverTimerTick;
-                _hoverTimer = null;
-            }
+            _hoverTimer = null;
         };
         _hoverTimer.Start();
     }
@@ -507,11 +526,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void OnShapesFlyoutPointerExited(object sender, PointerRoutedEventArgs e)
     {
-        // Hide flyout when cursor leaves flyout area
-        if (ShapesFlyout != null)
-        {
-            ShapesFlyout.Visibility = Visibility.Collapsed;
-        }
+        if (ShapesFlyout != null) FadeOutFlyout(ShapesFlyout);
     }
 
     // ---------- Text / Fonts flyout (mirrors Shapes flyout) ----------
@@ -530,7 +545,8 @@ public sealed partial class CaptureOverlayWindow : Window
         }
 
         if (FontsFlyout != null) FontsFlyout.Visibility = Visibility.Collapsed;
-        SetTool(ToolKind.Text);
+        // Toggle: re-click active text tool deselects
+        SetTool(_drawing.Settings.Tool == ToolKind.Text ? ToolKind.None : ToolKind.Text);
 
         var resetTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         resetTimer.Tick += (s, args) => { _textClickHandled = false; resetTimer.Stop(); };
@@ -562,11 +578,10 @@ public sealed partial class CaptureOverlayWindow : Window
             _hoverTimer = null;
         }
         if (FontsFlyout == null || TextBtn == null) return;
-        // Make sure the shapes flyout doesn't sit on top.
-        if (ShapesFlyout != null) ShapesFlyout.Visibility = Visibility.Collapsed;
+        if (ShapesFlyout != null) FadeOutFlyout(ShapesFlyout);
         EnsureFontListBuilt();
-        FontsFlyout.Visibility = Visibility.Visible;
         PositionFontsFlyout();
+        ShowFlyout(FontsFlyout);
     }
 
     private List<string>? _systemFonts;
@@ -667,7 +682,7 @@ public sealed partial class CaptureOverlayWindow : Window
         _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _hoverTimer.Tick += (s, args) =>
         {
-            if (FontsFlyout != null) FontsFlyout.Visibility = Visibility.Collapsed;
+            if (FontsFlyout != null) FadeOutFlyout(FontsFlyout);
             _hoverTimer?.Stop();
             _hoverTimer = null;
         };
@@ -687,7 +702,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void OnFontsFlyoutPointerExited(object sender, PointerRoutedEventArgs e)
     {
-        if (FontsFlyout != null) FontsFlyout.Visibility = Visibility.Collapsed;
+        if (FontsFlyout != null) FadeOutFlyout(FontsFlyout);
     }
 
     private void OnFontPick(object sender, RoutedEventArgs e)
@@ -715,14 +730,14 @@ public sealed partial class CaptureOverlayWindow : Window
             "Text" => ToolKind.Text,
             _ => ToolKind.None,
         };
-        SetTool(tool);
+        // Toggle: re-click active tool deselects
+        SetTool(_drawing.Settings.Tool == tool ? ToolKind.None : tool);
 
         // Update current shape tool if it's a shape
         if (tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
         {
             _currentShapeTool = tool;
         }
-        // Don't close flyout - let user pick multiple shapes or hover away to close
     }
 
     private void BuildHandles()
