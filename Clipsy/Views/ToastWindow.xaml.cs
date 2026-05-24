@@ -34,7 +34,6 @@ public sealed partial class ToastWindow : Window
     private readonly Action? _action1;
     private readonly Action? _action2;
     private DispatcherTimer? _dismissTimer;
-    private DispatcherTimer? _alphaTimer;
     private bool _isHovered;
     private bool _fadeInDone;
     private bool _isFadingOut;
@@ -51,7 +50,6 @@ public sealed partial class ToastWindow : Window
         ConfigureWindow();
         ApplyOptions(opts);
         ThemeService.Register(Content as FrameworkElement);
-        SetLayeredWindowAttributes(_hwnd, 0, 0, LWA_ALPHA); // start invisible
         StartDismissTimer();
     }
 
@@ -101,13 +99,10 @@ public sealed partial class ToastWindow : Window
 
     private void BeginFadeIn()
     {
-        // Slide via XAML compositor
         var sb = new Storyboard();
-        AddAnim(sb, SlideTransform, "X", 20, 0, FadeInMs, new CubicEase { EasingMode = EasingMode.EaseOut });
+        AddAnim(sb, CardBorder,     "Opacity", 0,  1, FadeInMs, new CubicEase { EasingMode = EasingMode.EaseOut });
+        AddAnim(sb, SlideTransform, "X",       20, 0, FadeInMs, new CubicEase { EasingMode = EasingMode.EaseOut });
         sb.Begin();
-
-        // Whole-window alpha via layered-window API
-        AnimateAlpha(0, 255, FadeInMs, EaseOutCubic);
     }
 
     private void BeginFadeOut()
@@ -118,36 +113,11 @@ public sealed partial class ToastWindow : Window
         _dismissTimer = null;
 
         var sb = new Storyboard();
-        AddAnim(sb, SlideTransform, "X", 0, 20, FadeOutMs, new QuadraticEase { EasingMode = EasingMode.EaseIn });
+        AddAnim(sb, CardBorder,     "Opacity", 1, 0,  FadeOutMs, new QuadraticEase { EasingMode = EasingMode.EaseIn });
+        AddAnim(sb, SlideTransform, "X",       0, 20, FadeOutMs, new QuadraticEase { EasingMode = EasingMode.EaseIn });
+        sb.Completed += (_, _) => { try { Close(); } catch { } };
         sb.Begin();
-
-        AnimateAlpha(255, 0, FadeOutMs, EaseInQuad, onComplete: () => { try { Close(); } catch { } });
     }
-
-    private void AnimateAlpha(byte from, byte to, int durationMs, Func<double, double> easing, Action? onComplete = null)
-    {
-        _alphaTimer?.Stop();
-        _alphaTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        double elapsed = 0;
-        _alphaTimer.Tick += (_, _) =>
-        {
-            elapsed += 16;
-            double t = Math.Min(elapsed / durationMs, 1.0);
-            double eased = easing(t);
-            byte alpha = (byte)(from + (to - from) * eased);
-            SetLayeredWindowAttributes(_hwnd, 0, alpha, LWA_ALPHA);
-            if (t >= 1.0)
-            {
-                _alphaTimer?.Stop();
-                _alphaTimer = null;
-                onComplete?.Invoke();
-            }
-        };
-        _alphaTimer.Start();
-    }
-
-    private static double EaseOutCubic(double t) => 1 - Math.Pow(1 - t, 3);
-    private static double EaseInQuad(double t)   => t * t;
 
     private static void AddAnim(Storyboard sb, DependencyObject target, string prop,
         double from, double to, double ms, EasingFunctionBase? ease = null)
@@ -197,26 +167,25 @@ public sealed partial class ToastWindow : Window
         style |= WS_POPUP;
         SetWindowLong(_hwnd, GWL_STYLE, unchecked((int)style));
 
+        // NO WS_EX_LAYERED — breaks WinUI 3 DComp rendering (XAML doesn't
+        // composite through layered windows; user gets a black rectangle).
         int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
-        exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED;
+        exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
         SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle);
 
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
-        // Don't let DWM round — XAML's CornerRadius="8" on CardBorder handles
-        // corners; DWM rounding plus our layered-alpha window produced a hard
-        // black rectangle outside the rounded XAML region.
+        // Extend DWM glass into the entire client area. With SystemBackdrop=null
+        // this gives a fully transparent HWND background — Border.Opacity
+        // animations reveal the desktop, not a black HWND fill.
+        var margins = new MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 };
+        DwmExtendFrameIntoClientArea(_hwnd, ref margins);
+
+        // XAML CornerRadius="8" owns corners. DWM rounding would clip outside
+        // the rounded XAML region and reveal whatever's behind.
         int donotround = 1; // DWMWCP_DONOTROUND
         DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref donotround, sizeof(int));
-
-        uint noBorder = DWMWA_COLOR_NONE;
-        DwmSetWindowAttributeU(_hwnd, DWMWA_BORDER_COLOR, ref noBorder, sizeof(uint));
-
-        // Kill the non-client drop shadow / border rendering — popup shadow
-        // composited as opaque under our transparent rounded corners.
-        int ncDisabled = 1; // DWMNCRP_DISABLED
-        DwmSetWindowAttribute(_hwnd, DWMWA_NCRENDERING_POLICY, ref ncDisabled, sizeof(int));
     }
 
     private void ApplyOptions(ToastService.ToastOptions opts)
@@ -316,9 +285,6 @@ public sealed partial class ToastWindow : Window
 
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
-    private const int WS_EX_LAYERED    = 0x00080000;
-
-    private const uint LWA_ALPHA = 0x00000002;
 
     private const int SWP_NOMOVE      = 0x0002;
     private const int SWP_NOSIZE      = 0x0001;
@@ -326,10 +292,7 @@ public sealed partial class ToastWindow : Window
     private const int SWP_NOACTIVATE  = 0x0010;
     private const int SWP_FRAMECHANGED = 0x0020;
 
-    private const int DWMWA_NCRENDERING_POLICY      = 2;
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
-    private const int DWMWA_BORDER_COLOR             = 34;
-    private const uint DWMWA_COLOR_NONE              = 0xFFFFFFFE;
     private const int MONITOR_DEFAULTTOPRIMARY       = 1;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -344,6 +307,12 @@ public sealed partial class ToastWindow : Window
         public uint dwFlags;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MARGINS
+    {
+        public int cxLeftWidth, cxRightWidth, cyTopHeight, cyBottomHeight;
+    }
+
     [DllImport("user32.dll")] private static extern int   GetWindowLong(IntPtr h, int n);
     [DllImport("user32.dll")] private static extern int   SetWindowLong(IntPtr h, int n, int v);
     [DllImport("user32.dll")] private static extern bool  SetWindowPos(IntPtr h, IntPtr z, int x, int y, int cx, int cy, int flags);
@@ -351,11 +320,10 @@ public sealed partial class ToastWindow : Window
     [DllImport("user32.dll")] private static extern bool  GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
     [DllImport("user32.dll")] private static extern uint  GetDpiForWindow(IntPtr h);
     [DllImport("user32.dll")] private static extern uint  GetDpiForSystem();
-    [DllImport("user32.dll")] private static extern bool  SetLayeredWindowAttributes(IntPtr h, uint colorKey, byte alpha, uint flags);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
 
-    [DllImport("dwmapi.dll", EntryPoint = "DwmSetWindowAttribute")]
-    private static extern int DwmSetWindowAttributeU(IntPtr h, int attr, ref uint value, int size);
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr h, ref MARGINS m);
 }
