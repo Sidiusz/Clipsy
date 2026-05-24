@@ -123,36 +123,20 @@ public sealed partial class SettingsWindow : Window
             Diagnostics.Log("SettingsWindow.SetTitleBar", ex);
         }
 
-        // Cloak the window via DWM until XAML has composed its first frame.
-        // Without this DWM briefly shows the default opaque window surface
-        // (visible as a black flash) before the dark theme paints.
-        int cloak = 1;
-        try { DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int)); }
-        catch { }
+        // Whole-window alpha fade kills the black flash WinUI 3 paints
+        // before XAML composes its first frame.
+        LayeredFade.EnableHidden(_hwnd);
 
         Activated += OnFirstActivated;
         if (Content is FrameworkElement fe)
         {
             fe.Loaded += (_, _) =>
-                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Uncloak);
+                DispatcherQueue.TryEnqueue(
+                    Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                    () => LayeredFade.FadeIn(_hwnd, durationMs: 180));
         }
         Closed += (_, _) => { if (_current == this) _current = null; };
     }
-
-    private bool _cloaked = true;
-    private const int DWMWA_CLOAK = 13;
-
-    private void Uncloak()
-    {
-        if (!_cloaked) return;
-        _cloaked = false;
-        int cloak = 0;
-        try { DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int)); }
-        catch { }
-    }
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
 
     private void OnFirstActivated(object sender, WindowActivatedEventArgs e)
