@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Clipsy.Localization;
@@ -100,9 +100,10 @@ public sealed partial class TrayMenuWindow : Window
     {
         _updateStatus = status;
 
-        var text3  = (SolidColorBrush)Application.Current.Resources["ClipsyText3Brush"];
-        var green  = (SolidColorBrush)Application.Current.Resources["ClipsySuccessBrush"];
-        var red    = (SolidColorBrush)Application.Current.Resources["ClipsyDangerBrush"];
+        var text3   = (SolidColorBrush)Application.Current.Resources["ClipsyText3Brush"];
+        var green   = (SolidColorBrush)Application.Current.Resources["ClipsySuccessBrush"];
+        var red     = (SolidColorBrush)Application.Current.Resources["ClipsyDangerBrush"];
+        var warning = (SolidColorBrush)Application.Current.Resources["ClipsyWarningBrush"];
 
         switch (status)
         {
@@ -129,10 +130,10 @@ public sealed partial class TrayMenuWindow : Window
             case TrayUpdateStatus.Failed:
                 UpdateRow.Visibility     = Visibility.Visible;
                 UpdateRow.IsHitTestVisible = true;
-                UpdateRowIcon.Glyph      = "";
-                UpdateRowIcon.Foreground = red;
-                UpdateRowText.Text       = Strings.Get("TrayUpdateFailed");
-                UpdateRowText.Foreground = red;
+                UpdateRowIcon.Glyph      = "";
+                UpdateRowIcon.Foreground   = warning;
+                UpdateRowText.Text         = string.Empty;
+
                 break;
 
             default: // UpToDate / Idle

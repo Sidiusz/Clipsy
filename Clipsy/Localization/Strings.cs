@@ -27,7 +27,6 @@ public static class Strings
         ["TrayReady"]            = New("ready",                       "готов"),
         ["TrayUpdateChecking"]   = New("Checking for updates…",       "Проверка обновлений…"),
         ["TrayUpdateAvailable"]  = New("available",                   "доступно"),
-        ["TrayUpdateFailed"]     = New("Check failed — open settings","Ошибка — открыть настройки"),
 
         // Capture overlay
         ["HintSelectArea"]      = New("Select area", "Выделите область"),
