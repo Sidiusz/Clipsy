@@ -132,18 +132,19 @@ public sealed class FFmpegService
         {
             var s = SettingsService.Instance.Settings;
             var fps    = s.GifFps;
-            var colors = s.GifColors;
-            var dither = s.GifDither ? "1" : "0";
+            var colors = Math.Clamp(s.GifColors, 4, 256);
+            // dither param accepts named modes, not 0/1. The previous numeric
+            // value made ffmpeg either bail out or produce a broken stream.
+            var dither = s.GifDither ? "floyd_steinberg" : "none";
 
-            var palette = $"{outputGif}.palette.png";
-            var r1 = await RunAsync(
-                $"-i \"{inputMp4}\" -vf \"fps={fps},scale=-1:-1:flags=lanczos,palettegen=max_colors={colors}\" -y \"{palette}\"");
-            if (!r1) return false;
-
-            var r2 = await RunAsync(
-                $"-i \"{inputMp4}\" -i \"{palette}\" -lavfi \"fps={fps},scale=-1:-1:flags=lanczos[x];[x][1:v]paletteuse=dither={dither}\" -y \"{outputGif}\"");
-            try { File.Delete(palette); } catch { }
-            return r2;
+            // Single-pass split + palettegen + paletteuse. Avoids the fragile
+            // two-pass palette file and works on every ffmpeg ≥4.x.
+            var filter =
+                $"fps={fps},split[a][b];" +
+                $"[a]palettegen=max_colors={colors}[p];" +
+                $"[b][p]paletteuse=dither={dither}";
+            var args = $"-i \"{inputMp4}\" -filter_complex \"{filter}\" -y \"{outputGif}\"";
+            return await RunAsync(args);
         }
         catch (Exception ex) { Debug.WriteLine($"[Clipsy] GIF: {ex.Message}"); return false; }
     }
