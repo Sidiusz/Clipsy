@@ -268,15 +268,11 @@
                                     Opened="OnColorFlyoutOpened">
                                 <StackPanel Spacing="8" Width="240">
                                     <ColorPicker x:Name="ColorPickerCtl"
-                                                 Color="#FFF23F42"
                                                  ColorSpectrumShape="Box"
                                                  IsColorChannelTextInputVisible="False"
                                                  IsHexInputVisible="True"
                                                  IsAlphaEnabled="False"
                                                  IsMoreButtonVisible="False"
-                                                 Width="240"
-                                                 MinWidth="240"
-                                                 MaxWidth="240"
                                                  ColorChanged="OnColorPickerChanged" />
                                     <Grid>
                                         <Grid.ColumnDefinitions>

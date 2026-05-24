@@ -87,6 +87,11 @@ public sealed partial class CaptureOverlayWindow : Window
         _frame = frame;
         InitializeComponent();
 
+        // Initial picker colour set in code rather than XAML — assigning
+        // ColorPicker.Color through the markup parser throws XamlParseException
+        // (0x802B000A) at runtime on Windows App SDK 1.6.
+        try { ColorPickerCtl.Color = Microsoft.UI.Colors.Red; } catch { }
+
         // Set window background to transparent to prevent white borders
         this.SystemBackdrop = null;
 
