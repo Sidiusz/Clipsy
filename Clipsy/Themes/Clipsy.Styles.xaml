@@ -288,6 +288,57 @@
         <Setter Property="Foreground" Value="{StaticResource ClipsyAccentBrush}" />
     </Style>
 
+    <!-- Selected tool: amber tint + amber border that survives PointerOver.
+         The base ClipsyIconButton template's PointerOver state forces
+         Background to grey, which overwrites the inline amber. This style
+         supplies its own template with amber stops for Normal / Hover /
+         Pressed so the active state never reads as grey on hover. -->
+    <Style x:Key="ClipsyIconButtonSelected" TargetType="Button" BasedOn="{StaticResource ClipsyIconButton}">
+        <Setter Property="Background" Value="{StaticResource ClipsyAccentDimBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource ClipsyAccentBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource ClipsyAccentBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="RootGrid"
+                          Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}"
+                          BorderThickness="{TemplateBinding BorderThickness}"
+                          CornerRadius="{TemplateBinding CornerRadius}">
+                        <ContentPresenter
+                            x:Name="ContentPresenter"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Padding="{TemplateBinding Padding}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyAccentDimStrongBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{StaticResource ClipsyAccentBrush}" />
+                                        <Setter Target="ContentPresenter.Foreground" Value="Black" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Opacity" Value="0.35" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="ClipsyIconButtonDanger" TargetType="Button" BasedOn="{StaticResource ClipsyIconButton}">
         <Setter Property="Foreground" Value="{StaticResource ClipsyDangerBrush}" />
         <Setter Property="Template">
