@@ -33,7 +33,7 @@ public sealed partial class ToastWindow : Window
     private readonly Action? _action1;
     private readonly Action? _action2;
     private DispatcherTimer? _dismissTimer;
-    private DispatcherTimer? _slideTimer;
+    private EventHandler<object>? _renderHandler;
     private bool _isHovered;
     private bool _fadeInDone;
     private bool _isFadingOut;
@@ -122,24 +122,34 @@ public sealed partial class ToastWindow : Window
 
     private void AnimateX(int from, int to, int durationMs, Func<double, double> easing, Action? onComplete = null)
     {
-        _slideTimer?.Stop();
-        _slideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        double elapsed = 0;
-        _slideTimer.Tick += (_, _) =>
+        StopRenderHandler();
+
+        var startTime = DateTime.UtcNow;
+        const int flags = SWP_NOACTIVATE | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS;
+
+        _renderHandler = (_, _) =>
         {
-            elapsed += 16;
+            double elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
             double t = Math.Min(elapsed / durationMs, 1.0);
             double eased = easing(t);
             int x = (int)(from + (to - from) * eased);
-            SetWindowPos(_hwnd, HWND_TOPMOST, x, _targetY, _w, _h, SWP_NOACTIVATE);
+            SetWindowPos(_hwnd, HWND_TOPMOST, x, _targetY, _w, _h, flags);
             if (t >= 1.0)
             {
-                _slideTimer?.Stop();
-                _slideTimer = null;
+                StopRenderHandler();
                 onComplete?.Invoke();
             }
         };
-        _slideTimer.Start();
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += _renderHandler;
+    }
+
+    private void StopRenderHandler()
+    {
+        if (_renderHandler != null)
+        {
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= _renderHandler;
+            _renderHandler = null;
+        }
     }
 
     private static double EaseOutCubic(double t) => 1 - Math.Pow(1 - t, 3);
@@ -287,11 +297,13 @@ public sealed partial class ToastWindow : Window
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
 
-    private const int SWP_NOMOVE       = 0x0002;
-    private const int SWP_NOSIZE       = 0x0001;
-    private const int SWP_NOZORDER     = 0x0004;
-    private const int SWP_NOACTIVATE   = 0x0010;
-    private const int SWP_FRAMECHANGED = 0x0020;
+    private const int SWP_NOMOVE         = 0x0002;
+    private const int SWP_NOSIZE         = 0x0001;
+    private const int SWP_NOZORDER       = 0x0004;
+    private const int SWP_NOACTIVATE     = 0x0010;
+    private const int SWP_FRAMECHANGED   = 0x0020;
+    private const int SWP_NOSENDCHANGING = 0x0400;
+    private const int SWP_ASYNCWINDOWPOS = 0x4000;
 
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int MONITOR_DEFAULTTOPRIMARY       = 1;
