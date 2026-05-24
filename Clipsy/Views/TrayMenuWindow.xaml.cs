@@ -51,6 +51,16 @@ public sealed partial class TrayMenuWindow : Window
         ApplyLocalization();
 
         Activated += OnActivated;
+
+        // Re-localize when language flips so the next tray-menu open shows
+        // the new strings without an app restart.
+        SettingsService.Instance.SettingsChanged += OnSettingsChanged;
+    }
+
+    private void OnSettingsChanged()
+    {
+        try { ApplyLocalization(); }
+        catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.OnSettingsChanged", ex); }
     }
 
     // ────────────────────────────────────────────────────────
@@ -79,6 +89,11 @@ public sealed partial class TrayMenuWindow : Window
 
         _appWindow.MoveAndResize(new RectInt32(x, y, w, h));
         Activate();
+        // H.NotifyIcon's right-click handler runs inside a tray nested
+        // message pump; without an explicit foreground request the window
+        // shows but Windows never marks it active, so the Deactivated event
+        // never fires when the user clicks elsewhere and the menu sticks.
+        SetForegroundWindow(_hwnd);
     }
 
     public void SetUpdateStatus(TrayUpdateStatus status, string? newVersion = null)
@@ -304,6 +319,7 @@ public sealed partial class TrayMenuWindow : Window
     [DllImport("user32.dll")]  private static extern int   SetWindowLong(IntPtr h, int n, int v);
     [DllImport("user32.dll")]  private static extern bool  SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
     [DllImport("user32.dll")]  private static extern bool  GetCursorPos(out POINT pt);
+    [DllImport("user32.dll")]  private static extern bool  SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")]  private static extern uint  GetDpiForWindow(IntPtr h);
     [DllImport("user32.dll")]  private static extern IntPtr MonitorFromPoint(POINT pt, uint f);
     [DllImport("user32.dll")]  private static extern bool  GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
