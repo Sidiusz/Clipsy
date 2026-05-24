@@ -1556,8 +1556,18 @@ public sealed partial class CaptureOverlayWindow : Window
         // (e.g. "i" vs "M") still end up centered on the click point.
         var family = _activeTextBox.FontFamily;
         var (gw, gh) = MeasureGlyph(text[0].ToString(), _activeTextBox.FontSize, family);
-        Canvas.SetLeft(_activeTextBox, _activeTextAnchor.X - TextEntryPadding.Left - gw / 2);
-        Canvas.SetTop(_activeTextBox,  _activeTextAnchor.Y - TextEntryPadding.Top  - gh / 2);
+        double newLeft = _activeTextAnchor.X - TextEntryPadding.Left - gw / 2;
+        double newTop  = _activeTextAnchor.Y - TextEntryPadding.Top  - gh / 2;
+        Canvas.SetLeft(_activeTextBox, newLeft);
+        Canvas.SetTop(_activeTextBox,  newTop);
+        // Drag handle was anchored to the pre-recenter position, so it would
+        // visibly jump apart from the box on the first keystroke. Move it
+        // with the box.
+        if (_activeDragHandle != null)
+        {
+            Canvas.SetLeft(_activeDragHandle, newLeft);
+            Canvas.SetTop(_activeDragHandle, newTop - 18);
+        }
         _activeTextAnchorApplied = true;
     }
 
