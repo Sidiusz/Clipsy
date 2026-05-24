@@ -41,7 +41,6 @@ public sealed partial class ToastWindow : Window
     public ToastWindow(ToastService.ToastOptions opts)
     {
         InitializeComponent();
-        this.SystemBackdrop = null;
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
         _action1 = opts.Action1Callback;
@@ -99,9 +98,11 @@ public sealed partial class ToastWindow : Window
 
     private void BeginFadeIn()
     {
+        // Slide only — WinUI 3 Window can't easily fade Opacity without
+        // breaking content (layered windows kill DComp, transparent HWND
+        // backgrounds reveal black). Slide gives motion without transparency.
         var sb = new Storyboard();
-        AddAnim(sb, CardBorder,     "Opacity", 0,  1, FadeInMs, new CubicEase { EasingMode = EasingMode.EaseOut });
-        AddAnim(sb, SlideTransform, "X",       20, 0, FadeInMs, new CubicEase { EasingMode = EasingMode.EaseOut });
+        AddAnim(sb, SlideTransform, "X", 380, 0, FadeInMs, new CubicEase { EasingMode = EasingMode.EaseOut });
         sb.Begin();
     }
 
@@ -113,8 +114,7 @@ public sealed partial class ToastWindow : Window
         _dismissTimer = null;
 
         var sb = new Storyboard();
-        AddAnim(sb, CardBorder,     "Opacity", 1, 0,  FadeOutMs, new QuadraticEase { EasingMode = EasingMode.EaseIn });
-        AddAnim(sb, SlideTransform, "X",       0, 20, FadeOutMs, new QuadraticEase { EasingMode = EasingMode.EaseIn });
+        AddAnim(sb, SlideTransform, "X", 0, 380, FadeOutMs, new QuadraticEase { EasingMode = EasingMode.EaseIn });
         sb.Completed += (_, _) => { try { Close(); } catch { } };
         sb.Begin();
     }
@@ -176,16 +176,9 @@ public sealed partial class ToastWindow : Window
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
-        // Extend DWM glass into the entire client area. With SystemBackdrop=null
-        // this gives a fully transparent HWND background — Border.Opacity
-        // animations reveal the desktop, not a black HWND fill.
-        var margins = new MARGINS { cxLeftWidth = -1, cxRightWidth = -1, cyTopHeight = -1, cyBottomHeight = -1 };
-        DwmExtendFrameIntoClientArea(_hwnd, ref margins);
-
-        // XAML CornerRadius="8" owns corners. DWM rounding would clip outside
-        // the rounded XAML region and reveal whatever's behind.
-        int donotround = 1; // DWMWCP_DONOTROUND
-        DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref donotround, sizeof(int));
+        // Solid window — no transparency tricks. DWM rounds corners.
+        int round = 2; // DWMWCP_ROUND
+        DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
     }
 
     private void ApplyOptions(ToastService.ToastOptions opts)
@@ -307,12 +300,6 @@ public sealed partial class ToastWindow : Window
         public uint dwFlags;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MARGINS
-    {
-        public int cxLeftWidth, cxRightWidth, cyTopHeight, cyBottomHeight;
-    }
-
     [DllImport("user32.dll")] private static extern int   GetWindowLong(IntPtr h, int n);
     [DllImport("user32.dll")] private static extern int   SetWindowLong(IntPtr h, int n, int v);
     [DllImport("user32.dll")] private static extern bool  SetWindowPos(IntPtr h, IntPtr z, int x, int y, int cx, int cy, int flags);
@@ -323,7 +310,4 @@ public sealed partial class ToastWindow : Window
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmExtendFrameIntoClientArea(IntPtr h, ref MARGINS m);
 }
