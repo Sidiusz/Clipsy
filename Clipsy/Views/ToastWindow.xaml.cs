@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Windows.Foundation;
 using Windows.Graphics;
 using Windows.UI;
 using WinRT.Interop;
@@ -22,15 +23,18 @@ public sealed partial class ToastWindow : Window
     private static readonly Color s_amber = Color.FromArgb(0xFF, 0xF0, 0xB2, 0x32);
 
     private const int ToastW      = 380;
-    private const int ToastH      = 80;
+    private const int MinH        = 50;
     private const int ToastGap    = 8;
     private const int ToastMargin = 16;
+    private const int FadeInMs    = 200;
+    private const int FadeOutMs   = 150;
 
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
     private readonly Action? _action1;
     private readonly Action? _action2;
     private DispatcherTimer? _dismissTimer;
+    private DispatcherTimer? _alphaTimer;
     private bool _isHovered;
     private bool _fadeInDone;
     private bool _isFadingOut;
@@ -38,6 +42,7 @@ public sealed partial class ToastWindow : Window
     public ToastWindow(ToastService.ToastOptions opts)
     {
         InitializeComponent();
+        this.SystemBackdrop = null;
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
         _action1 = opts.Action1Callback;
@@ -46,6 +51,7 @@ public sealed partial class ToastWindow : Window
         ConfigureWindow();
         ApplyOptions(opts);
         ThemeService.Register(Content as FrameworkElement);
+        SetLayeredWindowAttributes(_hwnd, 0, 0, LWA_ALPHA); // start invisible
         StartDismissTimer();
     }
 
@@ -55,7 +61,7 @@ public sealed partial class ToastWindow : Window
     {
         double scale = DpiScale();
         int w = (int)(ToastW * scale);
-        int h = (int)(ToastH * scale);
+        int h = ComputeHeightPx(scale);
         int gap = (int)(ToastGap * scale);
         int margin = (int)(ToastMargin * scale);
 
@@ -76,14 +82,32 @@ public sealed partial class ToastWindow : Window
         }
     }
 
+    private int ComputeHeightPx(double scale)
+    {
+        try
+        {
+            CardBorder.Measure(new Size(ToastW, double.PositiveInfinity));
+            double h = CardBorder.DesiredSize.Height;
+            if (h >= MinH) return (int)Math.Ceiling(h * scale);
+        }
+        catch { }
+        int fallback = string.IsNullOrEmpty(BodyText.Text)
+            ? 56
+            : (BodyText.Text.Length > 60 ? 92 : 72);
+        return (int)(fallback * scale);
+    }
+
     // ── Animation ────────────────────────────────────────────────
 
     private void BeginFadeIn()
     {
+        // Slide via XAML compositor
         var sb = new Storyboard();
-        AddAnim(sb, CardBorder,   "Opacity", 0,  1,  200, new CubicEase     { EasingMode = EasingMode.EaseOut });
-        AddAnim(sb, SlideTransform, "X",     20, 0,  200, new CubicEase     { EasingMode = EasingMode.EaseOut });
+        AddAnim(sb, SlideTransform, "X", 20, 0, FadeInMs, new CubicEase { EasingMode = EasingMode.EaseOut });
         sb.Begin();
+
+        // Whole-window alpha via layered-window API
+        AnimateAlpha(0, 255, FadeInMs, EaseOutCubic);
     }
 
     private void BeginFadeOut()
@@ -94,11 +118,36 @@ public sealed partial class ToastWindow : Window
         _dismissTimer = null;
 
         var sb = new Storyboard();
-        AddAnim(sb, CardBorder,   "Opacity", 1, 0,  150, new QuadraticEase  { EasingMode = EasingMode.EaseIn });
-        AddAnim(sb, SlideTransform, "X",     0, 20, 150, new QuadraticEase  { EasingMode = EasingMode.EaseIn });
-        sb.Completed += (_, _) => { try { Close(); } catch { } };
+        AddAnim(sb, SlideTransform, "X", 0, 20, FadeOutMs, new QuadraticEase { EasingMode = EasingMode.EaseIn });
         sb.Begin();
+
+        AnimateAlpha(255, 0, FadeOutMs, EaseInQuad, onComplete: () => { try { Close(); } catch { } });
     }
+
+    private void AnimateAlpha(byte from, byte to, int durationMs, Func<double, double> easing, Action? onComplete = null)
+    {
+        _alphaTimer?.Stop();
+        _alphaTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        double elapsed = 0;
+        _alphaTimer.Tick += (_, _) =>
+        {
+            elapsed += 16;
+            double t = Math.Min(elapsed / durationMs, 1.0);
+            double eased = easing(t);
+            byte alpha = (byte)(from + (to - from) * eased);
+            SetLayeredWindowAttributes(_hwnd, 0, alpha, LWA_ALPHA);
+            if (t >= 1.0)
+            {
+                _alphaTimer?.Stop();
+                _alphaTimer = null;
+                onComplete?.Invoke();
+            }
+        };
+        _alphaTimer.Start();
+    }
+
+    private static double EaseOutCubic(double t) => 1 - Math.Pow(1 - t, 3);
+    private static double EaseInQuad(double t)   => t * t;
 
     private static void AddAnim(Storyboard sb, DependencyObject target, string prop,
         double from, double to, double ms, EasingFunctionBase? ease = null)
@@ -149,7 +198,7 @@ public sealed partial class ToastWindow : Window
         SetWindowLong(_hwnd, GWL_STYLE, unchecked((int)style));
 
         int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
-        exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+        exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED;
         SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle);
 
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
@@ -164,17 +213,17 @@ public sealed partial class ToastWindow : Window
 
     private void ApplyOptions(ToastService.ToastOptions opts)
     {
-        (Color accent, string glyph) = opts.Category switch
+        Color accent = opts.Category switch
         {
-            ToastCategory.Screenshot => (s_green, "\xE930"),
-            ToastCategory.Error      => (s_red,   "\xEA39"),
-            ToastCategory.Update     => (s_blue,  "\xE72C"),
-            _                        => (s_amber, "\xE7BA"),
+            ToastCategory.Screenshot => s_green,
+            ToastCategory.Video      => s_green,
+            ToastCategory.Clipboard  => s_green,
+            ToastCategory.Error      => s_red,
+            ToastCategory.Update     => s_blue,
+            _                        => s_amber,
         };
 
         AccentBar.Fill = new SolidColorBrush(accent);
-        LevelIcon.Glyph = glyph;
-        LevelIcon.Foreground = new SolidColorBrush(accent);
 
         if (opts.Category == ToastCategory.Update)
             CardBorder.BorderBrush = new SolidColorBrush(s_blue);
@@ -259,6 +308,9 @@ public sealed partial class ToastWindow : Window
 
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int WS_EX_LAYERED    = 0x00080000;
+
+    private const uint LWA_ALPHA = 0x00000002;
 
     private const int SWP_NOMOVE      = 0x0002;
     private const int SWP_NOSIZE      = 0x0001;
@@ -290,6 +342,7 @@ public sealed partial class ToastWindow : Window
     [DllImport("user32.dll")] private static extern bool  GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
     [DllImport("user32.dll")] private static extern uint  GetDpiForWindow(IntPtr h);
     [DllImport("user32.dll")] private static extern uint  GetDpiForSystem();
+    [DllImport("user32.dll")] private static extern bool  SetLayeredWindowAttributes(IntPtr h, uint colorKey, byte alpha, uint flags);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);

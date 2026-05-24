@@ -93,7 +93,11 @@ public static class Strings
         ["TabVideo"]            = New("Video",    "Видео"),
         ["TabGif"]              = New("GIF",      "GIF"),
         ["TabHotkeys"]          = New("Hotkeys",  "Горячие клавиши"),
+        ["TabNotifications"]    = New("Notifications", "Уведомления"),
         ["TabInfo"]             = New("Info",     "О программе"),
+        ["SubNotifications"]    = New("Choose which events show a toast.", "Какие события показывают всплывашку."),
+        ["LblNotifyVideo"]      = New("Recording saved",  "Запись сохранена"),
+        ["LblNotifyClipboard"]  = New("Copied to clipboard", "Скопировано в буфер обмена"),
 
         // Settings - general tab labels
         ["LblLanguage"]         = New("Language",                  "Язык"),

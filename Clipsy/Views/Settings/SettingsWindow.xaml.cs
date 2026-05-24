@@ -91,7 +91,7 @@ public sealed partial class SettingsWindow : Window
         ["jpg-q"] = "general",
         ["after-save"] = "general",
         ["update-int"] = "general",
-        ["notif"] = "general",
+        ["notif"] = "notifications",
         ["translate-svc"]  = "ocr",
         ["translate-from"] = "ocr",
         ["translate-to"]   = "ocr",
@@ -189,7 +189,7 @@ public sealed partial class SettingsWindow : Window
             BuildDateLabel.Text = GetBuildDate();
 
             // Sync nav icon / pane visibility with default-checked radio
-            foreach (var rb in new[] { NavGeneral, NavVideo, NavOcr, NavGif, NavHotkeys, NavInfo })
+            foreach (var rb in new[] { NavGeneral, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
             {
                 if (rb.IsChecked == true) { OnNavChecked(rb, new RoutedEventArgs()); break; }
             }
@@ -206,8 +206,9 @@ public sealed partial class SettingsWindow : Window
         NavVideoLabel.Text    = Strings.Get("TabVideo");
         NavOcrLabel.Text      = Strings.Get("TabOcr");
         NavGifLabel.Text      = Strings.Get("TabGif");
-        NavHotkeysLabel.Text  = Strings.Get("TabHotkeys");
-        NavInfoLabel.Text     = Strings.Get("TabInfo");
+        NavHotkeysLabel.Text       = Strings.Get("TabHotkeys");
+        NavNotificationsLabel.Text = Strings.Get("TabNotifications");
+        NavInfoLabel.Text          = Strings.Get("TabInfo");
 
         if (TitleBarSubtitle != null) TitleBarSubtitle.Text = Strings.Get("TitleBarSubtitle");
         if (LblTipHeader != null)     LblTipHeader.Text    = Strings.Get("TipLabel");
@@ -217,7 +218,9 @@ public sealed partial class SettingsWindow : Window
         HdrVideo.Text    = Strings.Get("TabVideo");
         HdrOcr.Text      = Strings.Get("TabOcr");
         HdrGif.Text      = Strings.Get("TabGif");
-        HdrHotkeys.Text  = Strings.Get("TabHotkeys");
+        HdrHotkeys.Text       = Strings.Get("TabHotkeys");
+        HdrNotifications.Text = Strings.Get("TabNotifications");
+        SubNotifications.Text = Strings.Get("SubNotifications");
 
         SubGeneral.Text  = Strings.Get("SubGeneral");
         SubVideo.Text    = Strings.Get("SubVideo");
@@ -258,6 +261,8 @@ public sealed partial class SettingsWindow : Window
         HelperNotifications.Text = Strings.Get("HelperNotifications");
         LblNotifyMaster.Text     = Strings.Get("LblNotifyMaster");
         LblNotifyScreenshot.Text = Strings.Get("LblNotifyScreenshot");
+        LblNotifyVideo.Text      = Strings.Get("LblNotifyVideo");
+        LblNotifyClipboard.Text  = Strings.Get("LblNotifyClipboard");
         LblNotifyErrors.Text     = Strings.Get("LblNotifyErrors");
         LblNotifyUpdate.Text     = Strings.Get("LblNotifyUpdate");
         LblNotifyHints.Text      = Strings.Get("LblNotifyHints");
@@ -413,11 +418,13 @@ public sealed partial class SettingsWindow : Window
         SelectComboByTag(AfterSaveBox, _draft.AfterSaveAction);
         SelectComboByTag(UpdateIntervalBox, _draft.UpdateInterval);
 
-        NotifyMasterSwitch.IsChecked    = _draft.NotificationsEnabled;
-        NotifyScreenshotSwitch.IsChecked= _draft.NotifyScreenshotSaved;
-        NotifyErrorsSwitch.IsChecked    = _draft.NotifyErrors;
-        NotifyUpdateSwitch.IsChecked    = _draft.NotifyUpdateAvailable;
-        NotifyHintsSwitch.IsChecked     = _draft.NotifyHints;
+        NotifyMasterSwitch.IsChecked     = _draft.NotificationsEnabled;
+        NotifyScreenshotSwitch.IsChecked = _draft.NotifyScreenshotSaved;
+        NotifyVideoSwitch.IsChecked      = _draft.NotifyVideoSaved;
+        NotifyClipboardSwitch.IsChecked  = _draft.NotifyClipboard;
+        NotifyErrorsSwitch.IsChecked     = _draft.NotifyErrors;
+        NotifyUpdateSwitch.IsChecked     = _draft.NotifyUpdateAvailable;
+        NotifyHintsSwitch.IsChecked      = _draft.NotifyHints;
         UpdateNotifySubPanelState();
 
         SelectRadio(_draft.VideoCodec, RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
@@ -483,11 +490,13 @@ public sealed partial class SettingsWindow : Window
         _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
         _draft.UpdateInterval = SelectedComboTag(UpdateIntervalBox);
 
-        _draft.NotificationsEnabled   = NotifyMasterSwitch.IsChecked  == true;
+        _draft.NotificationsEnabled   = NotifyMasterSwitch.IsChecked    == true;
         _draft.NotifyScreenshotSaved  = NotifyScreenshotSwitch.IsChecked == true;
-        _draft.NotifyErrors           = NotifyErrorsSwitch.IsChecked   == true;
-        _draft.NotifyUpdateAvailable  = NotifyUpdateSwitch.IsChecked   == true;
-        _draft.NotifyHints            = NotifyHintsSwitch.IsChecked    == true;
+        _draft.NotifyVideoSaved       = NotifyVideoSwitch.IsChecked     == true;
+        _draft.NotifyClipboard        = NotifyClipboardSwitch.IsChecked == true;
+        _draft.NotifyErrors           = NotifyErrorsSwitch.IsChecked    == true;
+        _draft.NotifyUpdateAvailable  = NotifyUpdateSwitch.IsChecked    == true;
+        _draft.NotifyHints            = NotifyHintsSwitch.IsChecked     == true;
 
         _draft.VideoCodec = SelectedRadioTag(RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
         _draft.VideoResolution = SelectedSegmentTag(ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal);
@@ -1136,6 +1145,8 @@ public sealed partial class SettingsWindow : Window
         if (_draft.UpdateInterval != _initial.UpdateInterval) _dirty.Add("update-int");
         if (_draft.NotificationsEnabled  != _initial.NotificationsEnabled  ||
             _draft.NotifyScreenshotSaved != _initial.NotifyScreenshotSaved ||
+            _draft.NotifyVideoSaved      != _initial.NotifyVideoSaved      ||
+            _draft.NotifyClipboard       != _initial.NotifyClipboard       ||
             _draft.NotifyErrors          != _initial.NotifyErrors          ||
             _draft.NotifyUpdateAvailable != _initial.NotifyUpdateAvailable ||
             _draft.NotifyHints           != _initial.NotifyHints)
@@ -1391,8 +1402,9 @@ public sealed partial class SettingsWindow : Window
         PaneVideo.Visibility   = key == "video"   ? Visibility.Visible : Visibility.Collapsed;
         PaneOcr.Visibility     = key == "ocr"     ? Visibility.Visible : Visibility.Collapsed;
         PaneGif.Visibility     = key == "gif"     ? Visibility.Visible : Visibility.Collapsed;
-        PaneHotkeys.Visibility = key == "hotkeys" ? Visibility.Visible : Visibility.Collapsed;
-        PaneInfo.Visibility    = key == "info"    ? Visibility.Visible : Visibility.Collapsed;
+        PaneHotkeys.Visibility       = key == "hotkeys"       ? Visibility.Visible : Visibility.Collapsed;
+        PaneNotifications.Visibility = key == "notifications" ? Visibility.Visible : Visibility.Collapsed;
+        PaneInfo.Visibility          = key == "info"          ? Visibility.Visible : Visibility.Collapsed;
 
         try
         {
@@ -1402,8 +1414,9 @@ public sealed partial class SettingsWindow : Window
             IconNavVideo.Foreground   = key == "video"   ? accent : dim;
             IconNavOcr.Foreground     = key == "ocr"     ? accent : dim;
             IconNavGif.Foreground     = key == "gif"     ? accent : dim;
-            IconNavHotkeys.Foreground = key == "hotkeys" ? accent : dim;
-            IconNavInfo.Foreground    = key == "info"    ? accent : dim;
+            IconNavHotkeys.Foreground       = key == "hotkeys"       ? accent : dim;
+            IconNavNotifications.Foreground = key == "notifications" ? accent : dim;
+            IconNavInfo.Foreground          = key == "info"          ? accent : dim;
         }
         catch { }
     }

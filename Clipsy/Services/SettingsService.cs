@@ -55,6 +55,8 @@ public sealed class AppSettings
     // Notifications
     public bool NotificationsEnabled { get; set; } = true;
     public bool NotifyScreenshotSaved { get; set; } = true;
+    public bool NotifyVideoSaved { get; set; } = true;
+    public bool NotifyClipboard { get; set; } = true;
     public bool NotifyErrors { get; set; } = true;
     public bool NotifyUpdateAvailable { get; set; } = true;
     public bool NotifyHints { get; set; } = true;
