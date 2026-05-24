@@ -14,10 +14,14 @@ public static class ToastService
         public NotificationLevel Level { get; init; } = NotificationLevel.Info;
         public required string Title { get; init; }
         public string? Body { get; init; }
-        public string? Action1Label { get; init; }
+        // Icon buttons with tooltips (Action1 = secondary/ghost, Action2 = primary when Action2IsPrimary)
+        public string? Action1Icon     { get; init; }
+        public string? Action1Tooltip  { get; init; }
         public Action? Action1Callback { get; init; }
-        public string? Action2Label { get; init; }
+        public string? Action2Icon     { get; init; }
+        public string? Action2Tooltip  { get; init; }
         public Action? Action2Callback { get; init; }
+        public bool    Action2IsPrimary { get; init; }
     }
 
     // Mutated on UI thread only.

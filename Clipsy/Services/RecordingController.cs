@@ -351,6 +351,7 @@ public sealed class RecordingController
             TryDelete(tempPath);
             settings.Settings.LastVideoFolder = folder;
             settings.Save();
+            NotificationService.VideoSaved(name, new FileInfo(dest).Length / 1024L, dest);
             Diagnostics.Log($"  AfterSaveAction.Run action='{settings.Settings.AfterSaveAction}'");
             AfterSaveAction.Run(dest, settings.Settings.AfterSaveAction);
             Diagnostics.Log("SilentSave EXIT OK");
@@ -483,6 +484,7 @@ public sealed class RecordingController
                 settings.Settings.LastVideoFolder = dir;
                 settings.Save();
             }
+            NotificationService.VideoSaved(Path.GetFileName(dest), new FileInfo(dest).Length / 1024L, dest);
             Diagnostics.Log($"  AfterSaveAction.Run action='{settings.Settings.AfterSaveAction}'");
             AfterSaveAction.Run(dest, settings.Settings.AfterSaveAction);
             Diagnostics.Log("OfferSaveAsync EXIT OK");

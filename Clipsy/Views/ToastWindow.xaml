@@ -8,7 +8,14 @@
             Background="{StaticResource ClipsyBg2Brush}"
             BorderBrush="{StaticResource ClipsyBorderBrush}"
             BorderThickness="1"
-            CornerRadius="0">
+            CornerRadius="0"
+            Opacity="0"
+            PointerEntered="OnPointerEntered"
+            PointerExited="OnPointerExited">
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="SlideTransform" X="20" />
+        </Border.RenderTransform>
+
         <Grid>
             <!-- Left accent strip -->
             <Rectangle x:Name="AccentBar"
@@ -59,21 +66,17 @@
                             Margin="8,0,0,0">
                     <Button x:Name="Action1Btn"
                             Style="{StaticResource ClipsyButtonGhost}"
-                            FontSize="12"
-                            Padding="8,4"
+                            Width="28" Height="28" Padding="0"
                             Visibility="Collapsed"
                             Click="OnAction1Click" />
                     <Button x:Name="Action2Btn"
-                            Style="{StaticResource ClipsyButtonPrimary}"
-                            FontSize="12"
-                            Padding="8,4"
+                            Style="{StaticResource ClipsyButtonGhost}"
+                            Width="28" Height="28" Padding="0"
                             Visibility="Collapsed"
                             Click="OnAction2Click" />
                     <Button x:Name="CloseBtn"
                             Style="{StaticResource ClipsyButtonGhost}"
-                            Width="28"
-                            Height="28"
-                            Padding="0"
+                            Width="28" Height="28" Padding="0"
                             Click="OnCloseClick">
                         <FontIcon Glyph="&#xE711;" FontSize="10" />
                     </Button>

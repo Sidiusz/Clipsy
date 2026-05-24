@@ -2133,6 +2133,7 @@ public sealed partial class CaptureOverlayWindow : Window
             var bytes = ScreenshotRenderer.RenderEncoded(_frame, _selectionRect, _drawing.Elements,
                 DpiScale, fmt, settings.Settings.JpgQuality);
             await File.WriteAllBytesAsync(finalPath, bytes);
+            NotificationService.ScreenshotSaved(IOPath.GetFileName(finalPath), bytes.LongLength / 1024L, finalPath);
             var dir = IOPath.GetDirectoryName(finalPath);
             if (!string.IsNullOrEmpty(dir))
             {
@@ -2156,6 +2157,7 @@ public sealed partial class CaptureOverlayWindow : Window
         {
             var png = ScreenshotRenderer.RenderPng(_frame, _selectionRect, _drawing.Elements, DpiScale);
             await ClipboardService.SetImageAsync(png);
+            NotificationService.CopiedToClipboard();
             Close();
         }
         catch (Exception ex)

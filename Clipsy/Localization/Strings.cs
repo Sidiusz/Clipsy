@@ -276,6 +276,13 @@ public static class Strings
 
         // Toast content
         ["ToastScreenshotSaved"]    = New("Screenshot saved",                              "Скриншот сохранён"),
+        ["ToastVideoSaved"]         = New("Recording saved",                               "Запись сохранена"),
+        ["ToastCopied"]             = New("Copied to clipboard",                           "Скопировано в буфер обмена"),
+        ["ToastOpenFile"]           = New("Open file",                                     "Открыть файл"),
+        ["ToastOpenFolder"]         = New("Open folder",                                   "Открыть папку"),
+        ["ToastDownload"]           = New("Download update",                               "Скачать обновление"),
+        ["ToastSkipVersion"]        = New("Skip this version",                             "Пропустить эту версию"),
+        // Legacy keys kept for compatibility
         ["ToastOpen"]               = New("Open",                                          "Открыть"),
         ["ToastSkip"]               = New("Skip",                                          "Пропустить"),
         ["ToastUpdate"]             = New("Update",                                        "Обновить"),
