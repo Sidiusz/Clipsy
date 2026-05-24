@@ -99,7 +99,9 @@
 
     <Style x:Key="ClipsyButtonPrimary" TargetType="Button" BasedOn="{StaticResource ClipsyButton}">
         <Setter Property="Background" Value="{StaticResource ClipsyAccentBrush}" />
-        <Setter Property="Foreground" Value="White" />
+        <!-- Black text on amber for legibility; the inherited template
+             swaps Background to hover/pressed stops but leaves foreground. -->
+        <Setter Property="Foreground" Value="Black" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">

@@ -1750,13 +1750,30 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         _drawing.Settings.Tool = tool;
 
-        // Update button visual states by changing background
-        var selectedBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x58, 0x65, 0xF2));
-        var normalBrush = new SolidColorBrush(Color.FromArgb(0x00, 0x00, 0x00, 0x00));
+        // Pull brushes from theme tokens so accent swaps propagate.
+        var selectedBg     = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentDimBrush"];
+        var selectedBorder = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentBrush"];
+        var selectedFg     = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentBrush"];
+        var normalBg       = (Microsoft.UI.Xaml.Media.Brush)new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        var normalBorder   = (Microsoft.UI.Xaml.Media.Brush)new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        var normalFg       = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyText2Brush"];
 
-        PencilBtn.Background = tool == ToolKind.Pencil ? selectedBrush : normalBrush;
-        TextBtn.Background = tool == ToolKind.Text ? selectedBrush : normalBrush;
-        ShapesBtn.Background = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line ? selectedBrush : normalBrush;
+        void Apply(Button btn, bool active)
+        {
+            btn.Background = active ? selectedBg : normalBg;
+            btn.BorderBrush = active ? selectedBorder : normalBorder;
+            btn.Foreground = active ? selectedFg : normalFg;
+        }
+        Apply(PencilBtn, tool == ToolKind.Pencil);
+        Apply(TextBtn,   tool == ToolKind.Text);
+        Apply(ShapesBtn, tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line);
+        // The Shapes icon glyphs are Stroke-based shapes (not FontIcon
+        // glyphs that inherit Foreground), so swap their stroke too.
+        var shapesActive = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line;
+        var shapesStroke = shapesActive ? selectedFg : normalFg;
+        if (ShapeIconRect    != null) ShapeIconRect.Stroke    = shapesStroke;
+        if (ShapeIconEllipse != null) ShapeIconEllipse.Stroke = shapesStroke;
+        if (ShapeIconLine    != null) ShapeIconLine.Stroke    = shapesStroke;
 
         // Show/hide shapes in flyout - selected shape is hidden, others visible
         // Use _currentShapeTool to determine which shape is currently selected
