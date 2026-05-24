@@ -357,53 +357,30 @@
             </Border>
 
             <!-- ============== Fonts flyout (mirrors ShapesFlyout) ============== -->
+            <!-- Items populated from system-installed fonts in code-behind on
+                 first hover so we don't query GDI at XAML load time. -->
             <Border x:Name="FontsFlyout"
                     Style="{StaticResource ClipsyToolbar}"
+                    MinWidth="220" MaxHeight="360"
                     Visibility="Collapsed"
                     PointerEntered="OnFontsFlyoutPointerEntered"
                     PointerExited="OnFontsFlyoutPointerExited">
-                <StackPanel Orientation="Horizontal" Spacing="2" Margin="4,2">
-                    <Button x:Name="FontOnestBtn"
-                            Style="{StaticResource ClipsyIconButton}"
-                            Click="OnFontPick"
-                            Tag="ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, Segoe UI, sans-serif"
-                            ToolTipService.ToolTip="Onest">
-                        <TextBlock Text="Aa" FontSize="14" FontWeight="SemiBold"
-                                   FontFamily="ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, Segoe UI, sans-serif" />
-                    </Button>
-                    <Button x:Name="FontSegoeBtn"
-                            Style="{StaticResource ClipsyIconButton}"
-                            Click="OnFontPick"
-                            Tag="Segoe UI Variable, Segoe UI, sans-serif"
-                            ToolTipService.ToolTip="Segoe UI">
-                        <TextBlock Text="Aa" FontSize="14" FontWeight="SemiBold"
-                                   FontFamily="Segoe UI Variable, Segoe UI, sans-serif" />
-                    </Button>
-                    <Button x:Name="FontMonoBtn"
-                            Style="{StaticResource ClipsyIconButton}"
-                            Click="OnFontPick"
-                            Tag="Cascadia Mono, Consolas, monospace"
-                            ToolTipService.ToolTip="Cascadia Mono">
-                        <TextBlock Text="Aa" FontSize="14" FontWeight="SemiBold"
-                                   FontFamily="Cascadia Mono, Consolas, monospace" />
-                    </Button>
-                    <Button x:Name="FontSerifBtn"
-                            Style="{StaticResource ClipsyIconButton}"
-                            Click="OnFontPick"
-                            Tag="Times New Roman, serif"
-                            ToolTipService.ToolTip="Times New Roman">
-                        <TextBlock Text="Aa" FontSize="14" FontWeight="SemiBold"
-                                   FontFamily="Times New Roman, serif" />
-                    </Button>
-                    <Button x:Name="FontComicBtn"
-                            Style="{StaticResource ClipsyIconButton}"
-                            Click="OnFontPick"
-                            Tag="Comic Sans MS, cursive"
-                            ToolTipService.ToolTip="Comic Sans MS">
-                        <TextBlock Text="Aa" FontSize="14" FontWeight="SemiBold"
-                                   FontFamily="Comic Sans MS, cursive" />
-                    </Button>
-                </StackPanel>
+                <Grid Margin="4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBox x:Name="FontFilterBox"
+                             Grid.Row="0"
+                             PlaceholderText="Filter…"
+                             Margin="0,0,0,4"
+                             TextChanged="OnFontFilterChanged" />
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="FontList" Spacing="0" />
+                    </ScrollViewer>
+                </Grid>
             </Border>
         </Canvas>
 

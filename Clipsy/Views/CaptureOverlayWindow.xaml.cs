@@ -552,8 +552,79 @@ public sealed partial class CaptureOverlayWindow : Window
         if (FontsFlyout == null || TextBtn == null) return;
         // Make sure the shapes flyout doesn't sit on top.
         if (ShapesFlyout != null) ShapesFlyout.Visibility = Visibility.Collapsed;
+        EnsureFontListBuilt();
         FontsFlyout.Visibility = Visibility.Visible;
         PositionFontsFlyout();
+    }
+
+    private List<string>? _systemFonts;
+
+    private void EnsureFontListBuilt()
+    {
+        if (FontList == null || _systemFonts != null) return;
+        try
+        {
+            // GDI+ enumeration via System.Drawing.Common. Already referenced
+            // by the project (image processing path). Filter to families with
+            // a regular face so we don't surface broken icon/symbol entries.
+            using var coll = new System.Drawing.Text.InstalledFontCollection();
+            _systemFonts = coll.Families
+                .Select(f => f.Name)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Font enumeration failed: {ex.Message}");
+            _systemFonts = new List<string> { "Segoe UI Variable", "Segoe UI", "Arial" };
+        }
+        // Prepend the bundled Onest entry so it always shows even if not
+        // installed system-wide.
+        _systemFonts.Insert(0, "Onest (bundled)");
+        RenderFontList(string.Empty);
+    }
+
+    private void RenderFontList(string filter)
+    {
+        if (FontList == null || _systemFonts == null) return;
+        FontList.Children.Clear();
+        IEnumerable<string> items = _systemFonts;
+        if (!string.IsNullOrWhiteSpace(filter))
+            items = items.Where(n => n.Contains(filter, StringComparison.OrdinalIgnoreCase));
+        foreach (var name in items)
+        {
+            var (family, tag) = name == "Onest (bundled)"
+                ? ("ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, Segoe UI, sans-serif",
+                   "ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, Segoe UI, sans-serif")
+                : (name, name);
+            var preview = new TextBlock
+            {
+                Text = name,
+                FontSize = 14,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            try { preview.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(family); }
+            catch { /* fall back to inherited */ }
+            var btn = new Button
+            {
+                Content = preview,
+                Tag = tag,
+                Style = (Microsoft.UI.Xaml.Style)Application.Current.Resources["ClipsyButtonGhost"],
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(0, 1, 0, 1),
+            };
+            btn.Click += OnFontPick;
+            FontList.Children.Add(btn);
+        }
+    }
+
+    private void OnFontFilterChanged(object sender, TextChangedEventArgs e)
+    {
+        if (FontFilterBox == null) return;
+        RenderFontList(FontFilterBox.Text ?? string.Empty);
     }
 
     private void PositionFontsFlyout()
@@ -816,11 +887,14 @@ public sealed partial class CaptureOverlayWindow : Window
             _pencilPreview.Visibility = Visibility.Collapsed;
             _textPreview.Visibility = Visibility.Visible;
             _textPreview.FontSize = _drawing.Settings.TextSize;
-            // Anchor matches StartTextEntry: TextBox is top-left aligned to the
-            // click point with Padding(4,2). Mirror that so the preview lands
+            // Mirror the current font choice and center the glyph on the
+            // cursor — matches StartTextEntry's anchor so the preview lands
             // exactly where the committed text will sit.
-            Canvas.SetLeft(_textPreview, local.X + 4);
-            Canvas.SetTop(_textPreview, local.Y + 2);
+            try { _textPreview.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(_drawing.Settings.TextFont); }
+            catch { /* fallback to inherited font */ }
+            var (pw, ph) = MeasureGlyph(_textPreview.Text, _textPreview.FontSize, _textPreview.FontFamily);
+            Canvas.SetLeft(_textPreview, local.X - pw / 2);
+            Canvas.SetTop(_textPreview,  local.Y - ph / 2);
         }
         else
         {
