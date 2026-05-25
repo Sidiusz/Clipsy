@@ -20,7 +20,7 @@
                        VerticalAlignment="Top" Margin="0,2,0,0" />
                 <StackPanel Grid.Column="1" Margin="10,0,0,0"
                             VerticalAlignment="Center" Spacing="1">
-                    <TextBlock Text="Clipsy" FontSize="13" FontWeight="SemiBold"
+                    <TextBlock Text="Clipsy" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}"
                                Foreground="{StaticResource ClipsyTextBrush}"
                                FontFamily="{StaticResource ClipsyFontFamily}"/>
                     <TextBlock x:Name="HeaderVersion" FontSize="11"

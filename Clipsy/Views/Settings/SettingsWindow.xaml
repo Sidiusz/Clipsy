@@ -21,7 +21,7 @@
                         HorizontalAlignment="Left">
                 <Image Width="20" Height="20"
                        Source="ms-appx:///Assets/Icons/clipsy-32.png" />
-                <TextBlock Text="Clipsy" FontSize="13" FontWeight="SemiBold"
+                <TextBlock Text="Clipsy" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}"
                            Foreground="{StaticResource ClipsyTextBrush}"
                            VerticalAlignment="Center" />
                 <TextBlock Text="·" FontSize="14"
@@ -474,7 +474,7 @@
                                         <RadioButton x:Name="RadioCodecH264" Style="{StaticResource ClipsyRadioCard}"
                                                      GroupName="Codec" Tag="H.264" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
-                                                <TextBlock Text="H.264" FontSize="13" FontWeight="SemiBold" />
+                                                <TextBlock Text="H.264" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
                                                 <TextBlock Text="Wide compatibility, hardware-accelerated"
                                                            FontSize="11" />
                                             </StackPanel>
@@ -482,7 +482,7 @@
                                         <RadioButton x:Name="RadioCodecH265" Style="{StaticResource ClipsyRadioCard}"
                                                      GroupName="Codec" Tag="H.265" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
-                                                <TextBlock Text="H.265" FontSize="13" FontWeight="SemiBold" />
+                                                <TextBlock Text="H.265" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
                                                 <TextBlock Text="Smaller files, slower encode"
                                                            FontSize="11" />
                                             </StackPanel>
@@ -490,7 +490,7 @@
                                         <RadioButton x:Name="RadioCodecVp9" Style="{StaticResource ClipsyRadioCard}"
                                                      GroupName="Codec" Tag="VP9" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
-                                                <TextBlock Text="VP9" FontSize="13" FontWeight="SemiBold" />
+                                                <TextBlock Text="VP9" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
                                                 <TextBlock Text="Web-friendly, open codec"
                                                            FontSize="11" />
                                             </StackPanel>
@@ -498,7 +498,7 @@
                                         <RadioButton x:Name="RadioCodecAv1" Style="{StaticResource ClipsyRadioCard}"
                                                      GroupName="Codec" Tag="AV1" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
-                                                <TextBlock Text="AV1" FontSize="13" FontWeight="SemiBold" />
+                                                <TextBlock Text="AV1" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
                                                 <TextBlock Text="Smallest, very slow encoder"
                                                            FontSize="11" />
                                             </StackPanel>
@@ -523,7 +523,7 @@
                                                 BorderThickness="1" CornerRadius="12" Padding="10,4"
                                                 VerticalAlignment="Center">
                                             <TextBlock x:Name="FfmpegStatusText"
-                                                       FontSize="11" FontWeight="SemiBold" />
+                                                       FontSize="11" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
                                         </Border>
                                     </Grid>
 
@@ -913,7 +913,7 @@
                                                         <TextBlock Grid.Column="0"
                                                                    Text="{Binding Label}"
                                                                    FontSize="13"
-                                                                   FontWeight="SemiBold"
+                                                                   FontWeight="{StaticResource ClipsyFontWeightStrong}"
                                                                    Foreground="{StaticResource ClipsyTextBrush}"
                                                                    VerticalAlignment="Center" />
                                                         <Button Grid.Column="1"
@@ -1070,7 +1070,7 @@
                                     <FontIcon Glyph="&#xE722;" FontSize="28" Foreground="White" />
                                 </Border>
                                 <StackPanel Spacing="6" VerticalAlignment="Center">
-                                    <TextBlock Text="Clipsy" FontSize="26" FontWeight="SemiBold"
+                                    <TextBlock Text="Clipsy" FontSize="26" FontWeight="{StaticResource ClipsyFontWeightTitle}"
                                                Foreground="{StaticResource ClipsyTextBrush}" />
                                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                         <Border Background="{StaticResource ClipsyBg2Brush}"

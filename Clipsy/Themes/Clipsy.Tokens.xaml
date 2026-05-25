@@ -7,7 +7,8 @@
 -->
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    >
 
     <!-- ===== Colors: surface stack ===== -->
     <Color x:Key="ClipsyBg0">#FF1A1B1E</Color>
@@ -100,6 +101,15 @@
     <x:Double x:Key="ClipsyFontSizeLabel">11</x:Double>
     <x:Double x:Key="ClipsyFontSizeTitle">20</x:Double>
     <x:Double x:Key="ClipsyFontSizeHero">26</x:Double>
+
+    <!-- Font weights. All semantic — change one to retune that category
+         independently. Currently: Strong/Title/Label = SemiBold,
+         Body = Normal, Heavy = Bold. -->
+    <FontWeight x:Key="ClipsyFontWeightBody">Normal</FontWeight>
+    <FontWeight x:Key="ClipsyFontWeightStrong">SemiBold</FontWeight>
+    <FontWeight x:Key="ClipsyFontWeightTitle">SemiBold</FontWeight>
+    <FontWeight x:Key="ClipsyFontWeightLabel">SemiBold</FontWeight>
+    <FontWeight x:Key="ClipsyFontWeightHeavy">Bold</FontWeight>
 
     <!-- ===== Radius ===== -->
     <CornerRadius x:Key="ClipsyRadiusXs">3</CornerRadius>
