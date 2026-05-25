@@ -26,7 +26,7 @@
                                    Foreground="{StaticResource ClipsyTextBrush}"
                                    FontFamily="Cascadia Mono, Consolas, monospace"
                                    FontSize="13"
-                                   FontWeight="SemiBold"
+                                   FontWeight="{StaticResource ClipsyFontWeightStrong}"
                                    MinWidth="44"
                                    TextAlignment="Center"
                                    VerticalAlignment="Center" />

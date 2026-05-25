@@ -33,7 +33,7 @@
                         <TextBlock x:Name="TitleText"
                                    FontFamily="{StaticResource ClipsyFontFamily}"
                                    FontSize="13"
-                                   FontWeight="SemiBold"
+                                   FontWeight="{StaticResource ClipsyFontWeightStrong}"
                                    Foreground="{StaticResource ClipsyTextBrush}"
                                    TextWrapping="Wrap" />
                         <TextBlock x:Name="BodyText"

@@ -48,7 +48,7 @@
         <Setter Property="Height" Value="{StaticResource ClipsyControlHeight}" />
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontWeight" Value="{StaticResource ClipsyFontWeightStrong}" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="UseSystemFocusVisuals" Value="False" />
@@ -538,7 +538,7 @@
         <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyText3Brush}" />
         <Setter Property="FontSize" Value="11" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontWeight" Value="{StaticResource ClipsyFontWeightLabel}" />
         <Setter Property="CharacterSpacing" Value="60" />
     </Style>
 
@@ -547,7 +547,7 @@
         <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyTextBrush}" />
         <Setter Property="FontSize" Value="13" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontWeight" Value="{StaticResource ClipsyFontWeightStrong}" />
     </Style>
 
     <!-- 13 body -->
@@ -570,7 +570,7 @@
         <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
         <Setter Property="Foreground" Value="{StaticResource ClipsyTextBrush}" />
         <Setter Property="FontSize" Value="20" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontWeight" Value="{StaticResource ClipsyFontWeightTitle}" />
     </Style>
 
     <!-- Monospace -->
