@@ -730,14 +730,16 @@ public sealed partial class CaptureOverlayWindow : Window
             "Text" => ToolKind.Text,
             _ => ToolKind.None,
         };
-        // Toggle: re-click active tool deselects
-        SetTool(_drawing.Settings.Tool == tool ? ToolKind.None : tool);
-
-        // Update current shape tool if it's a shape
+        // Cache shape selection BEFORE SetTool so the ShapesBtn icon
+        // (which reads _currentShapeTool) renders the new pick, not the
+        // previous one. Off-by-one if we set it after.
         if (tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
         {
             _currentShapeTool = tool;
         }
+
+        // Toggle: re-click active tool deselects
+        SetTool(_drawing.Settings.Tool == tool ? ToolKind.None : tool);
     }
 
     private void BuildHandles()
