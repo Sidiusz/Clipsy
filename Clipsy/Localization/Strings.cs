@@ -235,7 +235,7 @@ public static class Strings
         ["HelperGifFps"]          = New("12 fps is a good default for screen content.",   "12 fps хорошо подходит для записи экрана."),
         ["HelperGifDither"]       = New("Smooths color transitions at the cost of file size.", "Сглаживает переходы цветов, увеличивая размер файла."),
         ["LblBuilt"]              = New("Built {0}",                                       "Сборка от {0}"),
-        ["TipText"]               = New("Press PrtSc anywhere to capture.",                "Нажмите PrtSc в любом месте для захвата."),
+        ["TipPrtScCapture"]       = New("Press PrtSc anywhere to capture.",                "Нажмите PrtSc в любом месте для захвата."),
         ["TipLabel"]              = New("TIP",                                             "СОВЕТ"),
         ["SectionLabelAction"]    = New("ACTION",                                          "ДЕЙСТВИЕ"),
         ["SectionLabelBinding"]   = New("BINDING",                                         "КОМБИНАЦИЯ"),
