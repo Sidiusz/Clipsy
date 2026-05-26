@@ -14,11 +14,12 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <Image Width="34" Height="34"
                        Source="ms-appx:///Assets/Icons/clipsy-64.png"
                        VerticalAlignment="Top" Margin="0,2,0,0" />
-                <StackPanel Grid.Column="1" Margin="10,0,0,0"
+                <StackPanel Grid.Column="1" Margin="10,0,10,0"
                             VerticalAlignment="Center" Spacing="1">
                     <TextBlock Text="Clipsy" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}"
                                Foreground="{StaticResource ClipsyTextBrush}"
@@ -26,20 +27,22 @@
                     <TextBlock x:Name="HeaderVersion" FontSize="11"
                                Foreground="{StaticResource ClipsyText3Brush}"
                                FontFamily="{StaticResource ClipsyFontFamily}"/>
-                    <!-- Update status row — visible only when Checking / Available / Failed -->
-                    <Grid x:Name="UpdateRow" Margin="0,3,0,0" Visibility="Collapsed"
-                          Tapped="OnUpdateRowTapped" IsHitTestVisible="False">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <FontIcon x:Name="UpdateRowIcon" FontSize="11"
-                                  Margin="0,0,4,0" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="UpdateRowText" Grid.Column="1"
-                                   FontSize="11" VerticalAlignment="Center"
-                                   FontFamily="{StaticResource ClipsyFontFamily}"/>
-                    </Grid>
                 </StackPanel>
+                <!-- Update button — same size as the logo, right-aligned.
+                     Visible only when Checking / Available / Failed. -->
+                <Grid x:Name="UpdateRow" Grid.Column="2"
+                      Width="34" Height="34" CornerRadius="6"
+                      Background="Transparent"
+                      Visibility="Collapsed"
+                      Tapped="OnUpdateRowTapped"
+                      IsHitTestVisible="False"
+                      VerticalAlignment="Top"
+                      Margin="0,2,0,0">
+                    <FontIcon x:Name="UpdateRowIcon" FontSize="18"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <!-- Kept for code-behind compat; rendered off-screen. -->
+                    <TextBlock x:Name="UpdateRowText" Visibility="Collapsed" />
+                </Grid>
             </Grid>
 
             <!-- ── Separator 1 ── -->

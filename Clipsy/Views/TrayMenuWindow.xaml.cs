@@ -146,12 +146,9 @@ public sealed partial class TrayMenuWindow : Window
     // Window setup
     // ────────────────────────────────────────────────────────
 
-    private int CurrentMenuH =>
-        _updateStatus is TrayUpdateStatus.Checking
-                      or TrayUpdateStatus.Available
-                      or TrayUpdateStatus.Failed
-            ? MenuH_Base + MenuH_Row
-            : MenuH_Base;
+    // Update button now sits beside the header text (right column), not
+    // below the version — header height stays constant regardless of status.
+    private int CurrentMenuH => MenuH_Base;
 
     private void ConfigureWindow()
     {
