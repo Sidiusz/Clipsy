@@ -619,32 +619,23 @@ public sealed partial class SettingsWindow : Window
 
     private async System.Threading.Tasks.Task<string?> PickFolderAsync(string initialDir)
     {
-        return await System.Threading.Tasks.Task.Run(() =>
+        // SHBrowseForFolderW on a Task.Run threadpool thread is non-STA,
+        // which made the dialog leak modal state to the parent window
+        // (clicks blocked, ding sound). FolderPicker is fully UI-thread,
+        // async, and respects the WinUI 3 dispatcher.
+        try
         {
-            const int BIF_RETURNONLYFSDIRS = 0x0001;
-            const int BIF_NEWDIALOGSTYLE = 0x0040;
-            var bi = new BROWSEINFO
-            {
-                hwndOwner = _hwnd,
-                pszDisplayName = Marshal.AllocHGlobal(260 * 2),
-                lpszTitle = "Choose folder",
-                ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE,
-            };
-            IntPtr pidl = SHBrowseForFolderW(ref bi);
-            string? result = null;
-            if (pidl != IntPtr.Zero)
-            {
-                var buf = Marshal.AllocHGlobal(260 * 2);
-                if (SHGetPathFromIDListW(pidl, buf))
-                {
-                    result = Marshal.PtrToStringUni(buf);
-                }
-                Marshal.FreeHGlobal(buf);
-                Marshal.FreeCoTaskMem(pidl);
-            }
-            Marshal.FreeHGlobal(bi.pszDisplayName);
-            return result;
-        });
+            var picker = new Windows.Storage.Pickers.FolderPicker();
+            picker.FileTypeFilter.Add("*");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd);
+            var folder = await picker.PickSingleFolderAsync();
+            return folder?.Path;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("SettingsWindow.PickFolderAsync", ex);
+            return null;
+        }
     }
 
     private void OnThemeSegmentClick(object sender, RoutedEventArgs e)
@@ -1371,26 +1362,6 @@ public sealed partial class SettingsWindow : Window
             ShowNotification("NotifyUpdateFailed", "error");
         }
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct BROWSEINFO
-    {
-        public IntPtr hwndOwner;
-        public IntPtr pidlRoot;
-        public IntPtr pszDisplayName;
-        [MarshalAs(UnmanagedType.LPWStr)] public string? lpszTitle;
-        public uint ulFlags;
-        public IntPtr lpfn;
-        public IntPtr lParam;
-        public int iImage;
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr SHBrowseForFolderW(ref BROWSEINFO lpbi);
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SHGetPathFromIDListW(IntPtr pidl, IntPtr pszPath);
 
     private void OnNavChecked(object sender, RoutedEventArgs e)
     {
