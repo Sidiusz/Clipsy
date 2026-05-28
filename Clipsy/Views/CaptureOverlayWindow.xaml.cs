@@ -1729,6 +1729,9 @@ public sealed partial class CaptureOverlayWindow : Window
                 _ = SaveSilentAsync();
                 return;
             case VirtualKey.C when ctrl:
+                // Don't intercept when eyedropper is active or a text field has focus.
+                if (_eyedropperActive) return;
+                if (FocusManager.GetFocusedElement(RootGrid.XamlRoot) is TextBox) return;
                 e.Handled = true;
                 if (_inOcrMode) { _ = CopyOcrTextAsync(); return; }
                 _ = CopyAsync();
@@ -1917,6 +1920,7 @@ public sealed partial class CaptureOverlayWindow : Window
     // ──────────────────────────────────────────────────────────────────
 
     private bool _eyedropperActive;
+    private bool _magClipApplied;
     private System.Drawing.Bitmap? _eyedropperBitmap;
     private const double MagZoom = 10.0;
     private const double MagHalf = 64.0; // half of 128px magnifier
@@ -1927,9 +1931,28 @@ public sealed partial class CaptureOverlayWindow : Window
         EnsureEyedropperBitmap();
         if (_eyedropperBitmap == null) return;
 
+        // Apply circular composition clip once — UIElement.Clip only supports
+        // RectangleGeometry in WinUI, so we use the composition layer.
+        if (!_magClipApplied)
+        {
+            var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(EyedropperMagnifier);
+            var comp   = visual.Compositor;
+            var geom   = comp.CreateEllipseGeometry();
+            geom.Center = new System.Numerics.Vector2(64f, 64f);
+            geom.Radius = new System.Numerics.Vector2(64f, 64f);
+            visual.Clip = comp.CreateGeometricClip(geom);
+            _magClipApplied = true;
+        }
+
         // Share the FrozenImage's BitmapImage as the magnifier source so we
-        // don't decode the PNG twice.
+        // don't decode the PNG twice. Match its DIP dimensions so the
+        // RenderTransform math aligns correctly — without explicit Width/Height,
+        // the Grid's 128x128 layout slot clips the image before the transform,
+        // leaving only the top-left 128px region, which the TranslateTransform
+        // then moves entirely off-screen (showing the black ellipse background).
         MagImage.Source = FrozenImage.Source;
+        MagImage.Width  = FrozenImage.Width;
+        MagImage.Height = FrozenImage.Height;
 
         _eyedropperActive = true;
         EyedropperMagnifier.Visibility = Visibility.Visible;
