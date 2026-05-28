@@ -87,7 +87,17 @@ public sealed partial class TrayMenuWindow : Window
         if (x < work.left)       x = work.left;
         if (y < work.top)        y = pt.y + 4;
 
-        _appWindow.MoveAndResize(new RectInt32(x, y, w, h));
+        try
+        {
+            _appWindow.MoveAndResize(new RectInt32(x, y, w, h));
+        }
+        catch (Exception ex)
+        {
+            // AppWindow handle can go stale (0x80070578) after certain Win32 events.
+            // Log and bail — preferable to crashing the app via AppDomain.UnhandledException.
+            Diagnostics.Log("TrayMenuWindow.ShowAtCursor MoveAndResize", ex);
+            return;
+        }
         Activate();
         // H.NotifyIcon's right-click handler runs inside a tray nested
         // message pump; without an explicit foreground request the window

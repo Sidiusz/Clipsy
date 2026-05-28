@@ -491,15 +491,7 @@
               HorizontalAlignment="Left"
               VerticalAlignment="Top">
             <Ellipse Width="128" Height="128" Fill="Black" />
-            <Image x:Name="MagImage" Stretch="None"
-                   HorizontalAlignment="Left" VerticalAlignment="Top">
-                <Image.RenderTransform>
-                    <TransformGroup>
-                        <ScaleTransform x:Name="MagScale" ScaleX="10" ScaleY="10" />
-                        <TranslateTransform x:Name="MagTranslate" X="0" Y="0" />
-                    </TransformGroup>
-                </Image.RenderTransform>
-            </Image>
+            <Image x:Name="MagImage" Stretch="Fill" />
             <Ellipse Width="128" Height="128" Stroke="White" StrokeThickness="2" Fill="Transparent" />
             <Border Width="14" Height="14" BorderBrush="Black" BorderThickness="1"
                     HorizontalAlignment="Center" VerticalAlignment="Center" />
