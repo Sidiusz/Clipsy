@@ -491,8 +491,18 @@
               HorizontalAlignment="Left"
               VerticalAlignment="Top">
             <Ellipse Width="128" Height="128" Fill="Black" />
-            <Image x:Name="MagImage" Stretch="Fill" />
+            <!-- Magnified pixels painted through an ImageBrush so the Ellipse
+                 clips the square WriteableBitmap into a clean circle. -->
+            <Ellipse Width="128" Height="128">
+                <Ellipse.Fill>
+                    <ImageBrush x:Name="MagBrush" Stretch="Fill" />
+                </Ellipse.Fill>
+            </Ellipse>
+            <!-- Outer ring: dark backing + bright white border so the circle
+                 edge stays visible over any content. -->
+            <Ellipse Width="128" Height="128" Stroke="Black" StrokeThickness="4" Fill="Transparent" />
             <Ellipse Width="128" Height="128" Stroke="White" StrokeThickness="2" Fill="Transparent" />
+            <!-- Centre crosshair marking the sampled pixel. -->
             <Border Width="14" Height="14" BorderBrush="Black" BorderThickness="1"
                     HorizontalAlignment="Center" VerticalAlignment="Center" />
             <Border Width="12" Height="12" BorderBrush="White" BorderThickness="1.5"

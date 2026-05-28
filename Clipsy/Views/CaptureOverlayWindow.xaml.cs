@@ -1936,7 +1936,7 @@ public sealed partial class CaptureOverlayWindow : Window
         // WriteableBitmap: 128×128 pixels, rendered at Stretch="Fill" into the 128×128 Grid.
         // No RenderTransform needed — magnified content is written directly into pixels.
         _magBitmap ??= new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(128, 128);
-        MagImage.Source = _magBitmap;
+        MagBrush.ImageSource = _magBitmap;
 
         _eyedropperActive = true;
         EyedropperMagnifier.Visibility = Visibility.Visible;
@@ -1989,7 +1989,7 @@ public sealed partial class CaptureOverlayWindow : Window
     private void UpdateMagnifier(Point cursorDip)
     {
         // Place magnifier near cursor, offset to avoid covering target pixel.
-        double offset = 24;
+        double offset = 12;
         double x = cursorDip.X + offset;
         double y = cursorDip.Y + offset;
         double w = RootGrid.Width > 0 ? RootGrid.Width : RootGrid.ActualWidth;
