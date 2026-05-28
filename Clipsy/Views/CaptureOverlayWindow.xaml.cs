@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -1920,45 +1921,28 @@ public sealed partial class CaptureOverlayWindow : Window
     // ──────────────────────────────────────────────────────────────────
 
     private bool _eyedropperActive;
-    private bool _magClipApplied;
     private System.Drawing.Bitmap? _eyedropperBitmap;
-    private const double MagZoom = 10.0;
-    private const double MagHalf = 64.0; // half of 128px magnifier
+    // Pre-copied pixel bytes for fast magnifier rendering (Format32bppArgb BGRA order)
+    private byte[]? _eyedropperPixels;
+    private int     _eyedropperStride;
+    private Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap? _magBitmap;
 
     private void OnEyedropperBtnClick(object sender, RoutedEventArgs e)
     {
         ColorFlyout?.Hide();
         EnsureEyedropperBitmap();
-        if (_eyedropperBitmap == null) return;
+        if (_eyedropperPixels == null) return;
 
-        // Apply circular composition clip once — UIElement.Clip only supports
-        // RectangleGeometry in WinUI, so we use the composition layer.
-        if (!_magClipApplied)
-        {
-            var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(EyedropperMagnifier);
-            var comp   = visual.Compositor;
-            var geom   = comp.CreateEllipseGeometry();
-            geom.Center = new System.Numerics.Vector2(64f, 64f);
-            geom.Radius = new System.Numerics.Vector2(64f, 64f);
-            visual.Clip = comp.CreateGeometricClip(geom);
-            _magClipApplied = true;
-        }
-
-        // Share the FrozenImage's BitmapImage as the magnifier source so we
-        // don't decode the PNG twice. Match its DIP dimensions so the
-        // RenderTransform math aligns correctly — without explicit Width/Height,
-        // the Grid's 128x128 layout slot clips the image before the transform,
-        // leaving only the top-left 128px region, which the TranslateTransform
-        // then moves entirely off-screen (showing the black ellipse background).
-        MagImage.Source = FrozenImage.Source;
-        MagImage.Width  = FrozenImage.Width;
-        MagImage.Height = FrozenImage.Height;
+        // WriteableBitmap: 128×128 pixels, rendered at Stretch="Fill" into the 128×128 Grid.
+        // No RenderTransform needed — magnified content is written directly into pixels.
+        _magBitmap ??= new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(128, 128);
+        MagImage.Source = _magBitmap;
 
         _eyedropperActive = true;
         EyedropperMagnifier.Visibility = Visibility.Visible;
         RootGrid.Focus(FocusState.Programmatic);
 
-        // Position magnifier at current cursor immediately.
+        // Position and render magnifier at current cursor immediately.
         try
         {
             GetCursorPos(out var pt);
@@ -1978,11 +1962,23 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void EnsureEyedropperBitmap()
     {
-        if (_eyedropperBitmap != null) return;
+        if (_eyedropperPixels != null) return;
         try
         {
             using var ms = new MemoryStream(_frame.PngBytes);
             _eyedropperBitmap = new System.Drawing.Bitmap(ms);
+
+            // Pre-copy all pixels once so UpdateMagnifier can read them without
+            // per-call LockBits overhead (Format32bppArgb = BGRA byte order).
+            var rect = new System.Drawing.Rectangle(0, 0, _eyedropperBitmap.Width, _eyedropperBitmap.Height);
+            var data = _eyedropperBitmap.LockBits(rect,
+                System.Drawing.Imaging.ImageLockMode.ReadOnly,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            _eyedropperStride = data.Stride;
+            var byteCount = Math.Abs(data.Stride) * _eyedropperBitmap.Height;
+            _eyedropperPixels = new byte[byteCount];
+            Marshal.Copy(data.Scan0, _eyedropperPixels, 0, byteCount);
+            _eyedropperBitmap.UnlockBits(data);
         }
         catch (Exception ex)
         {
@@ -2004,9 +2000,43 @@ public sealed partial class CaptureOverlayWindow : Window
         if (y < 0) y = 0;
         EyedropperMagnifier.Margin = new Thickness(x, y, 0, 0);
 
-        // Translate so the source pixel under the cursor lands at the magnifier centre.
-        MagTranslate.X = MagHalf - cursorDip.X * MagZoom;
-        MagTranslate.Y = MagHalf - cursorDip.Y * MagZoom;
+        // Render magnified region into the WriteableBitmap.
+        // srcSize = how many source pixels fit in the 128px output at ~10× zoom,
+        // scaled by DpiScale so visual zoom stays consistent across DPI settings.
+        if (_eyedropperPixels == null || _magBitmap == null || _eyedropperBitmap == null) return;
+
+        const int magPx  = 128;
+        int srcSize = Math.Max(1, (int)Math.Round(magPx * DpiScale / 10.0));
+
+        var scale = DpiScale;
+        int cx = (int)(cursorDip.X * scale);
+        int cy = (int)(cursorDip.Y * scale);
+        int srcW   = _eyedropperBitmap.Width;
+        int srcH   = _eyedropperBitmap.Height;
+        int stride = _eyedropperStride;
+        int half   = srcSize / 2;
+
+        var dst = new byte[magPx * magPx * 4];
+        int di = 0;
+        for (int dy = 0; dy < magPx; dy++)
+        {
+            int srcY = Math.Clamp(cy - half + (int)((double)dy / magPx * srcSize), 0, srcH - 1);
+            int rowBase = srcY * stride;
+            for (int dx = 0; dx < magPx; dx++)
+            {
+                int srcX = Math.Clamp(cx - half + (int)((double)dx / magPx * srcSize), 0, srcW - 1);
+                int si = rowBase + srcX * 4;
+                dst[di++] = _eyedropperPixels[si];     // B
+                dst[di++] = _eyedropperPixels[si + 1]; // G
+                dst[di++] = _eyedropperPixels[si + 2]; // R
+                dst[di++] = _eyedropperPixels[si + 3]; // A
+            }
+        }
+
+        using var stream = _magBitmap.PixelBuffer.AsStream();
+        stream.Seek(0, SeekOrigin.Begin);
+        stream.Write(dst, 0, dst.Length);
+        _magBitmap.Invalidate();
     }
 
     private Color SamplePixel(Point cursorDip)
