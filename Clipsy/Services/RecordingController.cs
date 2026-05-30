@@ -374,13 +374,14 @@ public sealed class RecordingController
             var dest = Path.Combine(folder, name);
             Diagnostics.Log($"  dest='{dest}' native='{_nativeFmt}' target='{fmt}'");
             // Container swap or GIF conversion when the user-chosen format
-            // differs from what the encoder wrote.
-            await ConvertOrCopyAsync(tempPath, dest, _nativeFmt, fmt);
+            // differs from what the encoder wrote. May redirect to MP4 if the
+            // chosen container needs FFmpeg and it isn't installed.
+            var actual = await ConvertOrCopyAsync(tempPath, dest, _nativeFmt, fmt);
             Diagnostics.Log("  ConvertOrCopyAsync OK");
             TryDelete(tempPath);
             settings.Settings.LastVideoFolder = folder;
             settings.Save();
-            NotificationService.VideoSaved(name, new FileInfo(dest).Length / 1024L, dest);
+            NotifyVideoSaved(actual, dest, fmt);
             Diagnostics.Log($"  AfterSaveAction.Run action='{settings.Settings.AfterSaveAction}'");
             AfterSaveAction.Run(dest, settings.Settings.AfterSaveAction);
             Diagnostics.Log("SilentSave EXIT OK");
@@ -454,22 +455,26 @@ public sealed class RecordingController
         // TRANSPARENT click-through window — invalid modal owner for common dialogs.
         var hwnd = App.Current?.HostWindow?.Hwnd ?? _hudHwnd;
 
-        // List every supported video format. Preferred (whatever the codec
-        // emitted natively) floats to the top so the dialog defaults to it.
+        // List supported video formats. MP4 and GIF work without FFmpeg; AVI/MKV
+        // need it for a correct container remux, so only offer them when the
+        // binary is installed (otherwise the user could pick a format we can't
+        // honour). Preferred format floats to the top as the dialog default.
+        bool ffmpeg = FFmpegService.Instance.IsAvailable;
         var filters = new System.Collections.Generic.List<SaveDialogService.SaveFilter>
         {
             new("MP4 video (*.mp4)",    "*.mp4"),
-            new("MKV video (*.mkv)",    "*.mkv"),
-            new("AVI video (*.avi)",    "*.avi"),
-            new("GIF animation (*.gif)", "*.gif"),
         };
-        int preferredIdx = preferredFmt switch
+        if (ffmpeg)
         {
-            "mkv" => 1,
-            "avi" => 2,
-            "gif" => 3,
-            _     => 0,
-        };
+            filters.Add(new("MKV video (*.mkv)", "*.mkv"));
+            filters.Add(new("AVI video (*.avi)", "*.avi"));
+        }
+        filters.Add(new("GIF animation (*.gif)", "*.gif"));
+
+        int preferredIdx = filters.FindIndex(f =>
+            SaveDialogService.ExtensionFromPattern(f.Pattern).TrimStart('.')
+                .Equals(preferredFmt, StringComparison.OrdinalIgnoreCase));
+        if (preferredIdx < 0) preferredIdx = 0;
         if (preferredIdx > 0)
         {
             var picked = filters[preferredIdx];
@@ -505,15 +510,15 @@ public sealed class RecordingController
 
         try
         {
-            await ConvertOrCopyAsync(tempPath, dest, _nativeFmt, chosenFmt);
+            var actual = await ConvertOrCopyAsync(tempPath, dest, _nativeFmt, chosenFmt);
             TryDelete(tempPath);
-            var dir = Path.GetDirectoryName(dest);
+            var dir = Path.GetDirectoryName(actual);
             if (!string.IsNullOrEmpty(dir))
             {
                 settings.Settings.LastVideoFolder = dir;
                 settings.Save();
             }
-            NotificationService.VideoSaved(Path.GetFileName(dest), new FileInfo(dest).Length / 1024L, dest);
+            NotifyVideoSaved(actual, dest, chosenFmt);
             Diagnostics.Log($"  AfterSaveAction.Run action='{settings.Settings.AfterSaveAction}'");
             AfterSaveAction.Run(dest, settings.Settings.AfterSaveAction);
             Diagnostics.Log("OfferSaveAsync EXIT OK");
@@ -528,47 +533,79 @@ public sealed class RecordingController
     /// <summary>
     /// Move the temp recording to <paramref name="dest"/>, converting between
     /// container formats if the user picked a different one in the dialog.
-    /// GIF goes through ConvertToGifAsync; mp4/mkv/avi cross-conversion uses
-    /// `ffmpeg -c copy` (no re-encode). If FFmpeg isn't available the file
-    /// is copied with the new extension and a warning is logged.
+    /// Returns the path actually written, which may differ from
+    /// <paramref name="dest"/>: AVI/MKV need FFmpeg for a correct remux, so when
+    /// FFmpeg is absent the native MP4 is kept instead of a fake-renamed copy.
+    /// GIF goes through ConvertToGifAsync (FFmpeg) or NativeGifEncoder (no FFmpeg).
     /// </summary>
-    private static async Task ConvertOrCopyAsync(string src, string dest, string srcFmt, string destFmt)
+    /// <summary>
+    /// Post the "saved" toast. If the file landed at a different path than the
+    /// caller requested (AVI/MKV redirected to MP4 because FFmpeg is missing),
+    /// surface the fallback notice instead of the plain success toast.
+    /// </summary>
+    private static void NotifyVideoSaved(string actualPath, string requestedPath, string requestedFmt)
+    {
+        long sizeKb = new FileInfo(actualPath).Length / 1024L;
+        var fileName = Path.GetFileName(actualPath);
+
+        if (!string.Equals(actualPath, requestedPath, StringComparison.OrdinalIgnoreCase))
+            NotificationService.VideoSavedAsMp4(fileName, sizeKb, actualPath, requestedFmt);
+        else
+            NotificationService.VideoSaved(fileName, sizeKb, actualPath);
+    }
+
+    private static async Task<string> ConvertOrCopyAsync(string src, string dest, string srcFmt, string destFmt)
     {
         if (string.Equals(srcFmt, destFmt, StringComparison.OrdinalIgnoreCase))
         {
             File.Copy(src, dest, overwrite: true);
-            return;
+            return dest;
         }
         if (destFmt == "gif")
         {
-            if (!FFmpegService.Instance.IsAvailable)
+            // FFmpeg path (palettegen + paletteuse) when the binary is present;
+            // otherwise fall back to the dependency-free NativeGifEncoder so the
+            // export still succeeds without FFmpeg installed in the app.
+            bool ok;
+            if (FFmpegService.Instance.IsAvailable)
+                ok = await FFmpegService.Instance.ConvertToGifAsync(src, dest);
+            else
             {
-                // Refuse to fall through to a plain copy — it would dump
-                // mp4 bytes into a .gif file (the bug behind the broken GIF
-                // reports). Surface the missing dependency instead.
-                NotificationService.Warning("WarnNoFfmpeg");
-                Diagnostics.Log("ConvertOrCopyAsync gif requested but FFmpeg missing");
-                throw new InvalidOperationException("FFmpeg is required to export GIF.");
+                Diagnostics.Log("ConvertOrCopyAsync gif via NativeGifEncoder (FFmpeg missing)");
+                ok = await NativeGifEncoder.ConvertMp4ToGifAsync(src, dest);
             }
-            var ok = await FFmpegService.Instance.ConvertToGifAsync(src, dest);
+
             if (!ok || !File.Exists(dest) || new FileInfo(dest).Length == 0)
             {
                 Diagnostics.Log("ConvertOrCopyAsync gif conversion failed");
                 throw new InvalidOperationException("GIF conversion failed.");
             }
-            return;
+            return dest;
         }
+
+        // Container swap (mp4 ↔ avi/mkv). FFmpeg does a clean stream copy.
         if (FFmpegService.Instance.IsAvailable)
         {
-            // Stream copy — no re-encode, fast container swap.
             var args = $"-i \"{src}\" -c copy -y \"{dest}\"";
             var ok = await FFmpegService.Instance.RunAsync(args);
-            if (ok && File.Exists(dest)) return;
+            if (ok && File.Exists(dest)) return dest;
             Diagnostics.Log($"ConvertOrCopyAsync ffmpeg remux failed src='{src}' dest='{dest}'");
         }
-        // No ffmpeg or remux failed → fall back to plain copy. Container
-        // mismatch may break playback for some codec/extension combos.
+
+        // No FFmpeg (or remux failed). For AVI/MKV a plain rename would dump
+        // MP4 bytes into a mismatched container, so keep the native MP4 and let
+        // the caller surface the "FFmpeg required" notice. src is always the
+        // native MP4 here (AVI/MKV are only reachable from the H.264/H.265 path).
+        if (destFmt is "avi" or "mkv")
+        {
+            var mp4Dest = Path.ChangeExtension(dest, ".mp4");
+            File.Copy(src, mp4Dest, overwrite: true);
+            Diagnostics.Log($"ConvertOrCopyAsync {destFmt} requested but FFmpeg missing → saved '{mp4Dest}'");
+            return mp4Dest;
+        }
+
         File.Copy(src, dest, overwrite: true);
+        return dest;
     }
 
     private void Cleanup(bool discardTemp)

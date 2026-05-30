@@ -303,6 +303,9 @@ public static class Strings
         ["ToastOpenFolder"]         = New("Open folder",                                   "Открыть папку"),
         ["ToastDownload"]           = New("Download update",                               "Скачать обновление"),
         ["ToastSkipVersion"]        = New("Skip this version",                             "Пропустить эту версию"),
+        ["ToastGetFfmpeg"]          = New("Get FFmpeg in settings",                        "Скачать FFmpeg в настройках"),
+        ["WarnSavedAsMp4"]          = New("{0} export needs FFmpeg — saved as MP4 instead ({1}). Install FFmpeg in settings.",
+                                          "Для экспорта в {0} нужен FFmpeg — сохранено как MP4 ({1}). Установите FFmpeg в настройках."),
         // Legacy keys kept for compatibility
         ["ToastOpen"]               = New("Open",                                          "Открыть"),
         ["ToastSkip"]               = New("Skip",                                          "Пропустить"),

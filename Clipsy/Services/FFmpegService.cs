@@ -123,7 +123,10 @@ public sealed class FFmpegService
         catch (Exception ex) { Debug.WriteLine($"[Clipsy] FFmpeg delete: {ex.Message}"); }
     }
 
-    // ─── GIF conversion (unchanged logic) ────────────────────────────────────
+    // ─── GIF conversion ───────────────────────────────────────────────────────
+    // Used when ffmpeg.exe is installed in the app. When it is missing the
+    // caller (RecordingController.ConvertOrCopyAsync) falls back to
+    // NativeGifEncoder instead.
 
     public async Task<bool> ConvertToGifAsync(string inputMp4, string outputGif)
     {

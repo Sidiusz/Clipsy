@@ -745,6 +745,32 @@ public sealed partial class SettingsWindow : Window
                 _loading = wasLoading;
             }
         }
+
+        UpdateVideoFormatAvailability(ffmpegAvailable);
+    }
+
+    /// <summary>
+    /// AVI/MKV containers need FFmpeg for a correct remux. Without it, disable
+    /// those choices and snap the selection back to MP4. MP4 and GIF stay
+    /// available (both work natively).
+    /// </summary>
+    private void UpdateVideoFormatAvailability(bool ffmpegAvailable)
+    {
+        if (VidFmtAvi == null || VidFmtMkv == null) return;
+        VidFmtAvi.IsEnabled = ffmpegAvailable;
+        VidFmtMkv.IsEnabled = ffmpegAvailable;
+
+        if (!ffmpegAvailable)
+        {
+            var fmt = SelectedComboTag(VideoFormatBox);
+            if (fmt == "avi" || fmt == "mkv")
+            {
+                var wasLoading = _loading;
+                _loading = true;
+                SelectComboByTag(VideoFormatBox, "mp4");
+                _loading = wasLoading;
+            }
+        }
     }
 
     private async void OnFfmpegInstall(object sender, RoutedEventArgs e)
