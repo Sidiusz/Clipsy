@@ -32,8 +32,6 @@ public sealed partial class RecordingHudWindow : Window
     private bool _paused;
     private bool _locked = true;
 
-    private const bool _draggingMove = false;
-
     public event Action? PauseRequested;
     public event Action? ResumeRequested;
     public event Action? StopRequested;
@@ -227,8 +225,8 @@ public sealed partial class RecordingHudWindow : Window
 
     private void OnHideTick(object? s, object e)
     {
-        if (_draggingMove) { ApplyHudFar(false); return; }
-        if (!GetCursorPos(out POINT pt) || !GetWindowRect(_hwnd, out RECT wr)) return;
+        if (!GetCursorPos(out POINT pt) || !GetWindowRect(_hwnd, out RECT wr))
+            return;
         int cx = (wr.Left + wr.Right) / 2;
         int cy = (wr.Top + wr.Bottom) / 2;
         double dist = System.Math.Sqrt((pt.X - cx) * (pt.X - cx) + (pt.Y - cy) * (pt.Y - cy));
