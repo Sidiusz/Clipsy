@@ -237,10 +237,12 @@ public sealed partial class SettingsWindow
     private void OnGifColorChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         if (GifColorLabel != null) GifColorLabel.Text = ((int)GifColorSlider.Value).ToString();
+        if (!_loading) MarkChanged();
     }
 
     private void OnGifFpsChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         if (GifFpsLabel != null) GifFpsLabel.Text = ((int)GifFpsSlider.Value).ToString();
+        if (!_loading) MarkChanged();
     }
 }
