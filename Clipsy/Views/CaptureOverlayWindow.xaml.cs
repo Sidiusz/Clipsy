@@ -39,7 +39,6 @@ public sealed partial class CaptureOverlayWindow : Window
     private const double SingleClickFallbackSize = 100.0;
     private const double HandleSize = 10.0;
     private const double HandleHitInflate = 6.0;
-    private const double EraserRadius = 4.0;
 
     private readonly ScreenFreezeService.FrozenFrame _frame;
     private readonly IntPtr _hwnd;
@@ -1691,7 +1690,7 @@ public sealed partial class CaptureOverlayWindow : Window
         // disc, keep the surrounding sub-strokes). Rectangles and text are
         // removed whole on touch since they are not point-sampled.
         // Shift + RMB removes whole strokes too, matching the recording overlay.
-        double r = System.Math.Max(EraserRadius, _drawing.Settings.PencilThickness * 1.5);
+        double r = System.Math.Max(2.0, _drawing.Settings.PencilThickness * 0.5);
         bool shift = (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
             Windows.System.VirtualKey.Shift) & Windows.UI.Core.CoreVirtualKeyStates.Down)
             == Windows.UI.Core.CoreVirtualKeyStates.Down;

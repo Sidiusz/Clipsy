@@ -58,10 +58,9 @@ public sealed class PencilEngine
     public void SetThickness(float t)
     {
         _thickness = Math.Clamp(t, MinThickness, MaxThickness);
-        // Eraser radius tracks thickness so the partial-erase footprint feels
-        // proportional to the visible stroke width. Same formula as the capture
-        // overlay canvas: max(4, thickness * 1.5).
-        _eraserRadius = Math.Max(4, (int)Math.Round(_thickness * 1.5f));
+        // Eraser radius = half the stroke width so the erase footprint matches
+        // the visible ring (diameter == thickness).
+        _eraserRadius = Math.Max(2, (int)Math.Round(_thickness * 0.5f));
         Changed?.Invoke();
     }
 
