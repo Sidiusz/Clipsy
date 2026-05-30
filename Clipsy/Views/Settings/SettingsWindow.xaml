@@ -6,6 +6,19 @@
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
     <Grid Background="{StaticResource ClipsyBg0Brush}">
+        <!-- Round all input fields in Settings. Scoped here so overlay/HUD
+             inputs keep their own look. BasedOn the keyed Clipsy styles which
+             carry the input surface + border; FontFamily kept for Onest. -->
+        <Grid.Resources>
+            <Style TargetType="TextBox" BasedOn="{StaticResource ClipsyTextBox}">
+                <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
+                <Setter Property="CornerRadius" Value="{StaticResource ClipsyRadiusMd}" />
+            </Style>
+            <Style TargetType="ComboBox" BasedOn="{StaticResource ClipsyComboBox}">
+                <Setter Property="FontFamily" Value="{StaticResource ClipsyFontFamily}" />
+                <Setter Property="CornerRadius" Value="{StaticResource ClipsyRadiusMd}" />
+            </Style>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="36" />
             <RowDefinition Height="*" />
