@@ -1,0 +1,342 @@
+using System.Collections.Generic;
+using Clipsy.Drawing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
+using Windows.Foundation;
+using Point = Windows.Foundation.Point;
+using Rect = Windows.Foundation.Rect;
+
+namespace Clipsy.Views;
+
+public sealed partial class CaptureOverlayWindow
+{
+    // ---------- Drawing tools ----------
+
+    private void StartToolPress(Point pos, Pointer pointer)
+    {
+        // Drawings live in root DIPs so they stay fixed on screen when the
+        // selection rectangle moves or resizes.
+        switch (_drawing.Settings.Tool)
+        {
+            case ToolKind.Pencil:
+                _mode = InteractionMode.DrawingStroke;
+                _activeStrokeVisual = new Polyline
+                {
+                    Stroke = new SolidColorBrush(_drawing.Settings.Color),
+                    StrokeThickness = _drawing.Settings.PencilThickness,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
+                    StrokeLineJoin = PenLineJoin.Round,
+                };
+                _activeStrokeVisual.Points.Add(pos);
+                _activeStroke = new StrokeElement
+                {
+                    Visual = _activeStrokeVisual,
+                    Points = new List<Point> { pos },
+                    Thickness = _drawing.Settings.PencilThickness,
+                };
+                DrawingCanvas.Children.Add(_activeStrokeVisual);
+                RootGrid.CapturePointer(pointer);
+                break;
+            case ToolKind.Rectangle:
+                _mode = InteractionMode.DrawingRect;
+                _activeRectAnchor = pos;
+                _activeRectVisual = new Microsoft.UI.Xaml.Shapes.Rectangle
+                {
+                    Stroke = new SolidColorBrush(_drawing.Settings.Color),
+                    StrokeThickness = _drawing.Settings.RectangleThickness,
+                    Width = 0,
+                    Height = 0,
+                };
+                Canvas.SetLeft(_activeRectVisual, pos.X);
+                Canvas.SetTop(_activeRectVisual, pos.Y);
+                DrawingCanvas.Children.Add(_activeRectVisual);
+                RootGrid.CapturePointer(pointer);
+                break;
+            case ToolKind.Ellipse:
+                _mode = InteractionMode.DrawingRect;
+                _activeRectAnchor = pos;
+                _activeRectVisual = new Microsoft.UI.Xaml.Shapes.Ellipse
+                {
+                    Stroke = new SolidColorBrush(_drawing.Settings.Color),
+                    StrokeThickness = _drawing.Settings.EllipseThickness,
+                    Width = 0,
+                    Height = 0,
+                };
+                Canvas.SetLeft(_activeRectVisual, pos.X);
+                Canvas.SetTop(_activeRectVisual, pos.Y);
+                DrawingCanvas.Children.Add(_activeRectVisual);
+                RootGrid.CapturePointer(pointer);
+                break;
+            case ToolKind.Line:
+                _mode = InteractionMode.DrawingRect;
+                _activeLineVisual = new Line
+                {
+                    Stroke = new SolidColorBrush(_drawing.Settings.Color),
+                    StrokeThickness = _drawing.Settings.LineThickness,
+                    X1 = pos.X,
+                    Y1 = pos.Y,
+                    X2 = pos.X,
+                    Y2 = pos.Y,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
+                    StrokeLineJoin = PenLineJoin.Round,
+                };
+                DrawingCanvas.Children.Add(_activeLineVisual);
+                RootGrid.CapturePointer(pointer);
+                break;
+            case ToolKind.Text:
+                // Click-to-place: do not enter a drag mode and do not capture
+                // the pointer. PointerReleased resets _mode to Idle, and the
+                // TextBox keeps focus until LostFocus / Enter / Esc.
+                StartTextEntry(pos);
+                break;
+        }
+    }
+
+    private void ExtendStroke(Point pos)
+    {
+        if (_activeStroke == null || _activeStrokeVisual == null) return;
+        _activeStroke.Points.Add(pos);
+        _activeStrokeVisual.Points.Add(pos);
+    }
+
+    private void FinishStroke()
+    {
+        if (_activeStroke == null || _activeStrokeVisual == null) return;
+        // Single click → zero-distance stroke. Polyline with one point (or two
+        // identical points) renders nothing even with Round caps. Add a 0.01-px
+        // sibling so the round end-cap paints a visible dot.
+        if (_activeStroke.Points.Count == 1)
+        {
+            var only = _activeStroke.Points[0];
+            var twin = new Point(only.X + 0.01, only.Y + 0.01);
+            _activeStroke.Points.Add(twin);
+            _activeStrokeVisual.Points.Add(twin);
+        }
+        DrawingCanvas.Children.Remove(_activeStrokeVisual);
+        _drawing.Add(_activeStroke);
+        _activeStroke = null;
+        _activeStrokeVisual = null;
+    }
+
+    private void UpdateActiveShape(Point pos)
+    {
+        if (_activeLineVisual != null)
+        {
+            _activeLineVisual.X2 = pos.X;
+            _activeLineVisual.Y2 = pos.Y;
+            return;
+        }
+
+        if (_activeRectVisual == null) return;
+        double x = System.Math.Min(_activeRectAnchor.X, pos.X);
+        double y = System.Math.Min(_activeRectAnchor.Y, pos.Y);
+        double w = System.Math.Abs(pos.X - _activeRectAnchor.X);
+        double h = System.Math.Abs(pos.Y - _activeRectAnchor.Y);
+        Canvas.SetLeft(_activeRectVisual, x);
+        Canvas.SetTop(_activeRectVisual, y);
+        // Below the stroke thickness an ellipse degenerates into a strip — WinUI
+        // still renders the stroke across the longer axis. Hide the visual until
+        // the user drags out a usable size to avoid the "circle = line" artifact.
+        double minSide = System.Math.Max(2.0, _activeRectVisual.StrokeThickness);
+        _activeRectVisual.Visibility = (w < minSide || h < minSide)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        _activeRectVisual.Width = w;
+        _activeRectVisual.Height = h;
+    }
+
+    private void FinishActiveShape()
+    {
+        if (_activeLineVisual != null)
+        {
+            double x1 = _activeLineVisual.X1;
+            double y1 = _activeLineVisual.Y1;
+            double x2 = _activeLineVisual.X2;
+            double y2 = _activeLineVisual.Y2;
+            DrawingCanvas.Children.Remove(_activeLineVisual);
+            if (System.Math.Abs(x2 - x1) < 1 && System.Math.Abs(y2 - y1) < 1)
+            {
+                _activeLineVisual = null;
+                return;
+            }
+            var visual = new Line
+            {
+                Stroke = _activeLineVisual.Stroke,
+                StrokeThickness = _activeLineVisual.StrokeThickness,
+                X1 = x1,
+                Y1 = y1,
+                X2 = x2,
+                Y2 = y2,
+                StrokeStartLineCap = _activeLineVisual.StrokeStartLineCap,
+                StrokeEndLineCap = _activeLineVisual.StrokeEndLineCap,
+                StrokeLineJoin = _activeLineVisual.StrokeLineJoin,
+            };
+            var element = new LineElement
+            {
+                Visual = visual,
+                Start = new Point(x1, y1),
+                End = new Point(x2, y2),
+                Thickness = _activeLineVisual.StrokeThickness,
+            };
+            _drawing.Add(element);
+            _activeLineVisual = null;
+            return;
+        }
+
+        if (_activeRectVisual == null) return;
+        double x = Canvas.GetLeft(_activeRectVisual);
+        double y = Canvas.GetTop(_activeRectVisual);
+        double w = _activeRectVisual.Width;
+        double h = _activeRectVisual.Height;
+        DrawingCanvas.Children.Remove(_activeRectVisual);
+        if (w < 2 || h < 2) { _activeRectVisual = null; return; }
+
+        if (_activeRectVisual is Ellipse)
+        {
+            var visual = new Ellipse
+            {
+                Stroke = _activeRectVisual.Stroke,
+                StrokeThickness = _activeRectVisual.StrokeThickness,
+                Width = w,
+                Height = h,
+            };
+            Canvas.SetLeft(visual, x);
+            Canvas.SetTop(visual, y);
+            var element = new EllipseElement
+            {
+                Visual = visual,
+                Bounds = new Rect(x, y, w, h),
+                Thickness = _activeRectVisual.StrokeThickness,
+            };
+            _drawing.Add(element);
+        }
+        else
+        {
+            var visual = new Microsoft.UI.Xaml.Shapes.Rectangle
+            {
+                Stroke = _activeRectVisual.Stroke,
+                StrokeThickness = _activeRectVisual.StrokeThickness,
+                Width = w,
+                Height = h,
+            };
+            Canvas.SetLeft(visual, x);
+            Canvas.SetTop(visual, y);
+            var element = new RectangleElement
+            {
+                Visual = visual,
+                Bounds = new Rect(x, y, w, h),
+                Thickness = _activeRectVisual.StrokeThickness,
+            };
+            _drawing.Add(element);
+        }
+        _activeRectVisual = null;
+    }
+
+    private void TryEraseAt(Point rootPos)
+    {
+        // Partial-erase pencil strokes (drop the points inside the eraser
+        // disc, keep the surrounding sub-strokes). Rectangles and text are
+        // removed whole on touch since they are not point-sampled.
+        // Shift + RMB removes whole strokes too, matching the recording overlay.
+        double r = System.Math.Max(2.0, _drawing.Settings.PencilThickness * 0.5);
+        bool shift = (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
+            Windows.System.VirtualKey.Shift) & Windows.UI.Core.CoreVirtualKeyStates.Down)
+            == Windows.UI.Core.CoreVirtualKeyStates.Down;
+        if (shift) _drawing.WholeStrokeErase(rootPos, r);
+        else _drawing.PartialErase(rootPos, r);
+    }
+
+    // ---------- Toolbar / tool selection ----------
+
+    private void OnToolToggle(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton tb) return;
+        ToolKind tool = tb.Name switch
+        {
+            "PencilBtn" => ToolKind.Pencil,
+            "Rectangle" => ToolKind.Rectangle,
+            "EllipseBtn" => ToolKind.Ellipse,
+            "LineBtn" => ToolKind.Line,
+            "TextBtn" => ToolKind.Text,
+            _ => ToolKind.None,
+        };
+        SetTool(tb.IsChecked == true ? tool : ToolKind.None);
+    }
+
+    private void SetTool(ToolKind tool)
+    {
+        _drawing.Settings.Tool = tool;
+
+        // Swap the Style instead of mutating brushes inline. The Selected
+        // style ships its own template + visual states with amber stops so
+        // PointerOver doesn't drop us back to grey.
+        var selectedStyle = (Microsoft.UI.Xaml.Style)Application.Current.Resources["ClipsyIconButtonSelected"];
+        var normalStyle   = (Microsoft.UI.Xaml.Style)Application.Current.Resources["ClipsyIconButton"];
+
+        PencilBtn.Style = tool == ToolKind.Pencil ? selectedStyle : normalStyle;
+        TextBtn.Style   = tool == ToolKind.Text   ? selectedStyle : normalStyle;
+        ShapesBtn.Style = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line
+            ? selectedStyle : normalStyle;
+
+        // The Shapes icon glyphs are Stroke-based shapes (not FontIcon
+        // glyphs that inherit Foreground), so swap their stroke explicitly.
+        var shapesActive = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line;
+        var shapesStroke = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[
+            shapesActive ? "ClipsyAccentBrush" : "ClipsyText2Brush"];
+        if (ShapeIconRect    != null) ShapeIconRect.Stroke    = shapesStroke;
+        if (ShapeIconEllipse != null) ShapeIconEllipse.Stroke = shapesStroke;
+        if (ShapeIconLine    != null) ShapeIconLine.Stroke    = shapesStroke;
+
+        // Show/hide shapes in flyout - selected shape is hidden, others visible
+        // Use _currentShapeTool to determine which shape is currently selected
+        RectBtn.Visibility = _currentShapeTool == ToolKind.Rectangle ? Visibility.Collapsed : Visibility.Visible;
+        EllipseBtn.Visibility = _currentShapeTool == ToolKind.Ellipse ? Visibility.Collapsed : Visibility.Visible;
+        LineBtn.Visibility = _currentShapeTool == ToolKind.Line ? Visibility.Collapsed : Visibility.Visible;
+
+        // Update shapes icon based on current shape tool
+        if (_currentShapeTool == ToolKind.Rectangle)
+        {
+            ShapeIconRect?.SetValue(UIElement.VisibilityProperty, Visibility.Visible);
+            ShapeIconEllipse?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+            ShapeIconLine?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+        }
+        else if (_currentShapeTool == ToolKind.Ellipse)
+        {
+            ShapeIconRect?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+            ShapeIconEllipse?.SetValue(UIElement.VisibilityProperty, Visibility.Visible);
+            ShapeIconLine?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+        }
+        else if (_currentShapeTool == ToolKind.Line)
+        {
+            ShapeIconRect?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+            ShapeIconEllipse?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+            ShapeIconLine?.SetValue(UIElement.VisibilityProperty, Visibility.Visible);
+        }
+        else
+        {
+            ShapeIconRect?.SetValue(UIElement.VisibilityProperty, Visibility.Visible);
+            ShapeIconEllipse?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+            ShapeIconLine?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+        }
+
+        if (tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
+        {
+            UpdatePreviewForThickness(_drawing.Settings.BrushSize);
+            if (_textPreview != null) _textPreview.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            _pencilPreview.Visibility = Visibility.Collapsed;
+            // Text preview's per-frame visibility is set in PointerMoved; collapse
+            // it explicitly when switching to a non-text tool so it doesn't linger.
+            if (_textPreview != null && tool != ToolKind.Text)
+                _textPreview.Visibility = Visibility.Collapsed;
+        }
+    }
+}

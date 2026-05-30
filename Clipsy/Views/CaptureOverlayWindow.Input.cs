@@ -1,0 +1,350 @@
+using Clipsy.Drawing;
+using Microsoft.UI.Input;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Windows.Foundation;
+using Windows.System;
+using Point = Windows.Foundation.Point;
+using Rect = Windows.Foundation.Rect;
+
+namespace Clipsy.Views;
+
+public sealed partial class CaptureOverlayWindow
+{
+    // ---------- Pointer input ----------
+
+    private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        var cp = e.GetCurrentPoint(RootGrid);
+        var pos = cp.Position;
+        bool rmb = cp.Properties.IsRightButtonPressed;
+        bool lmb = cp.Properties.IsLeftButtonPressed;
+
+        if (_eyedropperActive)
+        {
+            if (lmb)
+                ApplyPickedColor(SamplePixel(pos));
+            ExitEyedropperMode();
+            e.Handled = true;
+            return;
+        }
+
+        if (_inOcrMode)
+        {
+            // OCR mode owns the overlay. Text selection happens inside the
+            // floating OcrTextBox; clicks elsewhere are ignored so they
+            // don't paint, move the selection, or open menus.
+            return;
+        }
+
+        // When a paint tool is active the selection is locked: clicks
+        // anywhere on the overlay paint (LMB) or erase (RMB). The user can
+        // draw outside the selection rectangle without accidentally
+        // starting a new selection.
+        if (_drawing.Settings.Tool != ToolKind.None)
+        {
+            if (rmb)
+            {
+                _mode = InteractionMode.Erasing;
+                RootGrid.CapturePointer(e.Pointer);
+                TryEraseAt(pos);
+                e.Handled = true;
+                return;
+            }
+            if (lmb)
+            {
+                StartToolPress(pos, e.Pointer);
+                e.Handled = true;
+                return;
+            }
+            return;
+        }
+
+        if (rmb) return; // let RightTapped surface the overlay context menu
+
+        if (!lmb) return;
+
+        if (_hasSelection && TryGetHandle(pos, out var hp))
+        {
+            _mode = InteractionMode.ResizingSelection;
+            _activeHandle = hp;
+            _selectionAtDragStart = _selectionRect;
+            _dragStart = pos;
+            RootGrid.CapturePointer(e.Pointer);
+            return;
+        }
+
+        if (_hasSelection && IsInsideSelection(pos))
+        {
+            _mode = InteractionMode.MovingSelection;
+            _selectionAtDragStart = _selectionRect;
+            _dragStart = pos;
+            RootGrid.CapturePointer(e.Pointer);
+            return;
+        }
+
+        // Outside or no selection: start new selection
+        if (_drawing.Elements.Count > 0)
+        {
+            _drawing.ClearAll();
+        }
+        _mode = InteractionMode.SelectingNew;
+        _hasSelection = false;
+        _dragStart = pos;
+        _selectionRect = new Rect(pos.X, pos.Y, 0, 0);
+        UpdateSelectionVisual();
+        Hint.Visibility = Visibility.Collapsed;
+        RootGrid.CapturePointer(e.Pointer);
+    }
+
+    private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        var pos = e.GetCurrentPoint(RootGrid).Position;
+        if (_eyedropperActive)
+        {
+            UpdateMagnifier(pos);
+            return;
+        }
+        var local = new Point(pos.X - _selectionRect.X, pos.Y - _selectionRect.Y);
+        if (_drawing.Settings.Tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
+        {
+            _pencilPreview.Visibility = Visibility.Visible;
+            _textPreview.Visibility = Visibility.Collapsed;
+            Canvas.SetLeft(_pencilPreview, local.X - _pencilPreview.Width / 2);
+            Canvas.SetTop(_pencilPreview, local.Y - _pencilPreview.Height / 2);
+        }
+        else if (_drawing.Settings.Tool == ToolKind.Text && _activeTextBox == null)
+        {
+            _pencilPreview.Visibility = Visibility.Collapsed;
+            _textPreview.Visibility = Visibility.Visible;
+            _textPreview.FontSize = _drawing.Settings.TextSize;
+            // Mirror the current font choice and center the glyph on the
+            // cursor — matches StartTextEntry's anchor so the preview lands
+            // exactly where the committed text will sit.
+            try { _textPreview.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(_drawing.Settings.TextFont); }
+            catch { /* fallback to inherited font */ }
+            var (pw, ph) = MeasureGlyph(_textPreview.Text, _textPreview.FontSize, _textPreview.FontFamily);
+            Canvas.SetLeft(_textPreview, local.X - pw / 2);
+            Canvas.SetTop(_textPreview,  local.Y - ph / 2);
+        }
+        else
+        {
+            _pencilPreview.Visibility = Visibility.Collapsed;
+            _textPreview.Visibility = Visibility.Collapsed;
+        }
+
+        switch (_mode)
+        {
+            case InteractionMode.SelectingNew:
+                _selectionRect = MakeRect(_dragStart, pos);
+                UpdateSelectionVisual();
+                break;
+            case InteractionMode.MovingSelection:
+            {
+                double dx = pos.X - _dragStart.X;
+                double dy = pos.Y - _dragStart.Y;
+                _selectionRect = new Rect(
+                    _selectionAtDragStart.X + dx,
+                    _selectionAtDragStart.Y + dy,
+                    _selectionAtDragStart.Width,
+                    _selectionAtDragStart.Height);
+                UpdateSelectionVisual();
+                break;
+            }
+            case InteractionMode.ResizingSelection:
+                _selectionRect = ResizeFromHandle(_selectionAtDragStart, _activeHandle, pos);
+                UpdateSelectionVisual();
+                break;
+            case InteractionMode.DrawingStroke:
+                // GetIntermediatePoints returns all high-frequency samples buffered between
+                // PointerMoved events — critical for smooth strokes at 144Hz+.
+                var pts = e.GetIntermediatePoints(RootGrid);
+                if (pts != null && pts.Count > 0)
+                    foreach (var p in pts) ExtendStroke(p.Position);
+                else
+                    ExtendStroke(pos);
+                break;
+            case InteractionMode.DrawingRect:
+                UpdateActiveShape(pos);
+                break;
+            case InteractionMode.Erasing:
+                TryEraseAt(pos);
+                break;
+            case InteractionMode.SelectingOcrText:
+                UpdateOcrDragSelection(pos);
+                break;
+        }
+    }
+
+    private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        var pos = e.GetCurrentPoint(RootGrid).Position;
+        RootGrid.ReleasePointerCapture(e.Pointer);
+
+        switch (_mode)
+        {
+            case InteractionMode.SelectingNew:
+            {
+                var rect = MakeRect(_dragStart, pos);
+                if (rect.Width < MinSelectionSize && rect.Height < MinSelectionSize)
+                {
+                    double x = _dragStart.X - SingleClickFallbackSize / 2;
+                    double y = _dragStart.Y - SingleClickFallbackSize / 2;
+                    rect = new Rect(x, y, SingleClickFallbackSize, SingleClickFallbackSize);
+                }
+                _selectionRect = rect;
+                _hasSelection = true;
+                UpdateSelectionVisual();
+                ShowToolbars();
+                break;
+            }
+            case InteractionMode.DrawingStroke:
+                FinishStroke();
+                break;
+            case InteractionMode.DrawingRect:
+                FinishActiveShape();
+                break;
+            case InteractionMode.SelectingOcrText:
+                FinishOcrSelection(pos);
+                break;
+        }
+
+        _mode = InteractionMode.Idle;
+    }
+
+    private void OnRootPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_hasSelection) return;
+        int delta = e.GetCurrentPoint(RootGrid).Properties.MouseWheelDelta;
+        if (delta == 0) return;
+        double step = delta > 0 ? 1.0 : -1.0;
+
+        // Wheel while typing in a text box resizes the active text element
+        // instead of the brush — same gesture, the obvious meaning depends on
+        // what the user is currently doing.
+        if (_activeTextBox != null)
+        {
+            _drawing.Settings.BrushSize = System.Math.Clamp(_drawing.Settings.BrushSize + step, 1.0, 64.0);
+            _activeTextBox.FontSize = _drawing.Settings.TextSize;
+            e.Handled = true;
+            return;
+        }
+
+        _drawing.Settings.BrushSize = System.Math.Clamp(_drawing.Settings.BrushSize + step, 1.0, 64.0);
+        UpdatePreviewForThickness(_drawing.Settings.BrushSize);
+
+        // Refresh the text-tool preview live too — wheeling between letters
+        // shouldn't require nudging the cursor for the size hint to update.
+        if (_textPreview != null && _drawing.Settings.Tool == ToolKind.Text)
+            _textPreview.FontSize = _drawing.Settings.TextSize;
+
+        // Apply the new thickness live to whichever shape the user is currently
+        // dragging so the visual matches the cursor preview immediately.
+        if (_activeStrokeVisual != null)
+            _activeStrokeVisual.StrokeThickness = _drawing.Settings.PencilThickness;
+        if (_activeRectVisual != null)
+            _activeRectVisual.StrokeThickness = _drawing.Settings.Tool == ToolKind.Ellipse
+                ? _drawing.Settings.EllipseThickness
+                : _drawing.Settings.RectangleThickness;
+        if (_activeLineVisual != null)
+            _activeLineVisual.StrokeThickness = _drawing.Settings.LineThickness;
+
+        e.Handled = true;
+    }
+
+    private void UpdatePreviewForThickness(double _thickness)
+    {
+        var d = _drawing.Settings.PreviewDiameter;
+        _pencilPreview.Width = d;
+        _pencilPreview.Height = d;
+    }
+
+    private void OnRootRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (_inOcrMode)
+        {
+            // OCR mode owns right-click; never show the overlay context menu.
+            e.Handled = true;
+            return;
+        }
+        if (_drawing.Settings.Tool != ToolKind.None && _hasSelection)
+        {
+            var pos = e.GetPosition(RootGrid);
+            if (IsInsideSelection(pos))
+            {
+                // RMB inside selection with tool active is erase, not menu.
+                e.Handled = true;
+                return;
+            }
+        }
+        UpdateContextMenuVisibility();
+    }
+
+    // ---------- Keyboard ----------
+
+    private void OnKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        bool ctrl = IsCtrlDown();
+        if (_activeTextBox != null) return; // typing in textbox; handled by it
+
+        switch (e.Key)
+        {
+            case VirtualKey.Escape:
+                e.Handled = true;
+                HandleEscape();
+                return;
+            case VirtualKey.A when ctrl:
+                e.Handled = true;
+                SelectAll();
+                return;
+            case VirtualKey.Z when ctrl:
+                e.Handled = true;
+                _drawing.Undo();
+                return;
+            case VirtualKey.Y when ctrl:
+                e.Handled = true;
+                _drawing.Redo();
+                return;
+            case VirtualKey.S when ctrl:
+                if (_inOcrMode) return; // do not steal save during OCR
+                e.Handled = true;
+                _ = SaveSilentAsync();
+                return;
+            case VirtualKey.C when ctrl:
+                // Don't intercept when eyedropper is active or a text field has focus.
+                if (_eyedropperActive) return;
+                if (FocusManager.GetFocusedElement(RootGrid.XamlRoot) is TextBox) return;
+                e.Handled = true;
+                if (_inOcrMode) { _ = CopyOcrTextAsync(); return; }
+                _ = CopyAsync();
+                return;
+        }
+    }
+
+    private void HandleEscape()
+    {
+        if (_eyedropperActive)
+        {
+            ExitEyedropperMode();
+            return;
+        }
+        if (_inOcrMode)
+        {
+            ExitOcrMode();
+            return;
+        }
+        if (_drawing.Settings.Tool != ToolKind.None)
+        {
+            SetTool(ToolKind.None);
+            return;
+        }
+        Close();
+    }
+
+    private static bool IsCtrlDown()
+    {
+        var state = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
+        return (state & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
+    }
+}
