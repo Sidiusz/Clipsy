@@ -344,27 +344,6 @@
 
                                     <Border Style="{StaticResource ClipsyHairline}" />
 
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock x:Name="LblAutostart"
-                                                       Text="Start with Windows"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock x:Name="HelperAutostart"
-                                                       Text="Launch Clipsy when you sign in."
-                                                       Style="{StaticResource ClipsyHelper}" />
-                                        </StackPanel>
-                                        <ToggleButton x:Name="AutostartSwitch" Grid.Column="1"
-                                                      Style="{StaticResource ClipsyMiniToggle}"
-                                                      Click="OnAutostartToggled"
-                                                      VerticalAlignment="Center" />
-                                    </Grid>
-
-                                    <Border Style="{StaticResource ClipsyHairline}" />
-
                                     <Grid ColumnSpacing="16">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -427,9 +406,13 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" x:Name="LblAfterSave" Text="After save"
-                                                   Style="{StaticResource ClipsyBodyStrong}"
-                                                   VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblAfterSave" Text="After save"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperAfterSave"
+                                                       Text="Runs after every saved screenshot or recording."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
                                         <ComboBox x:Name="AfterSaveBox" Grid.Column="1" Width="240" HorizontalAlignment="Right"
                                                   VerticalAlignment="Center"
                                                   SelectionChanged="OnAnyControlChanged">
@@ -442,32 +425,62 @@
                             </Border>
 
                             <Border Style="{StaticResource ClipsyGroupCard}">
-                                <StackPanel Spacing="10">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock x:Name="LblUpdates" Text="Updates"
-                                                   Style="{StaticResource ClipsyBodyStrong}" />
-                                        <TextBlock x:Name="HelperUpdates"
-                                                   Text="Last checked 2 hours ago."
-                                                   Style="{StaticResource ClipsyHelper}" />
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <ComboBox x:Name="UpdateIntervalBox" Width="220" HorizontalAlignment="Right"
-                                                  SelectionChanged="OnAnyControlChanged">
-                                            <ComboBoxItem x:Name="UpdHourly" Content="Hourly" Tag="hourly" />
-                                            <ComboBoxItem x:Name="UpdDaily" Content="Daily" Tag="daily" />
-                                            <ComboBoxItem x:Name="UpdWeekly" Content="Weekly" Tag="weekly" />
-                                            <ComboBoxItem x:Name="UpdMonthly" Content="Monthly" Tag="monthly" />
-                                            <ComboBoxItem x:Name="UpdNever" Content="Never" Tag="never" />
-                                        </ComboBox>
-                                        <Button x:Name="BtnCheckNow"
-                                                Style="{StaticResource ClipsyButtonGhost}"
-                                                Click="OnCheckUpdates">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <FontIcon Glyph="&#xE72C;" FontSize="13" />
-                                                <TextBlock Text="Check now" />
-                                            </StackPanel>
-                                        </Button>
-                                    </StackPanel>
+                                <StackPanel Spacing="16">
+                                    <TextBlock x:Name="LblAppManagement" Text="App management"
+                                               Style="{StaticResource ClipsyBodyStrong}" />
+
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblAutostart"
+                                                       Text="Start with Windows"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperAutostart"
+                                                       Text="Launch Clipsy when you sign in."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="AutostartSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAutostartToggled"
+                                                      VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblUpdates" Text="Updates"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperUpdates"
+                                                       Text="How often Clipsy checks for a new version."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <ComboBox x:Name="UpdateIntervalBox" Width="160"
+                                                      SelectionChanged="OnAnyControlChanged">
+                                                <ComboBoxItem x:Name="UpdHourly" Content="Hourly" Tag="hourly" />
+                                                <ComboBoxItem x:Name="UpdDaily" Content="Daily" Tag="daily" />
+                                                <ComboBoxItem x:Name="UpdWeekly" Content="Weekly" Tag="weekly" />
+                                                <ComboBoxItem x:Name="UpdMonthly" Content="Monthly" Tag="monthly" />
+                                                <ComboBoxItem x:Name="UpdNever" Content="Never" Tag="never" />
+                                            </ComboBox>
+                                            <Button x:Name="BtnCheckNow"
+                                                    Style="{StaticResource ClipsyButtonGhost}"
+                                                    Click="OnCheckUpdates">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xE72C;" FontSize="13" />
+                                                    <TextBlock Text="Check now" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 
@@ -905,6 +918,9 @@
                                         <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
                                             <TextBlock x:Name="LblTranslateFrom" Text="Translate from"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperTranslateFrom"
+                                                       Text="Source language of the recognized text."
+                                                       Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ComboBox x:Name="TranslateFromBox" Grid.Column="1" Width="240"
                                                   HorizontalAlignment="Right"
@@ -922,6 +938,9 @@
                                         <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
                                             <TextBlock x:Name="LblTranslateTo" Text="Translate to"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperTranslateTo"
+                                                       Text="Language the text is translated into."
+                                                       Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ComboBox x:Name="TranslateToBox" Grid.Column="1" Width="240"
                                                   HorizontalAlignment="Right"
@@ -1032,14 +1051,6 @@
 
                             <Border Style="{StaticResource ClipsyGroupCard}">
                                 <StackPanel Spacing="16">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock x:Name="LblNotifications" Text="Notifications"
-                                                   Style="{StaticResource ClipsyBodyStrong}" />
-                                        <TextBlock x:Name="HelperNotifications"
-                                                   Text="Custom pop-ups shown bottom-right, auto-dismiss in 4 s."
-                                                   Style="{StaticResource ClipsyHelper}" />
-                                    </StackPanel>
-
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />

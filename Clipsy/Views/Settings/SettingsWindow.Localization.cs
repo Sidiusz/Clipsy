@@ -18,7 +18,7 @@ public sealed partial class SettingsWindow
 
         if (TitleBarSubtitle != null) TitleBarSubtitle.Text = Strings.Get("TitleBarSubtitle");
         if (LblTipHeader != null)     LblTipHeader.Text    = Strings.Get("TipLabel");
-        if (LblTip != null)           LblTip.Text          = Strings.Get("TipPrtScCapture");
+        if (LblTip != null)           LblTip.Text          = Strings.Get(_tipKeys[_currentTipKeyIndex]);
 
         HdrGeneral.Text  = Strings.Get("TabGeneral");
         HdrVideo.Text    = Strings.Get("TabVideo");
@@ -42,7 +42,9 @@ public sealed partial class SettingsWindow
         LblTranslateService.Text = Strings.Get("LblTranslateService");
         HelperTranslation.Text   = Strings.Get("HelperTranslation");
         LblTranslateFrom.Text    = Strings.Get("LblTranslateFrom");
+        HelperTranslateFrom.Text = Strings.Get("HelperTranslateFrom");
         LblTranslateTo.Text      = Strings.Get("LblTranslateTo");
+        HelperTranslateTo.Text   = Strings.Get("HelperTranslateTo");
         BuildTranslateLangDropdowns();
         HelperRemember.Text  = Strings.Get("HelperRemember");
         HelperCodec.Text    = Strings.Get("HelperCodec");
@@ -67,9 +69,10 @@ public sealed partial class SettingsWindow
         HelperVideoCursor.Text      = Strings.Get("HelperVideoCursor");
         LblJpgQuality.Text       = Strings.Get("LblJpgQuality");
         LblAfterSave.Text        = Strings.Get("LblAfterSave");
+        HelperAfterSave.Text     = Strings.Get("HelperAfterSave");
         LblUpdates.Text          = Strings.Get("LblUpdates");
-        LblNotifications.Text    = Strings.Get("LblNotifications");
-        HelperNotifications.Text = Strings.Get("HelperNotifications");
+        HelperUpdates.Text       = Strings.Get("HelperUpdates");
+        LblAppManagement.Text    = Strings.Get("LblAppManagement");
         LblNotifyMaster.Text     = Strings.Get("LblNotifyMaster");
         LblNotifyScreenshot.Text = Strings.Get("LblNotifyScreenshot");
         LblNotifyVideo.Text      = Strings.Get("LblNotifyVideo");
@@ -111,6 +114,7 @@ public sealed partial class SettingsWindow
 
         LblCodec.Text      = Strings.Get("LblCodec");
         LblResolution.Text = Strings.Get("LblResolution");
+        ResBtnOriginal.Content = Strings.Get("OptResNative");
         LblBitrate.Text    = Strings.Get("LblBitrate");
         LblRegionNote.Text = Strings.Get("LblRegionNote");
         LblMicEnabled.Text  = Strings.Get("LblMicEnabled");
