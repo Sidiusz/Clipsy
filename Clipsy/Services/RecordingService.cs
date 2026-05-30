@@ -27,10 +27,11 @@ public sealed class RecordingService : IDisposable
         Directory.CreateDirectory(tempDir);
         _tempPath = Path.Combine(tempDir, $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
 
+        bool captureVideoCursor = SettingsService.Instance.Settings.CaptureVideoCursor;
         _source = new DisplayRecordingSource(DisplayRecordingSource.MainMonitor)
         {
             SourceRect = new ScreenRect(x, y, width, height),
-            IsCursorCaptureEnabled = true,
+            IsCursorCaptureEnabled = captureVideoCursor,
             // Fill mode: any live region resize is rescaled into the fixed
             // OutputFrameSize, no letterbox / stuck-frame edges. Aspect may
             // distort if the user changes the region's ratio mid-recording —
@@ -86,7 +87,7 @@ public sealed class RecordingService : IDisposable
             },
             MouseOptions = new MouseOptions
             {
-                IsMousePointerEnabled = true,
+                IsMousePointerEnabled = captureVideoCursor,
                 IsMouseClicksDetected = false,
             },
         };

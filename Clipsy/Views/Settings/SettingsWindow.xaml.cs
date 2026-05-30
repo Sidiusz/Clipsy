@@ -90,6 +90,7 @@ public sealed partial class SettingsWindow : Window
         ["autostart"] = "general",
         ["ss-format"] = "general",
         ["jpg-q"] = "general",
+        ["ss-cursor"] = "general",
         ["after-save"] = "general",
         ["update-int"] = "general",
         ["notif"] = "notifications",
@@ -98,6 +99,7 @@ public sealed partial class SettingsWindow : Window
         ["translate-to"]   = "ocr",
         ["codec"] = "video",
         ["resolution"] = "video",
+        ["vid-cursor"] = "video",
         ["bitrate"] = "video",
         ["vid-format"] = "video",
         ["mic-enabled"] = "video",
@@ -256,8 +258,12 @@ public sealed partial class SettingsWindow : Window
         LblRememberFolder.Text   = Strings.Get("LblRememberFolder");
         LblAutostart.Text        = Strings.Get("LblAutostart");
         HelperAutostart.Text     = Strings.Get("HelperAutostart");
-        LblScreenshotFormat.Text = Strings.Get("LblScreenshotFormat");
-        LblVideoFormat.Text      = Strings.Get("LblVideoFormat");
+        LblScreenshotFormat.Text    = Strings.Get("LblScreenshotFormat");
+        LblScreenshotCursor.Text    = Strings.Get("LblScreenshotCursor");
+        HelperScreenshotCursor.Text = Strings.Get("HelperScreenshotCursor");
+        LblVideoFormat.Text         = Strings.Get("LblVideoFormat");
+        LblVideoCursor.Text         = Strings.Get("LblVideoCursor");
+        HelperVideoCursor.Text      = Strings.Get("HelperVideoCursor");
         LblJpgQuality.Text       = Strings.Get("LblJpgQuality");
         LblAfterSave.Text        = Strings.Get("LblAfterSave");
         LblUpdates.Text          = Strings.Get("LblUpdates");
@@ -415,7 +421,9 @@ public sealed partial class SettingsWindow : Window
         AutostartSwitch.IsChecked = _initialAutostart;
 
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
+        ScreenshotCursorSwitch.IsChecked = _draft.CaptureScreenshotCursor;
         SelectComboByTag(VideoFormatBox, _draft.VideoFormat);
+        VideoCursorSwitch.IsChecked = _draft.CaptureVideoCursor;
 
         JpgQualitySlider.Minimum = 50;
         JpgQualitySlider.Maximum = 100;
@@ -497,7 +505,9 @@ public sealed partial class SettingsWindow : Window
         _draft.VideoFolder = VideoFolderBox.Text;
         _draft.RememberLastFolder = RememberFolderSwitch.IsChecked == true;
         _draft.ScreenshotFormat = SelectedComboTag(ScreenshotFormatBox);
+        _draft.CaptureScreenshotCursor = ScreenshotCursorSwitch.IsChecked == true;
         _draft.VideoFormat = SelectedComboTag(VideoFormatBox);
+        _draft.CaptureVideoCursor = VideoCursorSwitch.IsChecked == true;
         _draft.JpgQuality = (int)JpgQualitySlider.Value;
         _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
         _draft.UpdateInterval = SelectedComboTag(UpdateIntervalBox);

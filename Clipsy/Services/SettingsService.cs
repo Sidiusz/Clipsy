@@ -31,8 +31,13 @@ public sealed class AppSettings
 
     // Microphone
     public bool MicrophoneEnabled { get; set; } = false;
+    public bool MicrophoneMuted { get; set; } = false;
     public string MicrophoneDevice { get; set; } = "";       // empty = default system device (DeviceName from Recorder.GetSystemAudioDevices)
     public string HotkeyMicToggle { get; set; } = "";        // empty = disabled
+
+    // Cursor capture
+    public bool CaptureScreenshotCursor { get; set; } = true;
+    public bool CaptureVideoCursor { get; set; } = true;
 
     // GIF
     public int GifColors { get; set; } = 256;

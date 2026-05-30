@@ -82,7 +82,16 @@
                               Click="OnMicToggle"
                               Visibility="Collapsed"
                               ToolTipService.ToolTip="Microphone on">
-                    <FontIcon x:Name="MicIcon" Glyph="&#xE720;" FontSize="16" />
+                    <Grid Width="16" Height="16">
+                        <FontIcon x:Name="MicIcon" Glyph="&#xE720;" FontSize="16" />
+                        <Line x:Name="MicMuteSlash"
+                              X1="13" Y1="1" X2="3" Y2="15"
+                              Stroke="{StaticResource ClipsyText3Brush}"
+                              StrokeThickness="2"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              Visibility="Collapsed" />
+                    </Grid>
                 </ToggleButton>
 
                 <Button x:Name="LockBtn"

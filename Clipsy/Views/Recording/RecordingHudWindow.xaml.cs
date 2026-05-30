@@ -21,8 +21,7 @@ public sealed partial class RecordingHudWindow : Window
     private const string GlyphPlay   = "\uE768";
     private const string GlyphLock   = "\uE72E";
     private const string GlyphUnlock = "\uE785";
-    private const string GlyphMicOn  = "\uE720";
-    private const string GlyphMicOff = "\uEA8F"; // NotificationBadge (circle with line) as muted indicator
+    private const string GlyphMic    = "\uE720";
 
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
@@ -84,19 +83,22 @@ public sealed partial class RecordingHudWindow : Window
         UpdateMicTooltip();
     }
 
-    public void InitMic(bool enabled)
+    public void InitMic(bool enabled, bool initiallyMuted = false)
     {
-        MicBtn.Visibility  = enabled ? Visibility.Visible   : Visibility.Collapsed;
-        MicSep.Visibility  = enabled ? Visibility.Visible   : Visibility.Collapsed;
-        MicBtn.IsChecked   = true; // mic starts unmuted
-        MicIcon.Glyph      = GlyphMicOn;
-        UpdateMicTooltip();
+        MicBtn.Visibility = enabled ? Visibility.Visible  : Visibility.Collapsed;
+        MicSep.Visibility = enabled ? Visibility.Visible  : Visibility.Collapsed;
+        MicIcon.Glyph = GlyphMic;
+        if (enabled) SetMicMuted(initiallyMuted);
+        else UpdateMicTooltip();
     }
 
     public void SetMicMuted(bool muted)
     {
         MicBtn.IsChecked = !muted;
-        MicIcon.Glyph    = muted ? GlyphMicOff : GlyphMicOn;
+        MicIcon.Foreground = muted
+            ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyText3Brush"]
+            : null;
+        MicMuteSlash.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
         UpdateMicTooltip();
     }
 
@@ -285,8 +287,7 @@ public sealed partial class RecordingHudWindow : Window
     private void OnMicToggle(object sender, RoutedEventArgs e)
     {
         bool muted = MicBtn.IsChecked != true;
-        MicIcon.Glyph = muted ? GlyphMicOff : GlyphMicOn;
-        UpdateMicTooltip();
+        SetMicMuted(muted);
         MicMuteToggled?.Invoke(muted);
     }
 

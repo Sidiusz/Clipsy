@@ -88,8 +88,8 @@ public sealed class RecordingController
         _hud.DrawColorChanged += OnDrawColorChanged;
         _hud.MicMuteToggled += OnMicMuteToggled;
 
-        _micMuted = false;
-        _hud.InitMic(settings.MicrophoneEnabled);
+        _micMuted = settings.MicrophoneEnabled && settings.MicrophoneMuted;
+        _hud.InitMic(settings.MicrophoneEnabled, _micMuted);
 
         int virtualScreenH = Services.ScreenFreezeService.GetVirtualScreenBounds().Height;
         _hud.PositionBelowRegion(x, y, w, h, virtualScreenH);
@@ -214,6 +214,9 @@ public sealed class RecordingController
     {
         _micMuted = muted;
         _service?.SetMicMuted(muted);
+        var s = SettingsService.Instance.Settings;
+        s.MicrophoneMuted = muted;
+        SettingsService.Instance.Save();
     }
 
     public void ToggleMic()

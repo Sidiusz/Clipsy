@@ -400,6 +400,28 @@
                                                    Style="{StaticResource ClipsyMono}" />
                                     </Grid>
 
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblScreenshotCursor" Text="Include cursor"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperScreenshotCursor"
+                                                       Text="Draw mouse pointer on screenshots."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="ScreenshotCursorSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAnyToggleChanged"
+                                                      VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
                                     <Grid ColumnSpacing="16">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -654,6 +676,26 @@
                                             <ComboBoxItem x:Name="VidFmtMkv" Content="MKV" Tag="mkv" />
                                             <ComboBoxItem x:Name="VidFmtGif" Content="GIF (animated)" Tag="gif" />
                                         </ComboBox>
+                                    </Grid>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblVideoCursor" Text="Include cursor"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperVideoCursor"
+                                                       Text="Show mouse pointer in recorded video."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="VideoCursorSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAnyToggleChanged"
+                                                      VerticalAlignment="Center" />
                                     </Grid>
 
                                     <Border Style="{StaticResource ClipsyHairline}" />
