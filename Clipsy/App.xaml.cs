@@ -56,14 +56,8 @@ public partial class App : Application
     {
         Strings.Initialize();
         HostWindow = new MainWindow();
-        HostWindow.CaptureRequested         += OnCaptureRequested;
-        HostWindow.RecordRequested          += OnRecordRequested;
-        HostWindow.OpenFolderRequested      += OnOpenFolderRequested;
-        HostWindow.OpenVideoFolderRequested += OnOpenVideoFolderRequested;
-        HostWindow.SettingsRequested        += OnSettingsRequested;
-        HostWindow.AboutRequested           += OnAboutRequested;
-        HostWindow.ExitRequested            += OnExitRequested;
-        HostWindow.MenuRequested            += OnMenuRequested;
+        HostWindow.CaptureRequested += OnCaptureRequested;
+        HostWindow.MenuRequested    += OnMenuRequested;
 
         // Activate the host so the WinUI 3 XAML island starts. The window
         // is offscreen + tool-window so it's invisible, but it must be
