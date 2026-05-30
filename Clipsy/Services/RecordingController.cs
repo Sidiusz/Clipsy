@@ -33,6 +33,7 @@ public sealed class RecordingController
     private int _x, _y, _w, _h;
     private bool _stopAndSave;
     private bool _stopping;
+    private (byte R, byte G, byte B) _drawColor = (0xFF, 0x00, 0x00);
 
     private RecordingController(DispatcherQueue ui) { _ui = ui; }
 
@@ -83,6 +84,7 @@ public sealed class RecordingController
         _hud.CancelRequested += OnCancelRequested;
         _hud.LockChanged += OnLockChanged;
         _hud.DrawToggled += OnDrawToggled;
+        _hud.DrawColorChanged += OnDrawColorChanged;
 
         int virtualScreenH = Services.ScreenFreezeService.GetVirtualScreenBounds().Height;
         _hud.PositionBelowRegion(x, y, w, h, virtualScreenH);
@@ -203,6 +205,12 @@ public sealed class RecordingController
         catch (Exception ex) { Diagnostics.Log("OnCancelRequested _ffmpegRec.Stop", ex); }
     }
 
+    private void OnDrawColorChanged(byte r, byte g, byte b)
+    {
+        _drawColor = (r, g, b);
+        _drawWin?.SetColor(r, g, b);
+    }
+
     private void OnLockChanged(bool locked)
     {
         try
@@ -267,7 +275,7 @@ public sealed class RecordingController
                 {
                     _drawWin = new Win32DrawingOverlay();
                     _drawWin.Create(_x, _y, _w, _h);
-                    _drawWin.SetColor(0xFF, 0x00, 0x00);
+                    _drawWin.SetColor(_drawColor.R, _drawColor.G, _drawColor.B);
                     _drawWin.SetThickness(3);
                     try { Recorder.SetExcludeFromCapture(_drawWin.Hwnd, false); } catch { }
                 }

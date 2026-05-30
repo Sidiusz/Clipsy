@@ -231,7 +231,8 @@ public sealed partial class SettingsWindow : Window
         HelperTheme.Text     = Strings.Get("HelperTheme");
         HelperOcr.Text       = Strings.Get("HelperOcr");
         LblTessLang.Text     = Strings.Get("LblTessLang");
-        HelperTessLang.Text  = Strings.Get("HelperTessLang");
+        var (tessMin, tessMax) = TessdataService.ApproxSizeRangeMb();
+        HelperTessLang.Text  = string.Format(Strings.Get("HelperTessLang"), tessMin, tessMax, Strings.Get("UnitMB"));
         LblTranslateService.Text = Strings.Get("LblTranslateService");
         HelperTranslation.Text   = Strings.Get("HelperTranslation");
         LblTranslateFrom.Text    = Strings.Get("LblTranslateFrom");

@@ -12,7 +12,9 @@ public sealed record TessdataLang(string Code, string DisplayName, string Approx
 
 public static class TessdataService
 {
-    private const string BaseUrl = "https://github.com/tesseract-ocr/tessdata_fast/raw/main/";
+    // tessdata_best: larger but markedly more accurate LSTM models — fewer
+    // mixed-script misreads (e.g. Cyrillic "Видео" no longer flips to Latin).
+    private const string BaseUrl = "https://github.com/tesseract-ocr/tessdata_best/raw/main/";
 
     public static readonly string StorageDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -20,23 +22,33 @@ public static class TessdataService
 
     public static readonly IReadOnlyList<TessdataLang> Catalog = new TessdataLang[]
     {
-        new("eng",     "English",                        "~4 MB"),
-        new("rus",     "Russian / Русский",               "~4 MB"),
-        new("deu",     "German / Deutsch",               "~4 MB"),
-        new("fra",     "French / Français",              "~4 MB"),
-        new("spa",     "Spanish / Español",              "~4 MB"),
-        new("ita",     "Italian / Italiano",             "~3 MB"),
-        new("por",     "Portuguese / Português",         "~4 MB"),
-        new("pol",     "Polish / Polski",                "~5 MB"),
-        new("nld",     "Dutch / Nederlands",             "~3 MB"),
-        new("tur",     "Turkish / Türkçe",               "~4 MB"),
-        new("ukr",     "Ukrainian / Українська",         "~4 MB"),
-        new("chi_sim", "Chinese Simplified / 简体中文",  "~18 MB"),
-        new("chi_tra", "Chinese Traditional / 繁體中文", "~22 MB"),
-        new("jpn",     "Japanese / 日本語",              "~14 MB"),
-        new("kor",     "Korean / 한국어",                "~5 MB"),
-        new("ara",     "Arabic / العربية",               "~6 MB"),
+        new("eng",     "English",                        "~12 MB"),
+        new("rus",     "Russian / Русский",               "~14 MB"),
+        new("deu",     "German / Deutsch",               "~15 MB"),
+        new("fra",     "French / Français",              "~13 MB"),
+        new("spa",     "Spanish / Español",              "~14 MB"),
+        new("ita",     "Italian / Italiano",             "~13 MB"),
+        new("por",     "Portuguese / Português",         "~13 MB"),
+        new("pol",     "Polish / Polski",                "~14 MB"),
+        new("nld",     "Dutch / Nederlands",             "~13 MB"),
+        new("tur",     "Turkish / Türkçe",               "~14 MB"),
+        new("ukr",     "Ukrainian / Українська",         "~14 MB"),
+        new("chi_sim", "Chinese Simplified / 简体中文",  "~44 MB"),
+        new("chi_tra", "Chinese Traditional / 繁體中文", "~48 MB"),
+        new("jpn",     "Japanese / 日本語",              "~37 MB"),
+        new("kor",     "Korean / 한국어",                "~16 MB"),
+        new("ara",     "Arabic / العربية",               "~15 MB"),
     };
+
+    public static (int Min, int Max) ApproxSizeRangeMb()
+    {
+        var nums = Catalog
+            .Select(c => System.Text.RegularExpressions.Regex.Match(c.ApproxSize, @"\d+"))
+            .Where(m => m.Success)
+            .Select(m => int.Parse(m.Value))
+            .ToList();
+        return nums.Count == 0 ? (0, 0) : (nums.Min(), nums.Max());
+    }
 
     public static bool IsInstalled(string code)
         => File.Exists(Path.Combine(StorageDir, code + ".traineddata"));

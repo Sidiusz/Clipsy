@@ -74,20 +74,49 @@ public sealed class TesseractOcrEngine : IOcrEngine
 
                 var langStr = string.Join("+", langs);
                 using var engine = new Tesseract.TesseractEngine(TessdataService.StorageDir, langStr, Tesseract.EngineMode.Default);
-                using var pix = Tesseract.Pix.LoadFromMemory(pngBytes);
-                using var page = engine.Process(pix);
-                using var iter = page.GetIterator();
-                iter.Begin();
-                do
+                using var srcPix = Tesseract.Pix.LoadFromMemory(pngBytes);
+
+                // Screen captures at 1080p give Tesseract small glyphs and it
+                // clips word endings. Upscale so the longest side reaches ~2400px
+                // (Tesseract is happiest near 300dpi). Bounds come back in the
+                // scaled space, so divide them by the same factor afterwards.
+                float scaleUp = 1f;
+                int longest = Math.Max(srcPix.Width, srcPix.Height);
+                if (longest > 0 && longest < 2400)
+                    scaleUp = Math.Min(3f, 2400f / longest);
+
+                bool scaled = scaleUp > 1.01f;
+                Tesseract.Pix pix = scaled ? srcPix.Scale(scaleUp, scaleUp) : srcPix;
+                try
                 {
-                    if (iter.TryGetBoundingBox(Tesseract.PageIteratorLevel.Word, out var r))
+                    using var page = engine.Process(pix);
+
+                    // Reading the wrong-script text (e.g. Chinese through an English
+                    // model) yields low-confidence gibberish. Drop the whole result
+                    // so the caller falls back to language-hint detection instead of
+                    // showing invented words.
+                    if (page.GetMeanConfidence() < 0.55f)
+                        return words;
+
+                    double inv = 1.0 / scaleUp;
+                    using var iter = page.GetIterator();
+                    iter.Begin();
+                    do
                     {
-                        var text = iter.GetText(Tesseract.PageIteratorLevel.Word)?.Trim();
-                        if (!string.IsNullOrEmpty(text))
-                            words.Add(new OcrWord(text, new Rect(r.X1, r.Y1, r.X2 - r.X1, r.Y2 - r.Y1)));
+                        if (iter.TryGetBoundingBox(Tesseract.PageIteratorLevel.Word, out var r))
+                        {
+                            var text = iter.GetText(Tesseract.PageIteratorLevel.Word)?.Trim();
+                            if (!string.IsNullOrEmpty(text))
+                                words.Add(new OcrWord(text,
+                                    new Rect(r.X1 * inv, r.Y1 * inv, (r.X2 - r.X1) * inv, (r.Y2 - r.Y1) * inv)));
+                        }
                     }
+                    while (iter.Next(Tesseract.PageIteratorLevel.Word));
                 }
-                while (iter.Next(Tesseract.PageIteratorLevel.Word));
+                finally
+                {
+                    if (scaled) pix.Dispose();
+                }
             }
             catch (Exception ex)
             {
@@ -95,6 +124,68 @@ public sealed class TesseractOcrEngine : IOcrEngine
             }
             return words;
         });
+    }
+}
+
+/// <summary>
+/// Best-effort language hint for the case where the active OCR engine returned
+/// nothing. Runs the always-available Windows.Media.Ocr engine purely as a
+/// script detector, then classifies the recovered glyphs by Unicode range.
+/// Only returns a hint when a single script clearly dominates, so we never
+/// guess. Maps to a Tesseract catalog code the user can download.
+/// </summary>
+public static class OcrLanguageHint
+{
+    public static async Task<TessdataLang?> DetectAsync(byte[] pngBytes)
+    {
+        try
+        {
+            var words = await new WinRtOcrEngine().RecognizeAsync(pngBytes);
+            if (words.Count == 0) return null;
+
+            int latin = 0, cyrillic = 0, cjk = 0, kana = 0, hangul = 0, arabic = 0, total = 0;
+            foreach (var w in words)
+            {
+                foreach (var ch in w.Text)
+                {
+                    if (char.IsWhiteSpace(ch) || char.IsDigit(ch) || char.IsPunctuation(ch) || char.IsSymbol(ch))
+                        continue;
+                    total++;
+                    if (ch >= 0x4E00 && ch <= 0x9FFF) cjk++;
+                    else if (ch >= 0x3040 && ch <= 0x30FF) kana++;
+                    else if (ch >= 0xAC00 && ch <= 0xD7A3) hangul++;
+                    else if (ch >= 0x0600 && ch <= 0x06FF) arabic++;
+                    else if (ch >= 0x0400 && ch <= 0x04FF) cyrillic++;
+                    else if (ch < 0x0250) latin++;
+                }
+            }
+            if (total < 3) return null;
+
+            // Kana is unambiguous Japanese even when kanji outnumber it.
+            string? best;
+            if (kana >= 2) best = "jpn";
+            else
+            {
+                // Pick the dominant script; require a clear majority for confidence.
+                (string code, int count)[] scripts =
+                {
+                    ("kor", hangul),
+                    ("ara", arabic),
+                    ("chi_sim", cjk),
+                    ("rus", cyrillic),
+                    ("eng", latin),
+                };
+                best = null; int bestCount = 0;
+                foreach (var (code, count) in scripts)
+                    if (count > bestCount) { bestCount = count; best = code; }
+                if (best == null || bestCount < total * 0.4) return null;
+            }
+            return TessdataService.Catalog.FirstOrDefault(c => c.Code == best);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
 
