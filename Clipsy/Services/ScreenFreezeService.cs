@@ -43,6 +43,9 @@ public sealed class ScreenFreezeService
             g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.None;
 
             g.CopyFromScreen(bounds.X, bounds.Y, 0, 0, bmp.Size, CopyPixelOperation.SourceCopy);
+
+            if (SettingsService.Instance.Settings.CaptureScreenshotCursor)
+                DrawCursorOnto(g, bounds.X, bounds.Y);
         }
 
         using var ms = new MemoryStream();
@@ -129,4 +132,42 @@ public sealed class ScreenFreezeService
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    private static void DrawCursorOnto(Graphics g, int originX, int originY)
+    {
+        var ci = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
+        if (!GetCursorInfo(ref ci) || (ci.flags & CURSOR_SHOWING) == 0)
+            return;
+        var hdc = g.GetHdc();
+        try
+        {
+            DrawIconEx(hdc,
+                ci.ptScreenPos.X - originX,
+                ci.ptScreenPos.Y - originY,
+                ci.hCursor, 0, 0, 0, IntPtr.Zero, DI_NORMAL);
+        }
+        finally
+        {
+            g.ReleaseHdc(hdc);
+        }
+    }
+
+    private const int CURSOR_SHOWING = 0x0001;
+    private const uint DI_NORMAL = 0x0003;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CURSORPOINT { public int X, Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CURSORINFO
+    {
+        public int cbSize;
+        public int flags;
+        public IntPtr hCursor;
+        public CURSORPOINT ptScreenPos;
+    }
+
+    [DllImport("user32.dll")] private static extern bool GetCursorInfo(ref CURSORINFO pci);
+    [DllImport("user32.dll")] private static extern bool DrawIconEx(IntPtr hdc, int x, int y,
+        IntPtr hIcon, int cx, int cy, uint step, IntPtr brush, uint flags);
 }
