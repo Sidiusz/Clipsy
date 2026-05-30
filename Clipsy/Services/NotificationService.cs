@@ -91,6 +91,34 @@ public static class NotificationService
             action2:        () => OpenFolder(filePath));
     }
 
+    // ── Video saved as MP4 fallback (AVI/MKV needs FFmpeg) ───────
+
+    public static void VideoSavedAsMp4(string fileName, long sizeKb, string filePath, string requestedFmt)
+    {
+        var body = string.Format(
+            Strings.Get("WarnSavedAsMp4"),
+            requestedFmt.ToUpperInvariant(),
+            $"{fileName} · {FormatSize(sizeKb)}");
+
+        Post(
+            NotificationLevel.Warning,
+            Strings.Get("ToastVideoSaved"),
+            body,
+            ToastCategory.Video,
+            action1Icon:    "\xE713",  // Settings gear
+            action1Tooltip: Strings.Get("ToastGetFfmpeg"),
+            action1:        OpenVideoSettings,
+            action2Icon:    "\xE838",  // Folder
+            action2Tooltip: Strings.Get("ToastOpenFolder"),
+            action2:        () => OpenFolder(filePath));
+    }
+
+    private static void OpenVideoSettings()
+    {
+        try { Clipsy.Views.Settings.SettingsWindow.ShowOrActivate(); }
+        catch { }
+    }
+
     // ── Clipboard ────────────────────────────────────────────────
 
     public static void CopiedToClipboard()
