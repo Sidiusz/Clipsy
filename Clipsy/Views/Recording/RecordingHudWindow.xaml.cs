@@ -21,6 +21,8 @@ public sealed partial class RecordingHudWindow : Window
     private const string GlyphPlay   = "\uE768";
     private const string GlyphLock   = "\uE72E";
     private const string GlyphUnlock = "\uE785";
+    private const string GlyphMicOn  = "\uE720";
+    private const string GlyphMicOff = "\uEA8F"; // NotificationBadge (circle with line) as muted indicator
 
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
@@ -45,6 +47,7 @@ public sealed partial class RecordingHudWindow : Window
     private Windows.UI.Color _currentDrawColor = Microsoft.UI.Colors.Red;
 
     public event Action<byte, byte, byte>? DrawColorChanged;
+    public event Action<bool>? MicMuteToggled;
 
     public RecordingHudWindow()
     {
@@ -78,6 +81,30 @@ public sealed partial class RecordingHudWindow : Window
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(CancelBtn,   Strings.Get("TipCancelRec"));
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(DrawBtn,     Strings.Get("TipDraw"));
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(LockBtn,     Strings.Get("TipLock"));
+        UpdateMicTooltip();
+    }
+
+    public void InitMic(bool enabled)
+    {
+        MicBtn.Visibility  = enabled ? Visibility.Visible   : Visibility.Collapsed;
+        MicSep.Visibility  = enabled ? Visibility.Visible   : Visibility.Collapsed;
+        MicBtn.IsChecked   = true; // mic starts unmuted
+        MicIcon.Glyph      = GlyphMicOn;
+        UpdateMicTooltip();
+    }
+
+    public void SetMicMuted(bool muted)
+    {
+        MicBtn.IsChecked = !muted;
+        MicIcon.Glyph    = muted ? GlyphMicOff : GlyphMicOn;
+        UpdateMicTooltip();
+    }
+
+    private void UpdateMicTooltip()
+    {
+        bool muted = MicBtn.IsChecked != true;
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(MicBtn,
+            Strings.Get(muted ? "TipMicMuted" : "TipMicActive"));
     }
 
     public IntPtr Hwnd => _hwnd;
@@ -253,6 +280,14 @@ public sealed partial class RecordingHudWindow : Window
     private void OnDrawToggle(object sender, RoutedEventArgs e)
     {
         DrawToggled?.Invoke(DrawBtn.IsChecked == true);
+    }
+
+    private void OnMicToggle(object sender, RoutedEventArgs e)
+    {
+        bool muted = MicBtn.IsChecked != true;
+        MicIcon.Glyph = muted ? GlyphMicOff : GlyphMicOn;
+        UpdateMicTooltip();
+        MicMuteToggled?.Invoke(muted);
     }
 
     private void OnDrawColorBtnClick(object sender, RoutedEventArgs e)

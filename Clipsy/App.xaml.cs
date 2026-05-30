@@ -196,7 +196,8 @@ public partial class App : Application
         var s = SettingsService.Instance.Settings;
         string capture = string.IsNullOrWhiteSpace(s.HotkeyCapture) ? "Snapshot" : s.HotkeyCapture;
         string? record = string.IsNullOrWhiteSpace(s.HotkeyRecordSilentSave) ? null : s.HotkeyRecordSilentSave;
-        bool ok = Hotkey!.Register(OnCaptureRequested, capture, OnRecordStopRequested, record);
+        string? mic    = string.IsNullOrWhiteSpace(s.HotkeyMicToggle) ? null : s.HotkeyMicToggle;
+        bool ok = Hotkey!.Register(OnCaptureRequested, capture, OnRecordStopRequested, record, OnMicToggleRequested, mic);
         if (!ok)
         {
             // RegisterHotKey collided with another app. Most common on Win11
@@ -214,13 +215,19 @@ public partial class App : Application
         var s = SettingsService.Instance.Settings;
         string capture = string.IsNullOrWhiteSpace(s.HotkeyCapture) ? "Snapshot" : s.HotkeyCapture;
         string? record = string.IsNullOrWhiteSpace(s.HotkeyRecordSilentSave) ? null : s.HotkeyRecordSilentSave;
-        Hotkey?.Reregister(capture, record);
+        string? mic    = string.IsNullOrWhiteSpace(s.HotkeyMicToggle) ? null : s.HotkeyMicToggle;
+        Hotkey?.Reregister(capture, record, mic);
     }
 
     private void OnRecordStopRequested()
     {
         if (RecordingController.IsRecording)
             RecordingController.Current?.StopFromHotkey();
+    }
+
+    private void OnMicToggleRequested()
+    {
+        RecordingController.Current?.ToggleMic();
     }
 
     private void OnExitRequested()

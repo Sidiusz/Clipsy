@@ -33,6 +33,7 @@ public sealed class RecordingController
     private int _x, _y, _w, _h;
     private bool _stopAndSave;
     private bool _stopping;
+    private bool _micMuted = false;
     private (byte R, byte G, byte B) _drawColor = (0xFF, 0x00, 0x00);
 
     private RecordingController(DispatcherQueue ui) { _ui = ui; }
@@ -85,6 +86,10 @@ public sealed class RecordingController
         _hud.LockChanged += OnLockChanged;
         _hud.DrawToggled += OnDrawToggled;
         _hud.DrawColorChanged += OnDrawColorChanged;
+        _hud.MicMuteToggled += OnMicMuteToggled;
+
+        _micMuted = false;
+        _hud.InitMic(settings.MicrophoneEnabled);
 
         int virtualScreenH = Services.ScreenFreezeService.GetVirtualScreenBounds().Height;
         _hud.PositionBelowRegion(x, y, w, h, virtualScreenH);
@@ -203,6 +208,19 @@ public sealed class RecordingController
         catch (Exception ex) { Diagnostics.Log("OnCancelRequested _service.Stop", ex); }
         try { _ffmpegRec?.Stop(); Diagnostics.Log("  _ffmpegRec.Stop OK"); }
         catch (Exception ex) { Diagnostics.Log("OnCancelRequested _ffmpegRec.Stop", ex); }
+    }
+
+    private void OnMicMuteToggled(bool muted)
+    {
+        _micMuted = muted;
+        _service?.SetMicMuted(muted);
+    }
+
+    public void ToggleMic()
+    {
+        _micMuted = !_micMuted;
+        _service?.SetMicMuted(_micMuted);
+        _hud?.SetMicMuted(_micMuted);
     }
 
     private void OnDrawColorChanged(byte r, byte g, byte b)

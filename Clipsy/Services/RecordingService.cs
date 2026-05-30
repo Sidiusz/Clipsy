@@ -77,7 +77,9 @@ public sealed class RecordingService : IDisposable
             AudioOptions = new AudioOptions
             {
                 IsAudioEnabled = true,
-                IsInputDeviceEnabled = false,
+                IsInputDeviceEnabled = s.MicrophoneEnabled,
+                AudioInputDevice = s.MicrophoneEnabled && !string.IsNullOrEmpty(s.MicrophoneDevice)
+                    ? s.MicrophoneDevice : null,
                 IsOutputDeviceEnabled = true,
                 Bitrate = AudioBitrate.bitrate_128kbps,
                 Channels = AudioChannels.Stereo,
@@ -127,6 +129,21 @@ public sealed class RecordingService : IDisposable
         }
     }
     public void Stop() => _recorder?.Stop();
+
+    public void SetMicMuted(bool muted)
+    {
+        if (_recorder == null) return;
+        try
+        {
+            var builder = _recorder.GetDynamicOptionsBuilder();
+            builder.SetDynamicAudioOptions(new DynamicAudioOptions { IsInputDeviceEnabled = !muted });
+            builder.Apply();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] SetMicMuted failed: {ex.Message}");
+        }
+    }
 
 
     public void UpdateRegion(int x, int y, int width, int height)

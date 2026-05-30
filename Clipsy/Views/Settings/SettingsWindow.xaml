@@ -550,6 +550,49 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- Microphone card -->
+                            <Border Style="{StaticResource ClipsyGroupCard}">
+                                <StackPanel Spacing="16">
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblMicEnabled" Text="Record microphone"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperMic"
+                                                       Text="Captures your voice along with the screen recording."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="MicEnabledSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnMicEnabledToggled"
+                                                      VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <StackPanel x:Name="MicDevicePanel" Spacing="16" Visibility="Collapsed">
+                                        <Border Style="{StaticResource ClipsyHairline}" />
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                                <TextBlock x:Name="LblMicDevice" Text="Input device"
+                                                           Style="{StaticResource ClipsyBodyStrong}" />
+                                                <TextBlock x:Name="HelperMicDevice"
+                                                           Text="Leave as default to use the system default recording device."
+                                                           Style="{StaticResource ClipsyHelper}" />
+                                            </StackPanel>
+                                            <ComboBox x:Name="MicDeviceBox" Grid.Column="1" Width="240"
+                                                      SelectionChanged="OnMicDeviceChanged"
+                                                      VerticalAlignment="Center" />
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
                             <Border Style="{StaticResource ClipsyGroupCard}">
                                 <StackPanel Spacing="16">
                                     <Grid ColumnSpacing="16">

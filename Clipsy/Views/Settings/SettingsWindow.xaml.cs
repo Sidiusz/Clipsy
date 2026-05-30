@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using ScreenRecorderLib;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -99,6 +100,8 @@ public sealed partial class SettingsWindow : Window
         ["resolution"] = "video",
         ["bitrate"] = "video",
         ["vid-format"] = "video",
+        ["mic-enabled"] = "video",
+        ["mic-device"] = "video",
         ["gif-color"] = "gif",
         ["gif-fps"] = "gif",
         ["gif-dither"] = "gif",
@@ -303,6 +306,10 @@ public sealed partial class SettingsWindow : Window
         LblResolution.Text = Strings.Get("LblResolution");
         LblBitrate.Text    = Strings.Get("LblBitrate");
         LblRegionNote.Text = Strings.Get("LblRegionNote");
+        LblMicEnabled.Text  = Strings.Get("LblMicEnabled");
+        HelperMic.Text      = Strings.Get("HelperMic");
+        LblMicDevice.Text   = Strings.Get("LblMicDevice");
+        HelperMicDevice.Text = Strings.Get("HelperMicDevice");
         UpdateFfmpegSection();
 
         LblGifColors.Text  = Strings.Get("LblGifColors");
@@ -434,6 +441,10 @@ public sealed partial class SettingsWindow : Window
         BitrateSlider.Value = System.Math.Clamp(_draft.VideoBitrateMbps, (int)BitrateSlider.Minimum, (int)BitrateSlider.Maximum);
         UpdateBitrateLabel();
 
+        MicEnabledSwitch.IsChecked = _draft.MicrophoneEnabled;
+        PopulateMicDevices(_draft.MicrophoneDevice);
+        UpdateMicDevicePanelVisibility();
+
         GifColorSlider.Minimum = 16;
         GifColorSlider.Maximum = 256;
         GifColorSlider.Value = System.Math.Clamp(_draft.GifColors, 16, 256);
@@ -503,6 +514,9 @@ public sealed partial class SettingsWindow : Window
         _draft.VideoResolution = SelectedSegmentTag(ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal);
         _draft.VideoBitrateMbps = (int)BitrateSlider.Value;
 
+        _draft.MicrophoneEnabled = MicEnabledSwitch.IsChecked == true;
+        _draft.MicrophoneDevice  = (MicDeviceBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
+
         _draft.GifColors = (int)GifColorSlider.Value;
         _draft.GifFps = (int)GifFpsSlider.Value;
         _draft.GifDither = GifDitherSwitch.IsChecked == true;
@@ -524,6 +538,7 @@ public sealed partial class SettingsWindow : Window
             case "redo": _draft.HotkeyRedo = binding; break;
             case "select-all": _draft.HotkeySelectAll = binding; break;
             case "record-save": _draft.HotkeyRecordSilentSave = binding; break;
+            case "mic-toggle":  _draft.HotkeyMicToggle = binding; break;
         }
     }
 
@@ -538,6 +553,7 @@ public sealed partial class SettingsWindow : Window
         AddHotkeyRow("redo",        "HkRedo",        _draft.HotkeyRedo);
         AddHotkeyRow("select-all",  "HkSelectAll",   _draft.HotkeySelectAll);
         AddHotkeyRow("record-save", "HkRecordSave",  _draft.HotkeyRecordSilentSave);
+        AddHotkeyRow("mic-toggle",  "HkMicToggle",   _draft.HotkeyMicToggle);
     }
 
     private void AddHotkeyRow(string key, string labelKey, string binding)
@@ -806,6 +822,55 @@ public sealed partial class SettingsWindow : Window
         long rounded = (long)System.Math.Round(mbPerMin / 10.0) * 10;
         if (rounded == 0) rounded = 10;
         EstFileSizeLabel.Text = string.Format(Strings.Get("BitrateEstimate"), rounded);
+    }
+
+    // ============== Microphone ==============
+
+    private void PopulateMicDevices(string selectedDeviceName)
+    {
+        MicDeviceBox.SelectionChanged -= OnMicDeviceChanged;
+        MicDeviceBox.Items.Clear();
+
+        var defaultItem = new ComboBoxItem { Content = Strings.Get("OptMicDefault"), Tag = "" };
+        MicDeviceBox.Items.Add(defaultItem);
+
+        ComboBoxItem? toSelect = defaultItem;
+        try
+        {
+            var devices = ScreenRecorderLib.Recorder.GetSystemAudioDevices(
+                ScreenRecorderLib.AudioDeviceSource.InputDevices);
+            foreach (var dev in devices)
+            {
+                var item = new ComboBoxItem { Content = dev.FriendlyName, Tag = dev.DeviceName };
+                MicDeviceBox.Items.Add(item);
+                if (dev.DeviceName == selectedDeviceName) toSelect = item;
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Clipsy] PopulateMicDevices failed: {ex.Message}");
+        }
+
+        MicDeviceBox.SelectedItem = toSelect;
+        MicDeviceBox.SelectionChanged += OnMicDeviceChanged;
+    }
+
+    private void UpdateMicDevicePanelVisibility()
+    {
+        if (MicDevicePanel == null) return;
+        MicDevicePanel.Visibility = (MicEnabledSwitch?.IsChecked == true)
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnMicEnabledToggled(object sender, RoutedEventArgs e)
+    {
+        UpdateMicDevicePanelVisibility();
+        if (!_loading) MarkChanged();
+    }
+
+    private void OnMicDeviceChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loading) MarkChanged();
     }
 
     private void OnGifColorChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -1156,6 +1221,9 @@ public sealed partial class SettingsWindow : Window
         if (_draft.HotkeyRedo != _initial.HotkeyRedo) _dirty.Add("hk-redo");
         if (_draft.HotkeySelectAll != _initial.HotkeySelectAll) _dirty.Add("hk-select-all");
         if (_draft.HotkeyRecordSilentSave != _initial.HotkeyRecordSilentSave) _dirty.Add("hk-record-save");
+        if (_draft.HotkeyMicToggle != _initial.HotkeyMicToggle) _dirty.Add("hk-mic-toggle");
+        if (_draft.MicrophoneEnabled != _initial.MicrophoneEnabled) _dirty.Add("mic-enabled");
+        if (_draft.MicrophoneDevice  != _initial.MicrophoneDevice)  _dirty.Add("mic-device");
     }
 
     private void UpdateDirtyVisuals()
