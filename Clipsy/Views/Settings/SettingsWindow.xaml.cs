@@ -472,6 +472,7 @@ public sealed partial class SettingsWindow : Window
     private void OnScreenshotFormatChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateJpgQualityRowVisibility();
+        if (!_loading) MarkChanged();
     }
 
     private void UpdateJpgQualityRowVisibility()
@@ -538,7 +539,9 @@ public sealed partial class SettingsWindow : Window
         if (_draft.RememberLastFolder != _initial.RememberLastFolder) _dirty.Add("remember");
         if ((AutostartSwitch.IsChecked == true) != _initialAutostart) _dirty.Add("autostart");
         if (_draft.ScreenshotFormat != _initial.ScreenshotFormat) _dirty.Add("ss-format");
+        if (_draft.CaptureScreenshotCursor != _initial.CaptureScreenshotCursor) _dirty.Add("ss-cursor");
         if (_draft.VideoFormat != _initial.VideoFormat) _dirty.Add("vid-format");
+        if (_draft.CaptureVideoCursor != _initial.CaptureVideoCursor) _dirty.Add("vid-cursor");
         if (_draft.JpgQuality != _initial.JpgQuality) _dirty.Add("jpg-q");
         if (_draft.AfterSaveAction != _initial.AfterSaveAction) _dirty.Add("after-save");
         if (_draft.UpdateInterval != _initial.UpdateInterval) _dirty.Add("update-int");
@@ -584,7 +587,9 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblRememberFolder, "LblRememberFolder", _dirty.Contains("remember"));
         SetLabel(LblAutostart, "LblAutostart", _dirty.Contains("autostart"));
         SetLabel(LblScreenshotFormat, "LblScreenshotFormat", _dirty.Contains("ss-format"));
+        SetLabel(LblScreenshotCursor, "LblScreenshotCursor", _dirty.Contains("ss-cursor"));
         SetLabel(LblVideoFormat, "LblVideoFormat", _dirty.Contains("vid-format"));
+        SetLabel(LblVideoCursor, "LblVideoCursor", _dirty.Contains("vid-cursor"));
         SetLabel(LblJpgQuality, "LblJpgQuality", _dirty.Contains("jpg-q"));
         SetLabel(LblAfterSave, "LblAfterSave", _dirty.Contains("after-save"));
         SetLabel(LblUpdates, "LblUpdates", _dirty.Contains("update-int"));
