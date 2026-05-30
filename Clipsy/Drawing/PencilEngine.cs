@@ -18,6 +18,7 @@ public sealed class PencilEngine
     private const int MaxThickness = 64;
 
     private readonly List<Stroke> _strokes = new();
+    private readonly Stack<List<Stroke>> _history = new();
     private Stroke? _current;
     private bool _drawing;
     private bool _erasing;
@@ -27,7 +28,7 @@ public sealed class PencilEngine
 
     private Color _color = Color.Red;
     private float _thickness = 3f;
-    private int _eraserRadius = 14;
+    private int _eraserRadius = 5;
 
     public event Action? Changed;
 
@@ -58,8 +59,9 @@ public sealed class PencilEngine
     {
         _thickness = Math.Clamp(t, MinThickness, MaxThickness);
         // Eraser radius tracks thickness so the partial-erase footprint feels
-        // proportional to the visible stroke width.
-        _eraserRadius = Math.Max(8, (int)(_thickness * 2));
+        // proportional to the visible stroke width. Same formula as the capture
+        // overlay canvas: max(4, thickness * 1.5).
+        _eraserRadius = Math.Max(4, (int)Math.Round(_thickness * 1.5f));
         Changed?.Invoke();
     }
 
@@ -103,22 +105,44 @@ public sealed class PencilEngine
     {
         if (!_drawing) return;
         _drawing = false;
-        if (_current != null && _current.Points.Count > 0) _strokes.Add(_current);
+        if (_current != null && _current.Points.Count > 0)
+        {
+            SaveHistory();
+            _strokes.Add(_current);
+        }
         _current = null;
         Changed?.Invoke();
     }
 
     public void ClearAll()
     {
+        if (_strokes.Count > 0) SaveHistory();
         _strokes.Clear();
         _current = null;
         Changed?.Invoke();
+    }
+
+    public void Undo()
+    {
+        if (_history.Count == 0) return;
+        _strokes.Clear();
+        _strokes.AddRange(_history.Pop());
+        Changed?.Invoke();
+    }
+
+    private void SaveHistory()
+    {
+        var snapshot = new List<Stroke>(_strokes.Count);
+        foreach (var s in _strokes)
+            snapshot.Add(new Stroke { Color = s.Color, Thickness = s.Thickness, Points = new List<System.Drawing.PointF>(s.Points) });
+        _history.Push(snapshot);
     }
 
     public void BeginErase(float x, float y, bool wholeStroke)
     {
         _erasing = true;
         _eraseWholeStroke = wholeStroke;
+        if (_strokes.Count > 0) SaveHistory();
         EraseAt(x, y);
     }
 
@@ -132,6 +156,7 @@ public sealed class PencilEngine
     {
         if (!_erasing) return;
         _erasing = false;
+        // History was saved in EraseAt on first hit; nothing to do here.
         Changed?.Invoke();
     }
 

@@ -8,6 +8,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using Windows.Graphics;
 using WinRT.Interop;
@@ -39,6 +40,11 @@ public sealed partial class RecordingHudWindow : Window
     public event Action? CancelRequested;
     public event Action<bool>? LockChanged;
     public event Action<bool>? DrawToggled;
+    private SolidColorBrush? _drawSwatchBrush;
+    private HudColorPickerWindow? _colorPickerWin;
+    private Windows.UI.Color _currentDrawColor = Microsoft.UI.Colors.Red;
+
+    public event Action<byte, byte, byte>? DrawColorChanged;
 
     public RecordingHudWindow()
     {
@@ -249,6 +255,47 @@ public sealed partial class RecordingHudWindow : Window
         DrawToggled?.Invoke(DrawBtn.IsChecked == true);
     }
 
+    private void OnDrawColorBtnClick(object sender, RoutedEventArgs e)
+    {
+        // Lazy-create the floating picker window.
+        if (_colorPickerWin == null)
+        {
+            _colorPickerWin = new HudColorPickerWindow();
+            _colorPickerWin.ColorConfirmed += OnPickerConfirmed;
+        }
+
+        // Compute anchor rect in screen physical pixels.
+        uint dpi = GetDpiForWindow(_hwnd);
+        double scale = dpi > 0 ? dpi / 96.0 : 1.0;
+        var hudPos = _appWindow.Position;
+
+        var transform = DrawColorBtn.TransformToVisual(null);
+        var btnPos = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+        int anchorX = hudPos.X + (int)(btnPos.X * scale);
+        int anchorY = hudPos.Y + (int)(btnPos.Y * scale);
+        int anchorW = (int)(DrawColorBtn.ActualWidth  * scale);
+        int anchorH = (int)(DrawColorBtn.ActualHeight * scale);
+
+        _colorPickerWin.ShowAt(_currentDrawColor, anchorX, anchorY, anchorW, anchorH);
+    }
+
+    private void OnPickerConfirmed(byte r, byte g, byte b)
+    {
+        _currentDrawColor = Windows.UI.Color.FromArgb(0xFF, r, g, b);
+        EnsureDrawSwatchBrush().Color = _currentDrawColor;
+        DrawColorChanged?.Invoke(r, g, b);
+    }
+
+    private SolidColorBrush EnsureDrawSwatchBrush()
+    {
+        if (_drawSwatchBrush == null)
+        {
+            _drawSwatchBrush = new SolidColorBrush(Microsoft.UI.Colors.Red);
+            DrawColorSwatch.Fill = _drawSwatchBrush;
+        }
+        return _drawSwatchBrush;
+    }
+
     private void ApplyLockVisual()
     {
         LockIcon.Glyph = _locked ? GlyphLock : GlyphUnlock;
@@ -269,6 +316,7 @@ public sealed partial class RecordingHudWindow : Window
     private const int LWA_ALPHA = 0x00000002;
 
     [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT lpPoint);
+    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hWnd);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
     [DllImport("user32.dll", SetLastError = true)] static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll", SetLastError = true)] static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);

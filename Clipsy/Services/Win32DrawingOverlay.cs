@@ -17,20 +17,20 @@ namespace Clipsy.Services;
 /// </summary>
 public sealed class Win32DrawingOverlay
 {
-    private const int EraserRadius = 14;
+    // Shared, surface-agnostic pencil/eraser logic. Identical engine used by
+    // the capture overlay canvas, so recording annotation behaves exactly the
+    // same (thickness clamp, wheel step, partial/whole erase, single-click dot,
+    // round caps/joins). This overlay is only the GDI render surface + Win32
+    // input source; all state lives in the engine.
+    private readonly Clipsy.Drawing.PencilEngine _engine = new();
 
     private IntPtr _hwnd;
     private bool _created;
     private int _x, _y, _w, _h;
     private bool _active;
-    private bool _drawing;
-    private bool _erasing;
-    private bool _eraseWhole;
-    private System.Drawing.Color _penColor = System.Drawing.Color.Red;
-    private float _penThickness = 3f;
-
-    private readonly List<Stroke> _strokes = new();
-    private Stroke? _current;
+    private bool _trackingLeave;
+    private IntPtr _kbHook;
+    private LowLevelKeyboardProcDelegate? _kbProcDelegate;
 
     private IntPtr _screenDc;
     private IntPtr _memDc;
@@ -44,11 +44,18 @@ public sealed class Win32DrawingOverlay
 
     public IntPtr Hwnd => _hwnd;
 
-    private sealed class Stroke
+    public Win32DrawingOverlay()
     {
-        public System.Drawing.Color Color;
-        public float Thickness;
-        public List<PointF> Points = new();
+        _engine.SetThickness(3f);
+        // Engine raises Changed on every stroke/erase/thickness/cursor mutation;
+        // repaint the layered window in response so canvas and recording stay
+        // pixel-identical.
+        _engine.Changed += OnEngineChanged;
+    }
+
+    private void OnEngineChanged()
+    {
+        if (_created) Render();
     }
 
     public bool Create(int x, int y, int w, int h)
@@ -62,7 +69,7 @@ public sealed class Win32DrawingOverlay
             hInstance = GetModuleHandle(null),
             lpszClassName = "ClipsyDrawingOverlay",
             hbrBackground = IntPtr.Zero,
-            hCursor = LoadCursor(IntPtr.Zero, IDC_CROSS),
+            hCursor = LoadCursor(IntPtr.Zero, IDC_ARROW), // arrow cursor, matching canvas behaviour
         };
         RegisterClass(ref wc);
 
@@ -100,32 +107,27 @@ public sealed class Win32DrawingOverlay
         var ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
         ex = active ? (ex & ~WS_EX_TRANSPARENT) : (ex | (int)WS_EX_TRANSPARENT);
         SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
+        if (active) InstallKbHook();
+        else { _engine.HideCursor(); UninstallKbHook(); }
         Render();
     }
 
-    public void SetColor(byte r, byte g, byte b)
-    {
-        _penColor = System.Drawing.Color.FromArgb(255, r, g, b);
-    }
+    public void SetColor(byte r, byte g, byte b) => _engine.SetColor(r, g, b);
 
-    public void SetThickness(int t) => _penThickness = Math.Max(1, t);
+    public void SetThickness(int t) => _engine.SetThickness(t);
 
-    public void ClearAll()
-    {
-        _strokes.Clear();
-        _current = null;
-        Render();
-    }
+    public void ClearAll() => _engine.ClearAll();
 
     public void Destroy()
     {
         if (!_created) return;
+        UninstallKbHook();
         _byHwnd.Remove(_hwnd);
         FreeDib();
         DestroyWindow(_hwnd);
         _created = false;
         _hwnd = IntPtr.Zero;
-        _strokes.Clear();
+        _engine.ClearAll();
     }
 
     private void AllocDib()
@@ -187,11 +189,12 @@ public sealed class Win32DrawingOverlay
 
     private void DrawAll(System.Drawing.Graphics g)
     {
-        foreach (var s in _strokes) DrawStroke(g, s);
-        if (_current != null) DrawStroke(g, _current);
+        foreach (var s in _engine.Strokes) DrawStroke(g, s);
+        if (_engine.Current != null) DrawStroke(g, _engine.Current);
+        DrawPreviewRing(g);
     }
 
-    private static void DrawStroke(System.Drawing.Graphics g, Stroke s)
+    private static void DrawStroke(System.Drawing.Graphics g, Clipsy.Drawing.PencilEngine.Stroke s)
     {
         if (s.Points.Count < 1) return;
         using var pen = new Pen(s.Color, s.Thickness)
@@ -210,6 +213,19 @@ public sealed class Win32DrawingOverlay
         {
             g.DrawLines(pen, s.Points.ToArray());
         }
+    }
+
+    // Preview ring: brush-size circle, visible whenever the overlay is active.
+    // Matches canvas: shown during drawing, erasing, and idle — always brush size.
+    private void DrawPreviewRing(System.Drawing.Graphics g)
+    {
+        if (!_active || !_engine.CursorVisible) return;
+        float d = Math.Max(2f, _engine.Thickness);
+        float cx = _engine.Cursor.X, cy = _engine.Cursor.Y;
+        using var fill = new SolidBrush(System.Drawing.Color.FromArgb(80, 0, 0, 0));
+        using var outline = new Pen(System.Drawing.Color.White, 1f);
+        g.FillEllipse(fill, cx - d / 2f, cy - d / 2f, d, d);
+        g.DrawEllipse(outline, cx - d / 2f, cy - d / 2f, d, d);
     }
 
     private void UpdateLayered()
@@ -240,54 +256,55 @@ public sealed class Win32DrawingOverlay
             {
                 if (!_active) break;
                 SetCapture(hwnd);
-                _drawing = true;
-                _current = new Stroke { Color = _penColor, Thickness = _penThickness };
-                _current.Points.Add(new PointF(LoWord(lParam), HiWord(lParam)));
-                Render();
+                _engine.BeginStroke(LoWord(lParam), HiWord(lParam));
                 return IntPtr.Zero;
             }
             case WM_MOUSEMOVE:
             {
                 float x = LoWord(lParam), y = HiWord(lParam);
-                if (_erasing)
-                {
-                    if (EraseDispatch(x, y)) Render();
-                    return IntPtr.Zero;
-                }
-                if (!_drawing || _current == null) break;
-                var last = _current.Points[_current.Points.Count - 1];
-                if (last.X == x && last.Y == y) break;
-                _current.Points.Add(new PointF(x, y));
-                Render();
+                EnsureLeaveTracking(hwnd);
+                // Always track cursor so the preview ring follows the pointer.
+                _engine.SetCursor(x, y, _active);
+                if (_engine.IsErasing) _engine.ExtendErase(x, y);
+                else if (_engine.IsDrawing) _engine.ExtendStroke(x, y);
                 return IntPtr.Zero;
             }
             case WM_LBUTTONUP:
             {
-                if (!_drawing) break;
-                _drawing = false;
+                if (!_engine.IsDrawing) break;
                 ReleaseCapture();
-                if (_current != null && _current.Points.Count > 0) _strokes.Add(_current);
-                _current = null;
-                Render();
+                _engine.EndStroke();
                 return IntPtr.Zero;
             }
             case WM_RBUTTONDOWN:
             {
                 if (!_active) break;
                 SetCapture(hwnd);
-                _erasing = true;
-                // Shift held at press latches whole-stroke erase for the duration
-                // of this RMB drag, matching capture overlay behavior.
-                _eraseWhole = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-                if (EraseDispatch(LoWord(lParam), HiWord(lParam))) Render();
+                // Shift held at press latches whole-stroke erase for the RMB drag,
+                // matching capture overlay behavior.
+                bool whole = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                _engine.BeginErase(LoWord(lParam), HiWord(lParam), whole);
                 return IntPtr.Zero;
             }
             case WM_RBUTTONUP:
             {
-                if (!_erasing) break;
-                _erasing = false;
-                _eraseWhole = false;
+                if (!_engine.IsErasing) break;
                 ReleaseCapture();
+                _engine.EndErase();
+                return IntPtr.Zero;
+            }
+            case WM_MOUSEWHEEL:
+            {
+                if (!_active) break;
+                int delta = unchecked((short)((wParam.ToInt64() >> 16) & 0xFFFF));
+                int steps = delta / 120;
+                if (steps != 0) _engine.NudgeThickness(steps);
+                return IntPtr.Zero;
+            }
+            case WM_MOUSELEAVE:
+            {
+                _trackingLeave = false;
+                _engine.HideCursor();
                 return IntPtr.Zero;
             }
             case WM_DESTROY:
@@ -296,71 +313,51 @@ public sealed class Win32DrawingOverlay
         return DefWindowProc(hwnd, msg, wParam, lParam);
     }
 
-    private bool EraseDispatch(float x, float y) =>
-        _eraseWhole ? EraseWholeAt(x, y) : EraseSplitAt(x, y);
-
-    private bool EraseWholeAt(float x, float y)
+    private void InstallKbHook()
     {
-        bool removed = false;
-        for (int i = _strokes.Count - 1; i >= 0; i--)
-        {
-            var s = _strokes[i];
-            float hit = EraserRadius + s.Thickness / 2f;
-            float hit2 = hit * hit;
-            foreach (var p in s.Points)
-            {
-                float dx = p.X - x, dy = p.Y - y;
-                if (dx * dx + dy * dy <= hit2)
-                {
-                    _strokes.RemoveAt(i);
-                    removed = true;
-                    break;
-                }
-            }
-        }
-        return removed;
+        if (_kbHook != IntPtr.Zero) return;
+        _kbProcDelegate = LowLevelKeyboardProc;
+        _kbHook = SetWindowsHookEx(WH_KEYBOARD_LL, _kbProcDelegate, GetModuleHandle(null), 0);
     }
 
-    // Partial erase: drop points inside the eraser disc, surviving runs become
-    // independent strokes. Mirrors DrawingController.PartialErase in the capture
-    // overlay so pencil behavior is identical across both surfaces.
-    private bool EraseSplitAt(float x, float y)
+    private void UninstallKbHook()
     {
-        bool changed = false;
-        for (int i = _strokes.Count - 1; i >= 0; i--)
+        if (_kbHook == IntPtr.Zero) return;
+        UnhookWindowsHookEx(_kbHook);
+        _kbHook = IntPtr.Zero;
+        _kbProcDelegate = null;
+    }
+
+    private IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0 && wParam.ToInt64() == WM_KEYDOWN_MSG)
         {
-            var s = _strokes[i];
-            float hit = EraserRadius + s.Thickness / 2f;
-            float hit2 = hit * hit;
-            var runs = new List<List<PointF>>();
-            List<PointF>? run = null;
-            bool anyHit = false;
-            foreach (var p in s.Points)
+            var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+            if (data.vkCode == VK_Z && (GetKeyState(VK_CONTROL) & 0x8000) != 0)
             {
-                float dx = p.X - x, dy = p.Y - y;
-                bool inside = dx * dx + dy * dy <= hit2;
-                if (inside)
-                {
-                    anyHit = true;
-                    if (run != null) { runs.Add(run); run = null; }
-                }
-                else
-                {
-                    run ??= new List<PointF>();
-                    run.Add(p);
-                }
-            }
-            if (run != null) runs.Add(run);
-            if (!anyHit) continue;
-            changed = true;
-            _strokes.RemoveAt(i);
-            foreach (var r in runs)
-            {
-                if (r.Count < 2) continue;
-                _strokes.Insert(i, new Stroke { Color = s.Color, Thickness = s.Thickness, Points = r });
+                _engine.Undo();
+                return new IntPtr(1);
             }
         }
-        return changed;
+        return CallNextHookEx(_kbHook, nCode, wParam, lParam);
+    }
+
+    private delegate IntPtr LowLevelKeyboardProcDelegate(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KBDLLHOOKSTRUCT { public uint vkCode; public uint scanCode; public uint flags; public uint time; public IntPtr dwExtraInfo; }
+
+    private void EnsureLeaveTracking(IntPtr hwnd)
+    {
+        if (_trackingLeave) return;
+        var tme = new TRACKMOUSEEVENT
+        {
+            cbSize = Marshal.SizeOf<TRACKMOUSEEVENT>(),
+            dwFlags = TME_LEAVE,
+            hwndTrack = hwnd,
+            dwHoverTime = 0,
+        };
+        if (TrackMouseEvent(ref tme)) _trackingLeave = true;
     }
 
     private static int LoWord(IntPtr p) => unchecked((short)(p.ToInt64() & 0xFFFF));
@@ -412,12 +409,16 @@ public sealed class Win32DrawingOverlay
 
     private delegate IntPtr WndProcDelegate(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-    private const uint WM_DESTROY = 0x0002;
+    private const uint IDC_ARROW   = 32512;
+    private const uint WM_DESTROY  = 0x0002;
     private const uint WM_LBUTTONDOWN = 0x0201;
     private const uint WM_LBUTTONUP = 0x0202;
     private const uint WM_MOUSEMOVE = 0x0200;
     private const uint WM_RBUTTONDOWN = 0x0204;
     private const uint WM_RBUTTONUP = 0x0205;
+    private const uint WM_MOUSEWHEEL = 0x020A;
+    private const uint WM_MOUSELEAVE = 0x02A3;
+    private const uint TME_LEAVE = 0x00000002;
     private const uint WS_POPUP = 0x80000000;
     private const int WS_EX_LAYERED = 0x00080000;
     private const int WS_EX_TRANSPARENT = 0x00000020;
@@ -428,7 +429,6 @@ public sealed class Win32DrawingOverlay
     private const uint SWP_SHOWWINDOW = 0x0040;
     private const uint SWP_NOACTIVATE = 0x0010;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-    private const uint IDC_CROSS = 32515;
     private const int GWL_EXSTYLE = -20;
     private const uint ULW_ALPHA = 0x00000002;
 
@@ -448,7 +448,24 @@ public sealed class Win32DrawingOverlay
     [DllImport("kernel32.dll")] private static extern IntPtr GetModuleHandle(string? lpModuleName);
     [DllImport("user32.dll")] private static extern IntPtr LoadCursor(IntPtr hInstance, uint lpCursorName);
     [DllImport("user32.dll")] private static extern short GetKeyState(int nVirtKey);
-    private const int VK_SHIFT = 0x10;
+    private const int VK_SHIFT   = 0x10;
+    private const int VK_CONTROL = 0x11;
+    [DllImport("user32.dll")] private static extern bool TrackMouseEvent(ref TRACKMOUSEEVENT lpEventTrack);
+    private const int WH_KEYBOARD_LL = 13;
+    private const long WM_KEYDOWN_MSG = 0x0100;
+    private const int VK_Z = 0x5A;
+    [DllImport("user32.dll")] private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProcDelegate lpfn, IntPtr hMod, uint dwThreadId);
+    [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+    [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TRACKMOUSEEVENT
+    {
+        public int cbSize;
+        public uint dwFlags;
+        public IntPtr hwndTrack;
+        public uint dwHoverTime;
+    }
     [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
     [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr hdc);
     [DllImport("gdi32.dll")] private static extern IntPtr CreateDIBSection(IntPtr hdc, ref BITMAPINFO bmi, uint usage, out IntPtr ppvBits, IntPtr hSection, uint offset);

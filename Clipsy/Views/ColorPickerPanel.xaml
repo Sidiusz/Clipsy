@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Clipsy · ColorPickerPanel
+  Shared UserControl: ColorPicker spectrum + Cancel / Confirm buttons + optional eyedropper.
+  Used by CaptureOverlayWindow (canvas flyout, ShowEyedropper=True) and
+  HudColorPickerWindow (recording floating picker, no eyedropper).
+-->
+<UserControl
+    x:Class="Clipsy.Views.ColorPickerPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel Spacing="8" Width="240">
+        <ColorPicker x:Name="ColorPickerCtl"
+                     ColorSpectrumShape="Box"
+                     IsAlphaEnabled="False"
+                     IsColorSliderVisible="True"
+                     IsColorChannelTextInputVisible="False"
+                     IsHexInputVisible="True"
+                     IsMoreButtonVisible="False"
+                     ColorChanged="OnColorChanged" />
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <!-- Eyedropper: hidden by default; set ShowEyedropper=True for canvas -->
+            <Button x:Name="EyedropperBtn" Grid.Column="0"
+                    Style="{StaticResource ClipsyIconButton}"
+                    Visibility="Collapsed"
+                    Click="OnEyedropperClick"
+                    ToolTipService.ToolTip="Pick color from screen">
+                <FontIcon Glyph="&#xEF3C;" FontSize="14" />
+            </Button>
+            <Button x:Name="CancelBtn" Grid.Column="2"
+                    Style="{StaticResource ClipsyIconButton}"
+                    Margin="0,0,6,0"
+                    Click="OnCancelClick"
+                    ToolTipService.ToolTip="Cancel">
+                <FontIcon Glyph="&#xE711;" FontSize="14" />
+            </Button>
+            <Button x:Name="ConfirmBtn" Grid.Column="3"
+                    Style="{StaticResource ClipsyIconButton}"
+                    Background="{StaticResource ClipsyAccentBrush}"
+                    Click="OnConfirmClick"
+                    ToolTipService.ToolTip="Apply">
+                <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="Black" />
+            </Button>
+        </Grid>
+    </StackPanel>
+</UserControl>

@@ -66,6 +66,14 @@
                               ToolTipService.ToolTip="Draw">
                     <FontIcon Glyph="&#xE70F;" FontSize="16" />
                 </ToggleButton>
+                <Button x:Name="DrawColorBtn"
+                        Style="{StaticResource ClipsyIconButton}"
+                        Click="OnDrawColorBtnClick"
+                        ToolTipService.ToolTip="Pen color">
+                    <Ellipse x:Name="DrawColorSwatch" Width="16" Height="16"
+                             Fill="{StaticResource ClipsyDangerBrush}"
+                             Stroke="White" StrokeThickness="1.5" />
+                </Button>
                 <Button x:Name="LockBtn"
                         Style="{StaticResource ClipsyIconButton}"
                         DoubleTapped="OnLockDoubleTapped"

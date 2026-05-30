@@ -31,6 +31,7 @@ public static class Strings
         // Capture overlay
         ["HintSelectArea"]      = New("Select area", "Выделите область"),
         ["NoTextFound"]         = New("No text found", "Текст не найден"),
+        ["OcrLangHint"]         = New("Looks like {0} — language pack not installed. Add it in Settings.", "Похоже на {0} — языковой пакет не установлен. Добавьте его в настройках."),
         ["Copied"]              = New("Copied", "Скопировано"),
         ["TranslateUnavailable"]= New("Translation unavailable", "Перевод недоступен"),
 
@@ -219,7 +220,8 @@ public static class Strings
         ["LangAutoDetect"]        = New("Auto-detect",         "Автоопределение"),
 
         ["LblTessLang"]           = New("Tesseract Languages", "Языки Tesseract"),
-        ["HelperTessLang"]        = New("Download language files for offline text recognition (~4-22 MB each).", "Загрузите языковые файлы для распознавания текста (~4-22 МБ каждый)."),
+        ["HelperTessLang"]        = New("Download language files for offline text recognition (~{0}-{1} {2} each).", "Загрузите языковые файлы для распознавания текста (~{0}-{1} {2} каждый)."),
+        ["UnitMB"]                = New("MB", "МБ"),
         ["BtnInstall"]            = New("Install", "Установить"),
         ["BtnDelete"]             = New("Delete",  "Удалить"),
         ["TessInstalling"]        = New("Downloading...", "Загрузка..."),

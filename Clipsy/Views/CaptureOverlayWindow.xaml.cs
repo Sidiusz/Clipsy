@@ -1979,6 +1979,8 @@ public sealed partial class CaptureOverlayWindow : Window
             _eyedropperPixels = new byte[byteCount];
             Marshal.Copy(data.Scan0, _eyedropperPixels, 0, byteCount);
             _eyedropperBitmap.UnlockBits(data);
+            // CopyFromScreen leaves alpha=0; force opaque so WriteableBitmap renders correctly.
+            for (int i = 3; i < _eyedropperPixels.Length; i += 4) _eyedropperPixels[i] = 0xFF;
         }
         catch (Exception ex)
         {
