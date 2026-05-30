@@ -13,6 +13,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Graphics;
 using System.Runtime.InteropServices;
 using WinRT.Interop;
@@ -49,6 +50,24 @@ public sealed partial class SettingsWindow : Window
     private bool _initialAutostart;
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _notifyTimer;
+
+    // Sidebar tip rotation: a shuffled queue of tip keys cycled on a timer with
+    // a fade swap. Not tied to the active tab — purely ambient.
+    private static readonly string[] _tipKeys =
+    {
+        "TipPrtScCapture",
+        "TipRotateDragRegion",
+        "TipRotateErase",
+        "TipRotateOcr",
+        "TipRotateGif",
+        "TipRotateHotkeys",
+        "TipRotateLock",
+    };
+    private static readonly Random _tipRng = new();
+    private readonly List<int> _tipOrder = new();
+    private int _tipPos = -1;
+    private int _currentTipKeyIndex;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _tipTimer;
 
     private static readonly Dictionary<string, string> _paramToCategory = new()
     {
@@ -112,7 +131,7 @@ public sealed partial class SettingsWindow : Window
             fe.Loaded += (_, _) =>
                 DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Uncloak);
         }
-        Closed += (_, _) => { if (_current == this) _current = null; };
+        Closed += (_, _) => { _tipTimer?.Stop(); if (_current == this) _current = null; };
     }
 
     private bool _cloaked = true;
@@ -169,6 +188,8 @@ public sealed partial class SettingsWindow : Window
             {
                 if (rb.IsChecked == true) { OnNavChecked(rb, new RoutedEventArgs()); break; }
             }
+
+            StartTipRotation();
         }
         catch (Exception ex)
         {
@@ -567,7 +588,7 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblJpgQuality, "LblJpgQuality", _dirty.Contains("jpg-q"));
         SetLabel(LblAfterSave, "LblAfterSave", _dirty.Contains("after-save"));
         SetLabel(LblUpdates, "LblUpdates", _dirty.Contains("update-int"));
-        SetLabel(LblNotifications, "LblNotifications", _dirty.Contains("notif"));
+        SetLabel(LblNotifyMaster, "LblNotifyMaster", _dirty.Contains("notif"));
         SetLabel(LblCodec, "LblCodec", _dirty.Contains("codec"));
         SetLabel(LblResolution, "LblResolution", _dirty.Contains("resolution"));
         SetLabel(LblBitrate, "LblBitrate", _dirty.Contains("bitrate"));
@@ -653,6 +674,83 @@ public sealed partial class SettingsWindow : Window
         _notifyTimer.IsRepeating = false;
         _notifyTimer.Tick += (_, _) => { NotifyBanner.Visibility = Visibility.Collapsed; };
         _notifyTimer.Start();
+    }
+
+    // ============== Sidebar tip rotation ==============
+
+    private void StartTipRotation()
+    {
+        if (_tipTimer != null || _tipKeys.Length == 0) return;
+        ReshuffleTips(-1);
+        AdvanceTip(animate: false);
+        _tipTimer = DispatcherQueue.CreateTimer();
+        _tipTimer.Interval = TimeSpan.FromSeconds(8);
+        _tipTimer.IsRepeating = true;
+        _tipTimer.Tick += (_, _) => AdvanceTip(animate: true);
+        _tipTimer.Start();
+    }
+
+    // Fisher-Yates shuffle. avoidFirst keeps the same tip from showing twice in
+    // a row across a cycle boundary.
+    private void ReshuffleTips(int avoidFirst)
+    {
+        _tipOrder.Clear();
+        for (int i = 0; i < _tipKeys.Length; i++) _tipOrder.Add(i);
+        for (int i = _tipOrder.Count - 1; i > 0; i--)
+        {
+            int j = _tipRng.Next(i + 1);
+            (_tipOrder[i], _tipOrder[j]) = (_tipOrder[j], _tipOrder[i]);
+        }
+        if (avoidFirst >= 0 && _tipOrder.Count > 1 && _tipOrder[0] == avoidFirst)
+            (_tipOrder[0], _tipOrder[1]) = (_tipOrder[1], _tipOrder[0]);
+        _tipPos = -1;
+    }
+
+    private void AdvanceTip(bool animate)
+    {
+        if (LblTip == null) return;
+        _tipPos++;
+        if (_tipPos >= _tipOrder.Count)
+        {
+            ReshuffleTips(_currentTipKeyIndex);
+            _tipPos = 0;
+        }
+        _currentTipKeyIndex = _tipOrder[_tipPos];
+        var text = Strings.Get(_tipKeys[_currentTipKeyIndex]);
+
+        if (!animate)
+        {
+            LblTip.Text = text;
+            LblTip.Opacity = 1;
+            return;
+        }
+
+        var fadeOut = new DoubleAnimation
+        {
+            To = 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(220)),
+            EnableDependentAnimation = true,
+        };
+        Storyboard.SetTarget(fadeOut, LblTip);
+        Storyboard.SetTargetProperty(fadeOut, "Opacity");
+        var sbOut = new Storyboard();
+        sbOut.Children.Add(fadeOut);
+        sbOut.Completed += (_, _) =>
+        {
+            LblTip.Text = text;
+            var fadeIn = new DoubleAnimation
+            {
+                To = 1,
+                Duration = new Duration(TimeSpan.FromMilliseconds(220)),
+                EnableDependentAnimation = true,
+            };
+            Storyboard.SetTarget(fadeIn, LblTip);
+            Storyboard.SetTargetProperty(fadeIn, "Opacity");
+            var sbIn = new Storyboard();
+            sbIn.Children.Add(fadeIn);
+            sbIn.Begin();
+        };
+        sbOut.Begin();
     }
 
     // ============== Save / Reset / Updates ==============
