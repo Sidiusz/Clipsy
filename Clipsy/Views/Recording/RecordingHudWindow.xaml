@@ -74,6 +74,17 @@
                              Fill="{StaticResource ClipsyDangerBrush}"
                              Stroke="White" StrokeThickness="1.5" />
                 </Button>
+
+                <Border x:Name="MicSep" Style="{StaticResource ClipsyToolbarSeparator}" Visibility="Collapsed" />
+                <ToggleButton x:Name="MicBtn"
+                              Style="{StaticResource ClipsyIconToggle}"
+                              IsChecked="True"
+                              Click="OnMicToggle"
+                              Visibility="Collapsed"
+                              ToolTipService.ToolTip="Microphone on">
+                    <FontIcon x:Name="MicIcon" Glyph="&#xE720;" FontSize="16" />
+                </ToggleButton>
+
                 <Button x:Name="LockBtn"
                         Style="{StaticResource ClipsyIconButton}"
                         DoubleTapped="OnLockDoubleTapped"

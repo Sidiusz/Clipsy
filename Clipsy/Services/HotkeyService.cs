@@ -23,6 +23,7 @@ public sealed class HotkeyService : IDisposable
     private const uint MOD_SHIFT      = 0x0004;
     private const int HOTKEY_CAPTURE  = 0xC1170;
     private const int HOTKEY_RECORD   = 0xC1171;
+    private const int HOTKEY_MIC      = 0xC1172;
     private const int HWND_MESSAGE    = -3;
 
     private readonly DispatcherQueue _dispatcher;
@@ -35,11 +36,14 @@ public sealed class HotkeyService : IDisposable
 
     private Action? _captureCallback;
     private Action? _recordCallback;
+    private Action? _micCallback;
 
     private uint _captureVk;
     private uint _captureMods;
     private uint _recordVk;
     private uint _recordMods;
+    private uint _micVk;
+    private uint _micMods;
 
     // Low-level keyboard hook fallback. RegisterHotKey collides with
     // Win11's Snipping Tool when the user has "Use PrintScreen to open
@@ -52,6 +56,7 @@ public sealed class HotkeyService : IDisposable
     private GCHandle _llProcHandle;
     private bool _captureViaLL;
     private bool _recordViaLL;
+    private bool _micViaLL;
 
     public bool IsCaptureRegistered { get; private set; }
     public int LastRegisterError { get; private set; }
@@ -62,13 +67,16 @@ public sealed class HotkeyService : IDisposable
     }
 
     public bool Register(Action captureCallback, string captureBinding,
-                         Action? recordCallback = null, string? recordBinding = null)
+                         Action? recordCallback = null, string? recordBinding = null,
+                         Action? micCallback = null, string? micBinding = null)
     {
         _captureCallback = captureCallback;
         _recordCallback  = recordCallback;
+        _micCallback     = micCallback;
 
         ParseBinding(captureBinding, out _captureVk, out _captureMods);
         ParseBinding(recordBinding,  out _recordVk,  out _recordMods);
+        ParseBinding(micBinding,     out _micVk,     out _micMods);
 
         _running = true;
         var ready = new ManualResetEventSlim(false);
@@ -83,11 +91,12 @@ public sealed class HotkeyService : IDisposable
         return IsCaptureRegistered;
     }
 
-    /// <summary>Re-register both hotkeys with new bindings without restarting the thread.</summary>
-    public void Reregister(string captureBinding, string? recordBinding)
+    /// <summary>Re-register all hotkeys with new bindings without restarting the thread.</summary>
+    public void Reregister(string captureBinding, string? recordBinding, string? micBinding = null)
     {
         ParseBinding(captureBinding, out _captureVk, out _captureMods);
         ParseBinding(recordBinding,  out _recordVk,  out _recordMods);
+        ParseBinding(micBinding,     out _micVk,     out _micMods);
         if (_threadId != 0)
             PostThreadMessage(_threadId, WM_USER_REREG, IntPtr.Zero, IntPtr.Zero);
     }
@@ -141,6 +150,7 @@ public sealed class HotkeyService : IDisposable
                 {
                     UnregisterHotKey(_hwnd, HOTKEY_CAPTURE);
                     UnregisterHotKey(_hwnd, HOTKEY_RECORD);
+                    UnregisterHotKey(_hwnd, HOTKEY_MIC);
                     DestroyWindow(_hwnd);
                     _hwnd = IntPtr.Zero;
                 }
@@ -155,8 +165,10 @@ public sealed class HotkeyService : IDisposable
     {
         UnregisterHotKey(_hwnd, HOTKEY_CAPTURE);
         UnregisterHotKey(_hwnd, HOTKEY_RECORD);
+        UnregisterHotKey(_hwnd, HOTKEY_MIC);
         _captureViaLL = false;
         _recordViaLL  = false;
+        _micViaLL     = false;
         IsCaptureRegistered = false;
 
         if (_captureVk != 0)
@@ -187,12 +199,22 @@ public sealed class HotkeyService : IDisposable
             }
         }
 
+        if (_micVk != 0 && _micCallback != null)
+        {
+            if (!RegisterHotKey(_hwnd, HOTKEY_MIC, _micMods, _micVk))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Clipsy] RegisterHotKey(mic-toggle) failed err=0x{Marshal.GetLastWin32Error():X} — falling back to LL hook");
+                _micViaLL = true;
+            }
+        }
+
         SyncLowLevelHook();
     }
 
     private void SyncLowLevelHook()
     {
-        bool need = _captureViaLL || _recordViaLL;
+        bool need = _captureViaLL || _recordViaLL || _micViaLL;
         if (need && _llHook == IntPtr.Zero)
         {
             _llProc = LowLevelKbProc;
@@ -238,6 +260,12 @@ public sealed class HotkeyService : IDisposable
                     if (cb != null) _dispatcher.TryEnqueue(() => cb());
                     return new IntPtr(1);
                 }
+                if (_micViaLL && vk == _micVk && mods == _micMods)
+                {
+                    var cb = _micCallback;
+                    if (cb != null) _dispatcher.TryEnqueue(() => cb());
+                    return new IntPtr(1);
+                }
             }
         }
         return CallNextHookEx(_llHook, nCode, wParam, lParam);
@@ -265,6 +293,11 @@ public sealed class HotkeyService : IDisposable
             else if (id == HOTKEY_RECORD)
             {
                 var cb = _recordCallback;
+                if (cb != null) _dispatcher.TryEnqueue(() => cb());
+            }
+            else if (id == HOTKEY_MIC)
+            {
+                var cb = _micCallback;
                 if (cb != null) _dispatcher.TryEnqueue(() => cb());
             }
             return IntPtr.Zero;

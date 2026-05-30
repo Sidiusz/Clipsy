@@ -74,6 +74,8 @@ public static class Strings
         ["MenuCancel"]          = New("Cancel",        "Отмена"),
 
         // Recording HUD
+        ["TipMicActive"]        = New("Microphone on — click to mute",         "Микрофон включён — кликните для отключения"),
+        ["TipMicMuted"]         = New("Microphone muted — click to unmute",    "Микрофон выключен — кликните для включения"),
         ["TipPause"]            = New("Pause",                                 "Пауза"),
         ["TipStop"]             = New("Stop and save to last folder",          "Стоп и сохранить в последнюю папку"),
         ["TipSaveAs"]           = New("Stop and Save As",                      "Стоп и сохранить как"),
@@ -184,6 +186,14 @@ public static class Strings
                                      "H.265 не поддерживается оборудованием. Запись в H.264."),
         ["HelperCodecVp9Av1"] = New("VP9 and AV1 require FFmpeg for native encoding without conversion.",
                                      "VP9 и AV1 требуют FFmpeg для нативной записи без конвертации."),
+        // Microphone settings
+        ["LblMicrophone"]       = New("Microphone",                            "Микрофон"),
+        ["LblMicEnabled"]       = New("Record microphone",                     "Записывать микрофон"),
+        ["HelperMic"]           = New("Captures your voice along with the screen recording.", "Запись голоса вместе с записью экрана."),
+        ["LblMicDevice"]        = New("Input device",                          "Устройство ввода"),
+        ["HelperMicDevice"]     = New("Leave as default to use the system default recording device.", "Оставьте по умолчанию для системного устройства записи."),
+        ["OptMicDefault"]       = New("Default system microphone",             "Системный микрофон по умолчанию"),
+
         ["LblFfmpegSection"]  = New("FFmpeg",                    "FFmpeg"),
         ["FfmpegInstalled"]   = New("Installed",                 "Установлен"),
         ["FfmpegNotInstalled"]= New("Not installed",             "Не установлен"),
@@ -259,6 +269,7 @@ public static class Strings
         ["HkRedo"]                = New("Redo",                                            "Повторить"),
         ["HkSelectAll"]           = New("Select all",                                      "Выделить всё"),
         ["HkRecordSave"]          = New("Save recording (silent)",                         "Сохранить запись (без диалога)"),
+        ["HkMicToggle"]           = New("Mute / unmute microphone",                        "Выкл/вкл микрофон"),
         ["HkPressKeys"]           = New("Press keys...",                                   "Нажмите клавиши..."),
 
         // Notifications shown in Settings

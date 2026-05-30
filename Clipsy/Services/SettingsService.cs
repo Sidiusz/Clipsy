@@ -29,6 +29,11 @@ public sealed class AppSettings
     public string VideoResolution { get; set; } = "1080p";  // 480p / 720p / 1080p / 1440p / Original
     public int VideoBitrateMbps { get; set; } = 8;
 
+    // Microphone
+    public bool MicrophoneEnabled { get; set; } = false;
+    public string MicrophoneDevice { get; set; } = "";       // empty = default system device (DeviceName from Recorder.GetSystemAudioDevices)
+    public string HotkeyMicToggle { get; set; } = "";        // empty = disabled
+
     // GIF
     public int GifColors { get; set; } = 256;
     public int GifFps { get; set; } = 12;

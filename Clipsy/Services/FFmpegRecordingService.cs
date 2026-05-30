@@ -38,7 +38,9 @@ public sealed class FFmpegRecordingService : IDisposable
         Directory.CreateDirectory(tempDir);
         _tempPath = Path.Combine(tempDir, $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mkv");
 
-        var args = BuildArgs(x, y, w, h, codec, kbps, _tempPath, withAudio: true);
+        bool micEnabled = s.MicrophoneEnabled;
+        string? micDevice = micEnabled && !string.IsNullOrEmpty(s.MicrophoneDevice) ? s.MicrophoneDevice : null;
+        var args = BuildArgs(x, y, w, h, codec, kbps, _tempPath, withAudio: true, micEnabled: micEnabled, micFriendlyName: micDevice);
         _process = Launch(args);
 
         if (_process == null)
@@ -113,7 +115,7 @@ public sealed class FFmpegRecordingService : IDisposable
     private static string BuildArgs(
         int x, int y, int w, int h,
         string codec, int bitrateMbps, string output,
-        bool withAudio)
+        bool withAudio, bool micEnabled = false, string? micFriendlyName = null)
     {
         // ── Video encoder flags ──────────────────────────────────────────────
         string videoEncoder = codec switch
@@ -128,17 +130,33 @@ public sealed class FFmpegRecordingService : IDisposable
         sb.Append($"-f gdigrab -framerate 30 -offset_x {x} -offset_y {y}");
         sb.Append($" -video_size {w}x{h} -draw_mouse 1 -i desktop");
 
+        bool hasMic = withAudio && micEnabled;
         if (withAudio)
         {
             // wasapi loopback: system audio (no extra drivers required on Win10+)
             sb.Append(" -f wasapi -loopback -i \"\"");
         }
+        if (hasMic)
+        {
+            // Mic via WASAPI capture device. FFmpeg WASAPI accepts the
+            // MMDevice endpoint ID (DeviceName) directly.
+            string micId = string.IsNullOrEmpty(micFriendlyName) ? "" : micFriendlyName;
+            sb.Append($" -f wasapi -i \"{micId}\"");
+        }
 
         // ── Encoding ────────────────────────────────────────────────────────
         sb.Append($" -c:v {videoEncoder} -b:v {bitrateMbps}M -r 30");
 
-        if (withAudio)
+        if (withAudio && hasMic)
+        {
+            // Mix system audio (input 1) + microphone (input 2) into one track.
+            sb.Append(" -filter_complex \"[1:a][2:a]amix=inputs=2:duration=first[aout]\"");
+            sb.Append(" -map 0:v -map \"[aout]\" -c:a libopus -b:a 128k");
+        }
+        else if (withAudio)
+        {
             sb.Append(" -c:a libopus -b:a 128k");
+        }
 
         sb.Append($" -y \"{output}\"");
         return sb.ToString();
