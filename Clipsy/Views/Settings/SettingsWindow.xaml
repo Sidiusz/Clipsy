@@ -1008,6 +1008,11 @@
                                               Background="Transparent"
                                               BorderThickness="0"
                                               Padding="0,6">
+                                        <!-- Empty collection disables the default bottom-up
+                                             entrance/reorder animation when rows populate. -->
+                                        <ListView.ItemContainerTransitions>
+                                            <TransitionCollection />
+                                        </ListView.ItemContainerTransitions>
                                         <ListView.ItemContainerStyle>
                                             <Style TargetType="ListViewItem">
                                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />

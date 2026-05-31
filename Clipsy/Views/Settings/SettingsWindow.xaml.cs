@@ -22,17 +22,22 @@ namespace Clipsy.Views.Settings;
 
 public sealed partial class SettingsWindow : Window
 {
-    private static SettingsWindow? _current;
+    // Pool-of-one: a warmed, hidden, ready-to-show instance (_spare) plus the
+    // currently visible one (_open). Showing a freshly-warmed window is flash-
+    // free (proven); reusing one window after hide is not — so each open consumes
+    // the spare and a new spare is warmed for next time.
+    private static SettingsWindow? _spare;
+    private static SettingsWindow? _open;
 
     private readonly IntPtr _hwnd;
+    private AppWindow? _appWindow;
     private AppSettings _draft;
     private AppSettings _initial = new();
     private readonly ObservableCollection<HotkeyRow> _hotkeyRows = new();
     private readonly HashSet<string> _dirty = new();
     private Button? _listeningButton;
     private string? _listeningKey;
-
-    private bool _firstActivated;
+    private bool _setupDone;
     // Starts true so RangeBase / ComboBox handlers that fire during
     // InitializeComponent (from XAML attribute setters like Value="8")
     // don't run MarkChanged() before the XAML tree is populated. Load()
@@ -107,6 +112,7 @@ public sealed partial class SettingsWindow : Window
         _hwnd = WindowNative.GetWindowHandle(this);
         _draft = SettingsService.Instance.Settings.Clone();
         HotkeyList.ItemsSource = _hotkeyRows;
+        PresetToggles();
 
         try
         {
@@ -118,50 +124,33 @@ public sealed partial class SettingsWindow : Window
             Diagnostics.Log("SettingsWindow.SetTitleBar", ex);
         }
 
-        // Cloak the window via DWM until XAML has composed its first frame.
-        // Without this DWM briefly shows the default opaque window surface
-        // (visible as a black flash) before the dark theme paints.
-        int cloak = 1;
-        try { DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int)); }
-        catch { }
-
-        Activated += OnFirstActivated;
-        if (Content is FrameworkElement fe)
-        {
-            fe.Loaded += (_, _) =>
-                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Uncloak);
-        }
-        Closed += (_, _) => { _tipTimer?.Stop(); if (_current == this) _current = null; };
-    }
-
-    private bool _cloaked = true;
-    private const int DWMWA_CLOAK = 13;
-
-    private void Uncloak()
-    {
-        if (!_cloaked) return;
-        _cloaked = false;
-        int cloak = 0;
-        try { DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int)); }
-        catch { }
-    }
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
-
-
-    private void OnFirstActivated(object sender, WindowActivatedEventArgs e)
-    {
-        if (_firstActivated) return;
-        _firstActivated = true;
+        // Tool-window so the off-screen warm render never flashes a taskbar
+        // button. No layered/cloak tricks — the no-flash comes from only ever
+        // SHOWING a freshly-warmed window (see Warm/Reveal), never reusing one.
+        _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
         try
         {
-            var appWin = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
-            appWin.Title = Strings.Get("TraySettings");
-            appWin.Resize(new SizeInt32(940, 640));
+            int ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
+            SetWindowLong(_hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW);
+        }
+        catch { }
+
+        Closed += (_, _) => { _tipTimer?.Stop(); if (_open == this) _open = null; };
+    }
+
+    // One-time heavy init: title bar theming, content Load, nav. Runs during
+    // warm-up so the window is fully built before it's ever shown.
+    private void SetupOnce()
+    {
+        if (_setupDone) return;
+        _setupDone = true;
+        try
+        {
+            _appWindow!.Title = Strings.Get("TraySettings");
+            _appWindow.Resize(new SizeInt32(WinW, WinH));
             try
             {
-                var tb = appWin.TitleBar;
+                var tb = _appWindow.TitleBar;
                 var transparent = Windows.UI.Color.FromArgb(0, 0, 0, 0);
                 var fg = Windows.UI.Color.FromArgb(0xFF, 0xB5, 0xBA, 0xC1);
                 var fgHover = Windows.UI.Color.FromArgb(0xFF, 0xF2, 0xF3, 0xF5);
@@ -177,48 +166,118 @@ public sealed partial class SettingsWindow : Window
                 tb.ButtonPressedForegroundColor = fgHover;
             }
             catch (Exception ex) { Diagnostics.Log("SettingsWindow.ThemeTitleBar", ex); }
+
             Load();
             ApplyLocalization();
             ThemeService.ApplyTo(Content as FrameworkElement);
             VersionLabel.Text = Strings.Get("VersionPrefix") + GetVersion();
             BuildDateLabel.Text = GetBuildDate();
-
-            // Sync nav icon / pane visibility with default-checked radio
             foreach (var rb in new[] { NavGeneral, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
-            {
                 if (rb.IsChecked == true) { OnNavChecked(rb, new RoutedEventArgs()); break; }
-            }
+        }
+        catch (Exception ex) { Diagnostics.Show("SettingsWindow.SetupOnce", ex); }
+    }
 
+    // Render the window fully, off-screen, WITHOUT activating it (Show(false) =
+    // no focus steal). This composites the XAML once so the swapchain is warm;
+    // the later on-screen Reveal then appears instantly, no black first frame.
+    private void Warm()
+    {
+        SetupOnce();
+        try
+        {
+            _appWindow!.MoveAndResize(new RectInt32(OffScreen, OffScreen, WinW, WinH));
+            _appWindow.Show(false);
+        }
+        catch (Exception ex) { Diagnostics.Log("SettingsWindow.Warm", ex); }
+    }
+
+    // Bring this already-warm window on-screen, centered, focused.
+    private void Reveal()
+    {
+        try
+        {
+            // Refresh values in case settings changed since warm-up.
+            _draft = SettingsService.Instance.Settings.Clone();
+            Load();
+            _appWindow?.Move(new Windows.Graphics.PointInt32(CenterX(), CenterY()));
+            Activate();
+            SetForegroundWindow(_hwnd);
             StartTipRotation();
         }
-        catch (Exception ex)
-        {
-            Diagnostics.Show("SettingsWindow.OnFirstActivated", ex);
-        }
+        catch (Exception ex) { Diagnostics.Show("SettingsWindow.Reveal", ex); }
+    }
+
+    private Windows.Graphics.RectInt32 WorkArea() =>
+        DisplayArea.GetFromWindowId(
+            Win32Interop.GetWindowIdFromWindow(_hwnd), DisplayAreaFallback.Primary).WorkArea;
+    private int CenterX() { var w = WorkArea(); return w.X + (w.Width  - WinW) / 2; }
+    private int CenterY() { var w = WorkArea(); return w.Y + (w.Height - WinH) / 2; }
+
+    private const int OffScreen = -32000;
+    private const int WinW = 940, WinH = 640;
+    private const int GWL_EXSTYLE      = -20;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+    [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr h, int n);
+    [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr h, int n, int v);
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
+
+    // Warm a spare hidden instance (off the user's critical path). Show(false)
+    // doesn't steal focus, so this is safe to call any time.
+    public static void Prewarm()
+    {
+        if (_spare != null) return;
+        try { var w = new SettingsWindow(); w.Warm(); _spare = w; }
+        catch (Exception ex) { Diagnostics.Show("SettingsWindow.Prewarm", ex); }
     }
 
     public static void ShowOrActivate()
     {
-        if (_current != null)
-        {
-            try { _current.Activate(); } catch (Exception ex) { Diagnostics.Show("SettingsWindow.Activate", ex); }
-            return;
-        }
         try
         {
-            _current = new SettingsWindow();
-            _current.Activate();
+            if (_open != null)
+            {
+                _open.Activate();
+                _open.BringToFront();
+                return;
+            }
+            if (_spare == null) Prewarm();
+            _open = _spare;
+            _spare = null;
+            _open?.Reveal();
+            Prewarm(); // refill the spare for next time
         }
-        catch (Exception ex)
-        {
-            _current = null;
-            Diagnostics.Show("SettingsWindow.Create", ex);
-        }
+        catch (Exception ex) { Diagnostics.Show("SettingsWindow.ShowOrActivate", ex); }
     }
+
+    private void BringToFront() => SetForegroundWindow(_hwnd);
 
     private static string GetVersion()
     {
         return UpdateService.CurrentVersion();
+    }
+
+    // Seed every toggle's on/off value while still inside the constructor —
+    // before the controls enter the live visual tree. A state applied pre-load
+    // snaps without the knob-slide transition; Load() later re-applies the same
+    // values (no change → no animation). The slide is thus kept only for real
+    // user clicks. _loading is true here, so the Checked handlers no-op.
+    private void PresetToggles()
+    {
+        _initialAutostart = AutostartService.IsEnabled();
+        RememberFolderSwitch.IsChecked   = _draft.RememberLastFolder;
+        AutostartSwitch.IsChecked        = _initialAutostart;
+        ScreenshotCursorSwitch.IsChecked = _draft.CaptureScreenshotCursor;
+        VideoCursorSwitch.IsChecked      = _draft.CaptureVideoCursor;
+        MicEnabledSwitch.IsChecked       = _draft.MicrophoneEnabled;
+        GifDitherSwitch.IsChecked        = _draft.GifDither;
+        NotifyMasterSwitch.IsChecked     = _draft.NotificationsEnabled;
+        NotifyScreenshotSwitch.IsChecked = _draft.NotifyScreenshotSaved;
+        NotifyVideoSwitch.IsChecked      = _draft.NotifyVideoSaved;
+        NotifyClipboardSwitch.IsChecked  = _draft.NotifyClipboard;
+        NotifyErrorsSwitch.IsChecked     = _draft.NotifyErrors;
+        NotifyUpdateSwitch.IsChecked     = _draft.NotifyUpdateAvailable;
+        NotifyHintsSwitch.IsChecked      = _draft.NotifyHints;
     }
 
     private void Load()
@@ -870,6 +929,19 @@ public sealed partial class SettingsWindow : Window
         PaneNotifications.Visibility = key == "notifications" ? Visibility.Visible : Visibility.Collapsed;
         PaneInfo.Visibility          = key == "info"          ? Visibility.Visible : Visibility.Collapsed;
 
+        FrameworkElement? shown = key switch
+        {
+            "general"       => PaneGeneral,
+            "video"         => PaneVideo,
+            "ocr"           => PaneOcr,
+            "gif"           => PaneGif,
+            "hotkeys"       => PaneHotkeys,
+            "notifications" => PaneNotifications,
+            "info"          => PaneInfo,
+            _               => null,
+        };
+        if (shown != null) FadeInPane(shown);
+
         try
         {
             var accent = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentBrush"];
@@ -883,5 +955,26 @@ public sealed partial class SettingsWindow : Window
             IconNavInfo.Foreground          = key == "info"          ? accent : dim;
         }
         catch { }
+    }
+
+    // Quick fade-in when a settings pane becomes visible — softens the
+    // section switch without delaying it. Opacity only (composition prop).
+    private static void FadeInPane(FrameworkElement pane)
+    {
+        var fade = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+        {
+            From = 0.0,
+            To = 1.0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(120)),
+            EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase
+            {
+                EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut,
+            },
+        };
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fade, pane);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fade, "Opacity");
+        var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+        sb.Children.Add(fade);
+        sb.Begin();
     }
 }
