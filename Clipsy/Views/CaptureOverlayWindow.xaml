@@ -469,7 +469,7 @@
                     <Border Style="{StaticResource ClipsyKbd}">
                         <TextBlock Text="A" Style="{StaticResource ClipsyMono}" />
                     </Border>
-                    <TextBlock Text="full screen"
+                    <TextBlock x:Name="HintFullScreenLabel" Text="full screen"
                                Foreground="{StaticResource ClipsyText2Brush}" FontSize="12" />
                 </StackPanel>
                 <Border Width="1" Background="{StaticResource ClipsyBorderBrush}" />
@@ -477,7 +477,7 @@
                     <Border Style="{StaticResource ClipsyKbd}">
                         <TextBlock Text="Esc" Style="{StaticResource ClipsyMono}" />
                     </Border>
-                    <TextBlock Text="cancel"
+                    <TextBlock x:Name="HintCancelLabel" Text="cancel"
                                Foreground="{StaticResource ClipsyText2Brush}" FontSize="12" />
                 </StackPanel>
             </StackPanel>

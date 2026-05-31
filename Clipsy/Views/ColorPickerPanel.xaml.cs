@@ -1,4 +1,5 @@
 using System;
+using Clipsy.Localization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.UI;
@@ -26,6 +27,14 @@ public sealed partial class ColorPickerPanel : UserControl
         // Set initial color in code — assigning ColorPicker.Color via XAML markup throws
         // XamlParseException (0x802B000A) on Windows App SDK 1.6 at runtime.
         try { ColorPickerCtl.Color = Microsoft.UI.Colors.Red; } catch { }
+        ApplyLocalization();
+    }
+
+    private void ApplyLocalization()
+    {
+        ToolTipService.SetToolTip(EyedropperBtn, Strings.Get("TipEyedropper"));
+        ToolTipService.SetToolTip(CancelBtn,     Strings.Get("TipColorCancel"));
+        ToolTipService.SetToolTip(ConfirmBtn,    Strings.Get("TipColorApply"));
     }
 
     /// Current color shown in the picker.

@@ -175,6 +175,9 @@ public sealed partial class CaptureOverlayWindow : Window
     private void ApplyLocalization()
     {
         HintText.Text = Strings.Get("HintSelectArea");
+        HintFullScreenLabel.Text = Strings.Get("HintFullScreen");
+        HintCancelLabel.Text = Strings.Get("HintCancel");
+        FontFilterBox.PlaceholderText = Strings.Get("FilterPlaceholder");
 
         ToolTipService.SetToolTip(RecordBtn,     Strings.Get("TipRecord"));
         ToolTipService.SetToolTip(ScreenshotBtn, Strings.Get("TipScreenshot"));

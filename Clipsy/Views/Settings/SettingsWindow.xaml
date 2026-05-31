@@ -70,6 +70,7 @@
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0"
+                               x:Name="LblSettingsHeader"
                                Text="SETTINGS"
                                Style="{StaticResource ClipsyLabel}"
                                Margin="18,18,18,10" />
@@ -523,7 +524,7 @@
                                                      GroupName="Codec" Tag="H.264" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="H.264" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
-                                                <TextBlock Text="Wide compatibility, hardware-accelerated"
+                                                <TextBlock x:Name="LblCodecH264Desc" Text="Wide compatibility, hardware-accelerated"
                                                            FontSize="11" />
                                             </StackPanel>
                                         </RadioButton>
@@ -531,7 +532,7 @@
                                                      GroupName="Codec" Tag="H.265" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="H.265" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
-                                                <TextBlock Text="Smaller files, slower encode"
+                                                <TextBlock x:Name="LblCodecH265Desc" Text="Smaller files, slower encode"
                                                            FontSize="11" />
                                             </StackPanel>
                                         </RadioButton>
@@ -539,7 +540,7 @@
                                                      GroupName="Codec" Tag="VP9" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="VP9" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
-                                                <TextBlock Text="Web-friendly, open codec"
+                                                <TextBlock x:Name="LblCodecVp9Desc" Text="Web-friendly, open codec"
                                                            FontSize="11" />
                                             </StackPanel>
                                         </RadioButton>
@@ -547,7 +548,7 @@
                                                      GroupName="Codec" Tag="AV1" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="AV1" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
-                                                <TextBlock Text="Smallest, very slow encoder"
+                                                <TextBlock x:Name="LblCodecAv1Desc" Text="Smallest, very slow encoder"
                                                            FontSize="11" />
                                             </StackPanel>
                                         </RadioButton>
@@ -995,8 +996,8 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="160" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="ACTION" Style="{StaticResource ClipsyLabel}" />
-                                            <TextBlock Grid.Column="1" Text="BINDING" Style="{StaticResource ClipsyLabel}"
+                                            <TextBlock x:Name="LblColAction" Grid.Column="0" Text="ACTION" Style="{StaticResource ClipsyLabel}" />
+                                            <TextBlock x:Name="LblColBinding" Grid.Column="1" Text="BINDING" Style="{StaticResource ClipsyLabel}"
                                                        HorizontalAlignment="Center" />
                                         </Grid>
                                     </Border>

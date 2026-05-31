@@ -112,6 +112,14 @@ public sealed partial class SettingsWindow
         UpdMonthly.Content = Strings.Get("OptMonthly");
         UpdNever.Content   = Strings.Get("OptNever");
 
+        if (LblSettingsHeader != null) LblSettingsHeader.Text = Strings.Get("SettingsHeader");
+        if (LblColAction != null)      LblColAction.Text  = Strings.Get("SectionLabelAction");
+        if (LblColBinding != null)     LblColBinding.Text = Strings.Get("SectionLabelBinding");
+        HelperVideoFormat.Text = Strings.Get("HelperVideoFormat");
+        LblCodecH264Desc.Text  = Strings.Get("CodecH264Desc");
+        LblCodecH265Desc.Text  = Strings.Get("CodecH265Desc");
+        LblCodecVp9Desc.Text   = Strings.Get("CodecVp9Desc");
+        LblCodecAv1Desc.Text   = Strings.Get("CodecAv1Desc");
         LblCodec.Text      = Strings.Get("LblCodec");
         LblResolution.Text = Strings.Get("LblResolution");
         ResBtnOriginal.Content = Strings.Get("OptResNative");

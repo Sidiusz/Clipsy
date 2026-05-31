@@ -30,22 +30,19 @@
             <Button x:Name="EyedropperBtn" Grid.Column="0"
                     Style="{StaticResource ClipsyIconButton}"
                     Visibility="Collapsed"
-                    Click="OnEyedropperClick"
-                    ToolTipService.ToolTip="Pick color from screen">
+                    Click="OnEyedropperClick">
                 <FontIcon Glyph="&#xEF3C;" FontSize="14" />
             </Button>
             <Button x:Name="CancelBtn" Grid.Column="2"
                     Style="{StaticResource ClipsyIconButton}"
                     Margin="0,0,6,0"
-                    Click="OnCancelClick"
-                    ToolTipService.ToolTip="Cancel">
+                    Click="OnCancelClick">
                 <FontIcon Glyph="&#xE711;" FontSize="14" />
             </Button>
             <Button x:Name="ConfirmBtn" Grid.Column="3"
                     Style="{StaticResource ClipsyIconButton}"
                     Background="{StaticResource ClipsyAccentBrush}"
-                    Click="OnConfirmClick"
-                    ToolTipService.ToolTip="Apply">
+                    Click="OnConfirmClick">
                 <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="Black" />
             </Button>
         </Grid>
