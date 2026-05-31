@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Clipsy.Drawing;
 using Microsoft.UI.Xaml;
@@ -5,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 using Point = Windows.Foundation.Point;
@@ -267,6 +269,43 @@ public sealed partial class CaptureOverlayWindow
             _ => ToolKind.None,
         };
         SetTool(tb.IsChecked == true ? tool : ToolKind.None);
+        if (tb.IsChecked == true) PopButton(tb);
+    }
+
+    // Quick scale-pop on tool select — confirms the click without delaying it.
+    // ScaleX/ScaleY on a transform are dependent animations, hence the flag.
+    private static void PopButton(FrameworkElement el)
+    {
+        if (el == null) return;
+        el.RenderTransformOrigin = new Point(0.5, 0.5);
+        if (el.RenderTransform is not ScaleTransform st)
+        {
+            st = new ScaleTransform();
+            el.RenderTransform = st;
+        }
+
+        var sb = new Storyboard();
+        foreach (var prop in new[] { "ScaleX", "ScaleY" })
+        {
+            var a = new DoubleAnimationUsingKeyFrames { EnableDependentAnimation = true };
+            a.KeyFrames.Add(new DiscreteDoubleKeyFrame { KeyTime = TimeSpan.Zero, Value = 1.0 });
+            a.KeyFrames.Add(new EasingDoubleKeyFrame
+            {
+                KeyTime = KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(55)),
+                Value = 1.12,
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            });
+            a.KeyFrames.Add(new EasingDoubleKeyFrame
+            {
+                KeyTime = KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(120)),
+                Value = 1.0,
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
+            });
+            Storyboard.SetTarget(a, st);
+            Storyboard.SetTargetProperty(a, prop);
+            sb.Children.Add(a);
+        }
+        sb.Begin();
     }
 
     private void SetTool(ToolKind tool)

@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Foundation;
 using Windows.Graphics;
 using WinRT.Interop;
@@ -31,6 +32,7 @@ public sealed partial class RecordingHudWindow : Window
     private TimeSpan _accumulated = TimeSpan.Zero;
     private bool _paused;
     private bool _locked = true;
+    private Storyboard? _recPulse;
 
     public event Action? PauseRequested;
     public event Action? ResumeRequested;
@@ -120,12 +122,37 @@ public sealed partial class RecordingHudWindow : Window
         HudRoot.Opacity = 1.0;
         _timer.Start();
         _hideTimer.Start();
+        StartRecPulse();
     }
 
     public void Shutdown()
     {
         _timer.Stop();
         _hideTimer.Stop();
+        _recPulse?.Stop();
+        _recPulse = null;
+    }
+
+    // Slow opacity pulse on the REC dot — the universal "live" cue.
+    // Opacity is a composition-thread (independent) property, so it stays
+    // smooth even if the UI thread is busy.
+    private void StartRecPulse()
+    {
+        if (_recPulse != null) return;
+        var anim = new DoubleAnimation
+        {
+            From = 1.0,
+            To = 0.3,
+            Duration = new Duration(TimeSpan.FromMilliseconds(850)),
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        };
+        Storyboard.SetTarget(anim, RecDot);
+        Storyboard.SetTargetProperty(anim, "Opacity");
+        _recPulse = new Storyboard();
+        _recPulse.Children.Add(anim);
+        _recPulse.Begin();
     }
 
     public void PositionBelowRegion(int regionX, int regionY, int regionW, int regionH, int virtualScreenH)
@@ -255,12 +282,15 @@ public sealed partial class RecordingHudWindow : Window
         {
             _accumulated += DateTime.UtcNow - _startedAt;
             PauseIcon.Glyph = GlyphPlay;
+            _recPulse?.Pause();
+            RecDot.Opacity = 0.3; // steady dim = paused
             PauseRequested?.Invoke();
         }
         else
         {
             _startedAt = DateTime.UtcNow;
             PauseIcon.Glyph = GlyphPause;
+            _recPulse?.Resume();
             ResumeRequested?.Invoke();
         }
     }

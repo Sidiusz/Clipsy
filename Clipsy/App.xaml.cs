@@ -78,6 +78,10 @@ public partial class App : Application
         RegisterHotkeys();
         SettingsService.Instance.SettingsChanged += OnSettingsChangedRewireHotkeys;
 
+        // Pre-create + warm the Settings window off-screen so the first open is
+        // instant and never shows WinUI's black first-paint frame.
+        Clipsy.Views.Settings.SettingsWindow.Prewarm();
+
         _ = CheckUpdatesIfDueAsync();
 
         // Warm up the capture pipeline so the first PrintScreen press doesn't

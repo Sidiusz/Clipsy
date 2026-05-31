@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Windows.Graphics;
 using Windows.UI;
 using WinRT.Interop;
@@ -30,6 +31,7 @@ public sealed partial class TrayMenuWindow : Window
     private readonly AppWindow _appWindow;
     private bool _hiding;
     private TrayUpdateStatus _updateStatus = TrayUpdateStatus.Idle;
+    private EventHandler<object>? _fadeHandler;
 
     private static readonly SolidColorBrush s_transparent = new(Colors.Transparent);
 
@@ -51,6 +53,7 @@ public sealed partial class TrayMenuWindow : Window
         ApplyLocalization();
 
         Activated += OnActivated;
+        WarmUp();
 
         // Re-localize when language flips so the next tray-menu open shows
         // the new strings without an app restart.
@@ -87,6 +90,10 @@ public sealed partial class TrayMenuWindow : Window
         if (x < work.left)       x = work.left;
         if (y < work.top)        y = pt.y + 4;
 
+        // Start fully transparent (layered alpha 0) so the uncloak reveals
+        // nothing until the fade ramps it up.
+        SetLayeredWindowAttributes(_hwnd, 0, 0, LWA_ALPHA);
+
         try
         {
             _appWindow.MoveAndResize(new RectInt32(x, y, w, h));
@@ -98,12 +105,65 @@ public sealed partial class TrayMenuWindow : Window
             Diagnostics.Log("TrayMenuWindow.ShowAtCursor MoveAndResize", ex);
             return;
         }
+        Cloak(false); // reveal the already-composed frame — no black swapchain flash
         Activate();
         // H.NotifyIcon's right-click handler runs inside a tray nested
         // message pump; without an explicit foreground request the window
         // shows but Windows never marks it active, so the Deactivated event
         // never fires when the user clicks elsewhere and the menu sticks.
         SetForegroundWindow(_hwnd);
+        PlayOpenAnimation();
+    }
+
+    // Show the window once, off-screen and cloaked, so WinUI composes its
+    // first frame into the swapchain. From then on the surface stays warm and
+    // every open is just an uncloak — the black "first paint" never recurs.
+    private void WarmUp()
+    {
+        try
+        {
+            Cloak(true);
+            _appWindow.MoveAndResize(new RectInt32(-32000, -32000, MenuW, CurrentMenuH));
+            Activate();
+        }
+        catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.WarmUp", ex); }
+    }
+
+    // DWM cloaking hides the window from the compositor WITHOUT destroying its
+    // swapchain content (unlike AppWindow.Hide). Cloaked windows are also not
+    // hit-testable, so this fully replaces Hide for dismissal.
+    private void Cloak(bool on)
+    {
+        int v = on ? 1 : 0;
+        DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref v, sizeof(int));
+    }
+
+    // Uniform whole-window fade via the layered-window alpha (0→255 over
+    // 120ms, ease-out). Fades the entire composited frame — backdrop and
+    // content together — so there's no content-scaling artifact and, because
+    // layered-transparent shows the desktop (not black), no flash.
+    private void PlayOpenAnimation()
+    {
+        StopFade();
+        var start = DateTime.UtcNow;
+        const double durMs = 120.0;
+        _fadeHandler = (_, _) =>
+        {
+            double t = Math.Min((DateTime.UtcNow - start).TotalMilliseconds / durMs, 1.0);
+            double eased = 1.0 - Math.Pow(1.0 - t, 3); // ease-out cubic
+            SetLayeredWindowAttributes(_hwnd, 0, (byte)(eased * 255), LWA_ALPHA);
+            if (t >= 1.0) StopFade();
+        };
+        CompositionTarget.Rendering += _fadeHandler;
+    }
+
+    private void StopFade()
+    {
+        if (_fadeHandler != null)
+        {
+            CompositionTarget.Rendering -= _fadeHandler;
+            _fadeHandler = null;
+        }
     }
 
     public void SetUpdateStatus(TrayUpdateStatus status, string? newVersion = null)
@@ -177,8 +237,13 @@ public sealed partial class TrayMenuWindow : Window
         style |= WS_POPUP;
         SetWindowLong(_hwnd, GWL_STYLE, unchecked((int)style));
 
+        // WS_EX_LAYERED makes DWM compose the window to an off-screen buffer
+        // and present it atomically. Without it, WinUI shows the bare HWND
+        // (black background erase) for a frame before the XAML content paints
+        // — the "black backdrop" flash. LWA_ALPHA 255 keeps it fully opaque.
         int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
-        SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+        SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_LAYERED);
+        SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
 
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -223,7 +288,8 @@ public sealed partial class TrayMenuWindow : Window
     {
         if (_hiding) return;
         _hiding = true;
-        _appWindow.Hide();
+        StopFade();
+        Cloak(true); // keep the swapchain warm; do not tear it down with Hide()
         foreach (var row in _parts.Keys)
             SetHover(row, false);
         _hiding = false;
@@ -313,11 +379,14 @@ public sealed partial class TrayMenuWindow : Window
     private const uint  WS_MAXIMIZEBOX  = 0x00010000;
     private const uint  WS_SYSMENU   = 0x00080000;
     private const int   WS_EX_TOOLWINDOW = 0x00000080;
+    private const int   WS_EX_LAYERED     = 0x00080000;
+    private const int   LWA_ALPHA         = 0x00000002;
     private const uint  SWP_NOMOVE      = 0x0002;
     private const uint  SWP_NOSIZE      = 0x0001;
     private const uint  SWP_NOZORDER    = 0x0004;
     private const uint  SWP_NOACTIVATE  = 0x0010;
     private const uint  SWP_FRAMECHANGED = 0x0020;
+    private const int   DWMWA_CLOAK = 13;
     private const int   DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int   DWMWA_BORDER_COLOR = 34;
     private const uint  DWMWA_COLOR_NONE = 0xFFFFFFFE;
@@ -328,6 +397,7 @@ public sealed partial class TrayMenuWindow : Window
     [DllImport("user32.dll")]  private static extern bool  SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
     [DllImport("user32.dll")]  private static extern bool  GetCursorPos(out POINT pt);
     [DllImport("user32.dll")]  private static extern bool  SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, int dwFlags);
     [DllImport("user32.dll")]  private static extern uint  GetDpiForWindow(IntPtr h);
     [DllImport("user32.dll")]  private static extern IntPtr MonitorFromPoint(POINT pt, uint f);
     [DllImport("user32.dll")]  private static extern bool  GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
