@@ -83,10 +83,18 @@ public sealed class Win32ResizeOverlay
     public void MoveTo(int x, int y, int w, int h)
     {
         if (!_created) return;
+        // Reposition-only fast path: a pure move leaves the border + 8 handles
+        // pixel-identical, so just slide the layered window with SetWindowPos
+        // instead of reallocating the DIB and repainting every drag tick. Only
+        // an actual size change needs a fresh surface + redraw.
+        bool sizeChanged = (w != _w || h != _h);
         _x = x; _y = y; _w = w; _h = h;
         SetWindowPos(_hwnd, HWND_TOPMOST, WinX, WinY, WinW, WinH, SWP_SHOWWINDOW | SWP_NOACTIVATE);
-        AllocDib();
-        Render();
+        if (sizeChanged)
+        {
+            AllocDib();
+            Render();
+        }
     }
 
     public void SetZOrder(bool topmost)

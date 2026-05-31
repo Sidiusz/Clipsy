@@ -92,10 +92,19 @@ public sealed class Win32DrawingOverlay
     public void MoveTo(int x, int y, int w, int h)
     {
         if (!_created) return;
+        // Reposition-only fast path: when the size is unchanged (pure region
+        // move, e.g. dragging while recording) the DIB pixels are identical and
+        // strokes are stored in window-local coords, so moving the layered
+        // window with SetWindowPos carries the content along. Skip the costly
+        // DIB realloc + full GDI+ repaint (≈14 MB at 1440p per tick).
+        bool sizeChanged = (w != _w || h != _h);
         _x = x; _y = y; _w = w; _h = h;
         SetWindowPos(_hwnd, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
-        AllocDib();
-        Render();
+        if (sizeChanged)
+        {
+            AllocDib();
+            Render();
+        }
     }
 
     public void SetActive(bool active)
@@ -187,14 +196,20 @@ public sealed class Win32DrawingOverlay
         UpdateLayered();
     }
 
+    // Cache the GDI+ PointF[] per finished stroke. Render() runs on every mouse
+    // move (stroke growth AND cursor-ring follow), and DrawLines needs an array;
+    // without this each completed stroke re-allocated its array every frame.
+    // Keyed weakly so erased/undone strokes drop out without manual cleanup.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Clipsy.Drawing.PencilEngine.Stroke, System.Drawing.PointF[]> _ptCache = new();
+
     private void DrawAll(System.Drawing.Graphics g)
     {
-        foreach (var s in _engine.Strokes) DrawStroke(g, s);
-        if (_engine.Current != null) DrawStroke(g, _engine.Current);
+        foreach (var s in _engine.Strokes) DrawStroke(g, s, isCurrent: false);
+        if (_engine.Current != null) DrawStroke(g, _engine.Current, isCurrent: true);
         DrawPreviewRing(g);
     }
 
-    private static void DrawStroke(System.Drawing.Graphics g, Clipsy.Drawing.PencilEngine.Stroke s)
+    private void DrawStroke(System.Drawing.Graphics g, Clipsy.Drawing.PencilEngine.Stroke s, bool isCurrent)
     {
         if (s.Points.Count < 1) return;
         using var pen = new Pen(s.Color, s.Thickness)
@@ -211,7 +226,19 @@ public sealed class Win32DrawingOverlay
         }
         else
         {
-            g.DrawLines(pen, s.Points.ToArray());
+            // The current stroke grows each frame, so it can't be cached; finished
+            // strokes are immutable and reuse their cached vertex array.
+            System.Drawing.PointF[] pts;
+            if (isCurrent)
+            {
+                pts = s.Points.ToArray();
+            }
+            else if (!_ptCache.TryGetValue(s, out pts!))
+            {
+                pts = s.Points.ToArray();
+                _ptCache.Add(s, pts);
+            }
+            g.DrawLines(pen, pts);
         }
     }
 
