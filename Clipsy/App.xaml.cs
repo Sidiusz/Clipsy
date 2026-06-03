@@ -37,6 +37,7 @@ public partial class App : Application
             Diagnostics.Log("TaskScheduler.UnobservedTaskException", e.Exception);
             e.SetObserved();
         };
+#if DEBUG
         try
         {
             DebugSettings.IsBindingTracingEnabled = true;
@@ -50,6 +51,7 @@ public partial class App : Application
         {
             Diagnostics.Log("DebugSettings setup failed", ex);
         }
+#endif
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
