@@ -275,6 +275,8 @@ public sealed partial class CaptureOverlayWindow : Window
             op.IsMinimizable = false;
             op.IsAlwaysOnTop = true;
         }
+        _appWindow.IsShownInSwitchers = false;
+
         var b = _frame.VirtualBounds;
 
         // AppWindow.MoveAndResize and SetWindowPos both take physical screen pixels.

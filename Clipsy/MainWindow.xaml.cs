@@ -74,9 +74,11 @@ public sealed partial class MainWindow : Window
     {
         const int GWL_EXSTYLE = -20;
         const int WS_EX_TOOLWINDOW = 0x00000080;
+        const int WS_EX_NOACTIVATE = 0x08000000;
         var ex = GetWindowLong(Hwnd, GWL_EXSTYLE);
-        SetWindowLong(Hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW);
+        SetWindowLong(Hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
         AppWindow.MoveAndResize(new RectInt32(-32000, -32000, 1, 1));
+        AppWindow.IsShownInSwitchers = false;
     }
 
     // ---------- Win32 ----------
