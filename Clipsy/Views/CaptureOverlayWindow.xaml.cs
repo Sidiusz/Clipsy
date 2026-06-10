@@ -431,7 +431,14 @@ public sealed partial class CaptureOverlayWindow : Window
 
             sb.Begin();
         }
-        catch { /* purely cosmetic — never block the overlay */ }
+        catch
+        {
+            // Cosmetic only — but the elements start hidden (Opacity 0 in
+            // XAML), so on any failure snap them to their final state.
+            DimPath.Opacity = 1;
+            Hint.Opacity = 1;
+            HintTranslate.Y = 0;
+        }
     }
 
     private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
