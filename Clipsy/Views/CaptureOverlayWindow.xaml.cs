@@ -293,10 +293,13 @@ public sealed partial class CaptureOverlayWindow : Window
 
         var b = _frame.VirtualBounds;
 
-        // AppWindow.MoveAndResize and SetWindowPos both take physical screen pixels.
-        // Never divide b.Width/b.Height by dpiScale here — that shrinks the window.
-        _appWindow.MoveAndResize(new RectInt32(b.X, b.Y, b.Width, b.Height));
-        SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height,
+        // First present happens OFF-SCREEN (the TrayMenuWindow.WarmUp trick):
+        // whatever black erase WinUI paints around Activate() lands at -32000
+        // where nobody sees it. Uncloak() moves the window into place once the
+        // frame is composed. AppWindow.MoveAndResize and SetWindowPos both
+        // take physical screen pixels — never divide sizes by dpiScale here.
+        _appWindow.MoveAndResize(new RectInt32(OffscreenX, OffscreenY, b.Width, b.Height));
+        SetWindowPos(_hwnd, HWND_TOPMOST, OffscreenX, OffscreenY, b.Width, b.Height,
             SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
         // XAML element sizes are in DIPs, so divide by DPI scale.
@@ -364,8 +367,11 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         if (!_cloaked) return;
         _cloaked = false;
-        // Frame is composed by now: make the layered window opaque first,
-        // then uncloak — the reveal is atomic, nothing black in between.
+        // Frame is composed by now: move the window from its off-screen
+        // warm-up spot into place, make it opaque, then uncloak — the reveal
+        // is atomic, nothing black in between.
+        var b = _frame.VirtualBounds;
+        SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
         SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
         int cloak = 0;
         DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
@@ -462,6 +468,9 @@ public sealed partial class CaptureOverlayWindow : Window
     private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
 
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    // Off-screen warm-up position for the first (black-erase) present.
+    private const int OffscreenX = -32000;
+    private const int OffscreenY = -32000;
     private const uint SWP_NOACTIVATE   = 0x0010;
     private const uint SWP_SHOWWINDOW   = 0x0040;
     private const uint SWP_NOMOVE       = 0x0002;
