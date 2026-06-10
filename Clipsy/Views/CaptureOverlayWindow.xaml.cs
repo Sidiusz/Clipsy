@@ -367,20 +367,43 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         if (!_cloaked) return;
         _cloaked = false;
-        // Frame is composed by now: move the window from its off-screen
-        // warm-up spot into place, make it opaque, then uncloak — the reveal
-        // is atomic, nothing black in between.
+        // Move the window from its off-screen warm-up spot into place — but do
+        // NOT reveal yet: moving makes DWM refresh the window's redirection
+        // surface, which paints black until the next XAML present. Revealing
+        // immediately after the move was the residual black flash. Stay
+        // cloaked for two more composition ticks at the final position.
         var b = _frame.VirtualBounds;
         SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
-        SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
-        int cloak = 0;
-        DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
-        // The overlay is shown with SWP_NOACTIVATE (avoids taskbar flash), so
-        // it never receives keyboard focus — Esc/Ctrl+A were dead until the
-        // first click. Take the foreground explicitly once visible.
-        SetForegroundWindow(_hwnd);
-        RootGrid.Focus(FocusState.Programmatic);
-        PlayIntroAnimations();
+        int ticksAfterMove = 0;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnPostMoveTick;
+        void OnPostMoveTick(object? s, object e)
+        {
+            if (++ticksAfterMove < 2) return;
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPostMoveTick;
+            SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
+            int cloak = 0;
+            DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
+            // The overlay is shown with SWP_NOACTIVATE (avoids taskbar flash),
+            // so it never receives keyboard focus — Esc/Ctrl+A were dead until
+            // the first click. Take the foreground explicitly once visible.
+            SetForegroundWindow(_hwnd);
+            RootGrid.Focus(FocusState.Programmatic);
+            PlayIntroAnimations();
+        }
+    }
+
+    // Make the window invisible instantly (cloak + layered alpha 0). Called
+    // right before Close(): tearing the window down while visible paints the
+    // same black redirection surface for a frame — the flash on cancel/save.
+    internal void HideForClose()
+    {
+        try
+        {
+            SetLayeredWindowAttributes(_hwnd, 0, 0, LWA_ALPHA);
+            int cloak = 1;
+            DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
+        }
+        catch { }
     }
 
     // Soft entrance on reveal: the dim fades up over ~120 ms and the hint
