@@ -144,12 +144,10 @@ public partial class App : Application
                 _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.UpToDate);
                 return;
             }
-            var releaseUrl = info.Url;
-            var version    = info.Version;
+            var version = info.Version;
             NotificationService.UpdateAvailable(
-                version,
+                info,
                 Strings.Get("UpdateAvailable"),
-                releaseUrl,
                 skipVersion: () =>
                 {
                     SettingsService.Instance.Settings.SkippedVersion = version;
