@@ -30,6 +30,7 @@ public sealed partial class TrayMenuWindow : Window
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
     private bool _hiding;
+    private bool _closed;
     private TrayUpdateStatus _updateStatus = TrayUpdateStatus.Idle;
     private EventHandler<object>? _fadeHandler;
 
@@ -54,6 +55,7 @@ public sealed partial class TrayMenuWindow : Window
         ApplyLocalization();
 
         Activated += OnActivated;
+        Closed += (_, _) => _closed = true;
         WarmUp();
 
         // Re-localize when language flips so the next tray-menu open shows
@@ -73,6 +75,8 @@ public sealed partial class TrayMenuWindow : Window
 
     public void ShowAtCursor()
     {
+        if (_closed) return;
+
         double scale = GetDpiScale();
         int w = (int)(MenuW * scale);
         int h = (int)(CurrentMenuH * scale);
@@ -281,13 +285,14 @@ public sealed partial class TrayMenuWindow : Window
 
     private void OnActivated(object sender, WindowActivatedEventArgs e)
     {
+        if (_closed) return;
         if (e.WindowActivationState == WindowActivationState.Deactivated && !_hiding)
             HideMenu();
     }
 
     private void HideMenu()
     {
-        if (_hiding) return;
+        if (_hiding || _closed) return;
         _hiding = true;
         StopFade();
         Cloak(true); // keep the swapchain warm; do not tear it down with Hide()
