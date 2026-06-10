@@ -127,9 +127,12 @@
                         <Grid>
                             <FontIcon Glyph="&#xE711;" FontSize="16"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            <TextBlock Text="Esc" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
-                                       HorizontalAlignment="Left" VerticalAlignment="Top"
-                                       Margin="2,2,0,0" IsHitTestVisible="False" />
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Background="{StaticResource ClipsyBg2Brush}"
+                                    CornerRadius="3" Padding="2,0" Margin="1,1,0,0"
+                                    IsHitTestVisible="False">
+                                <TextBlock Text="Esc" FontSize="8" FontWeight="SemiBold" Opacity="0.85" />
+                            </Border>
                         </Grid>
                     </Button>
                 </StackPanel>
@@ -355,9 +358,12 @@
                         <Grid>
                             <FontIcon Glyph="&#xE70F;" FontSize="16"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            <TextBlock Text="1" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
-                                       HorizontalAlignment="Left" VerticalAlignment="Top"
-                                       Margin="2,2,0,0" IsHitTestVisible="False" />
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Background="{StaticResource ClipsyBg2Brush}"
+                                    CornerRadius="3" Padding="2,0" Margin="1,1,0,0"
+                                    IsHitTestVisible="False">
+                                <TextBlock Text="1" FontSize="8" FontWeight="SemiBold" Opacity="0.85" />
+                            </Border>
                         </Grid>
                     </Button>
                     <Button x:Name="TextBtn"
@@ -375,9 +381,12 @@
                                 <TextBlock x:Name="TextBtnGlyphSmall" Text="T" FontWeight="SemiBold" FontSize="9"
                                            VerticalAlignment="Bottom" Margin="1,0,0,1" />
                             </StackPanel>
-                            <TextBlock Text="2" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
-                                       HorizontalAlignment="Left" VerticalAlignment="Top"
-                                       Margin="2,2,0,0" IsHitTestVisible="False" />
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Background="{StaticResource ClipsyBg2Brush}"
+                                    CornerRadius="3" Padding="2,0" Margin="1,1,0,0"
+                                    IsHitTestVisible="False">
+                                <TextBlock Text="2" FontSize="8" FontWeight="SemiBold" Opacity="0.85" />
+                            </Border>
                         </Grid>
                     </Button>
                     <Button x:Name="ShapesBtn"
@@ -408,9 +417,12 @@
                                               Fill="Transparent" />
                                 </Grid>
                             </Grid>
-                            <TextBlock Text="3" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
-                                       HorizontalAlignment="Left" VerticalAlignment="Top"
-                                       Margin="2,2,0,0" IsHitTestVisible="False" />
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Background="{StaticResource ClipsyBg2Brush}"
+                                    CornerRadius="3" Padding="2,0" Margin="1,1,0,0"
+                                    IsHitTestVisible="False">
+                                <TextBlock Text="3" FontSize="8" FontWeight="SemiBold" Opacity="0.85" />
+                            </Border>
                         </Grid>
                     </Button>
                     <Border Style="{StaticResource ClipsyToolbarSeparatorHorizontal}" />
@@ -427,9 +439,12 @@
                                            HorizontalAlignment="Right" VerticalAlignment="Top"
                                            Margin="0,-2,-2,0" />
                             </Grid>
-                            <TextBlock Text="4" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
-                                       HorizontalAlignment="Left" VerticalAlignment="Top"
-                                       Margin="2,2,0,0" IsHitTestVisible="False" />
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Background="{StaticResource ClipsyBg2Brush}"
+                                    CornerRadius="3" Padding="2,0" Margin="1,1,0,0"
+                                    IsHitTestVisible="False">
+                                <TextBlock Text="4" FontSize="8" FontWeight="SemiBold" Opacity="0.85" />
+                            </Border>
                         </Grid>
                     </Button>
                 </StackPanel>
