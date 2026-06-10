@@ -378,9 +378,20 @@ public sealed partial class CaptureOverlayWindow : Window
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnPostMoveTick;
         void OnPostMoveTick(object? s, object e)
         {
-            if (++ticksAfterMove < 2) return;
+            ticksAfterMove++;
+            if (ticksAfterMove == 2)
+            {
+                // Strip WS_EX_LAYERED while still cloaked: a full-screen
+                // layered window goes through DWM's slow composition path and
+                // caps interaction FPS hard on high-refresh monitors. The flag
+                // was only needed to mask the first present.
+                SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_TOOLWINDOW);
+                SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                return;
+            }
+            if (ticksAfterMove < 3) return;
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPostMoveTick;
-            SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
             int cloak = 0;
             DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
             // The overlay is shown with SWP_NOACTIVATE (avoids taskbar flash),
@@ -392,14 +403,13 @@ public sealed partial class CaptureOverlayWindow : Window
         }
     }
 
-    // Make the window invisible instantly (cloak + layered alpha 0). Called
-    // right before Close(): tearing the window down while visible paints the
-    // same black redirection surface for a frame — the flash on cancel/save.
+    // Make the window invisible instantly (DWM cloak). Called right before
+    // Close(): tearing the window down while visible paints the black
+    // redirection surface for a frame — the flash on cancel/save.
     internal void HideForClose()
     {
         try
         {
-            SetLayeredWindowAttributes(_hwnd, 0, 0, LWA_ALPHA);
             int cloak = 1;
             DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
         }

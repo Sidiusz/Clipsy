@@ -67,7 +67,10 @@ public static class ThemeService
 
         foreach (var el in live)
         {
-            ApplyTo(el);
+            // One broken window (e.g. mid-teardown) must not abort theming
+            // the rest or crash the settings save.
+            try { ApplyTo(el); }
+            catch (Exception ex) { Diagnostics.Log("ThemeService.ApplyToRegistered", ex); }
         }
     }
 }

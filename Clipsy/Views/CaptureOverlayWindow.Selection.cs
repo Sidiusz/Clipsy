@@ -256,41 +256,54 @@ public sealed partial class CaptureOverlayWindow
 
         double bx, by, rx, ry;
 
+        // Placement per axis: preferred side outside → opposite side outside →
+        // inside the selection. Never lets an island leave the screen.
+        double PlaceOutsideOrInside(double prefer, double opposite, double inside, double size, double limit)
+        {
+            if (prefer >= 8 && prefer + size <= limit - 8) return prefer;
+            if (opposite >= 8 && opposite + size <= limit - 8) return opposite;
+            return inside;
+        }
+
         if (Clipsy.Services.SettingsService.Instance.Settings.DynamicToolbarIslands)
         {
             // Both islands dock to the corner where the selection drag ended,
-            // aligned edge-to-corner (not centered). Falls inside the
-            // selection when there is no room outside.
+            // aligned edge-to-corner (not centered). When the anchored side
+            // has no room, flip to the opposite side; inside is the last resort.
             bx = _anchorRight ? selR - bw : selX;
-            by = _anchorBottom ? selB + 12 : selY - bh - 12;
-            bool bottomFits = _anchorBottom ? by + bh <= rootH - 8 : by >= 8;
-            if (!bottomFits) by = _anchorBottom ? selB - bh - 8 : selY + 8;
+            by = PlaceOutsideOrInside(
+                prefer:   _anchorBottom ? selB + 12 : selY - bh - 12,
+                opposite: _anchorBottom ? selY - bh - 12 : selB + 12,
+                inside:   _anchorBottom ? selB - bh - 8 : selY + 8,
+                size: bh, limit: rootH);
 
-            rx = _anchorRight ? selR + 12 : selX - rw - 12;
-            bool rightFits = _anchorRight ? rx + rw <= rootW - 8 : rx >= 8;
-            if (!rightFits) rx = _anchorRight ? selR - rw - 8 : selX + 8;
+            rx = PlaceOutsideOrInside(
+                prefer:   _anchorRight ? selR + 12 : selX - rw - 12,
+                opposite: _anchorRight ? selX - rw - 12 : selR + 12,
+                inside:   _anchorRight ? selR - rw - 8 : selX + 8,
+                size: rw, limit: rootW);
             ry = _anchorBottom ? selB - rh : selY;
         }
         else
         {
             bx = selX + (_selectionRect.Width - bw) / 2;
-            by = selB + 12;
-            if (by + bh > rootH - 8)
-            {
-                by = selY - bh - 12;
-                if (by < 8) by = selB - bh - 8;
-            }
+            by = PlaceOutsideOrInside(
+                prefer:   selB + 12,
+                opposite: selY - bh - 12,
+                inside:   selB - bh - 8,
+                size: bh, limit: rootH);
 
-            rx = selR + 12;
             ry = selY + (_selectionRect.Height - rh) / 2;
-            if (rx + rw > rootW - 8)
-            {
-                rx = selX - rw - 12;
-                if (rx < 8) rx = selR - rw - 8;
-            }
+            rx = PlaceOutsideOrInside(
+                prefer:   selR + 12,
+                opposite: selX - rw - 12,
+                inside:   selR - rw - 8,
+                size: rw, limit: rootW);
         }
 
         bx = System.Math.Clamp(bx, 8, System.Math.Max(8, rootW - bw - 8));
+        by = System.Math.Clamp(by, 8, System.Math.Max(8, rootH - bh - 8));
+        rx = System.Math.Clamp(rx, 8, System.Math.Max(8, rootW - rw - 8));
         ry = System.Math.Clamp(ry, 8, System.Math.Max(8, rootH - rh - 8));
 
         // Islands must never overlap each other: slide the horizontal bar
