@@ -294,7 +294,7 @@ public sealed partial class EyedropperOverlayWindow : Window
     {
         try
         {
-            using var ms = new MemoryStream(_frame.PngBytes);
+            using var ms = new MemoryStream(_frame.ImageBytes);
             _bitmap = new System.Drawing.Bitmap(ms);
             var rect = new System.Drawing.Rectangle(0, 0, _bitmap.Width, _bitmap.Height);
             var data = _bitmap.LockBits(rect,

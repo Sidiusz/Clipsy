@@ -111,7 +111,7 @@ public sealed partial class CaptureOverlayWindow
         if (_eyedropperPixels != null) return;
         try
         {
-            using var ms = new MemoryStream(_frame.PngBytes);
+            using var ms = new MemoryStream(_frame.ImageBytes);
             _eyedropperBitmap = new System.Drawing.Bitmap(ms);
 
             // Pre-copy all pixels once so UpdateMagnifier can read them without

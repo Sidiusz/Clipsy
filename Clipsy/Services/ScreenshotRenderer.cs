@@ -110,7 +110,7 @@ public static class ScreenshotRenderer
         IReadOnlyList<DrawElement> elements,
         double dpiScale)
     {
-        using var srcMs = new MemoryStream(frame.PngBytes);
+        using var srcMs = new MemoryStream(frame.ImageBytes);
         using var src = new Bitmap(srcMs);
 
         int px = (int)System.Math.Floor(selectionDip.X * dpiScale);
