@@ -125,7 +125,7 @@
                             ToolTipService.ToolTip="Cancel (Esc)"
                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                         <Grid>
-                            <FontIcon Glyph="&#xE711;" FontSize="16"
+                            <FontIcon Glyph="&#xE711;" FontSize="16" Margin="0,8,0,0"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                             <Border HorizontalAlignment="Left" VerticalAlignment="Top"
                                     Background="{StaticResource ClipsyBg2Brush}"
@@ -356,7 +356,8 @@
                         <!-- Content stretched to the full button so the hotkey badge
                              pins to the button's own top-left corner, not the icon's. -->
                         <Grid>
-                            <FontIcon Glyph="&#xE70F;" FontSize="16"
+                            <!-- Icon nudged below the badge chip's row so they never overlap -->
+                            <FontIcon Glyph="&#xE70F;" FontSize="16" Margin="0,8,0,0"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                             <Border HorizontalAlignment="Left" VerticalAlignment="Top"
                                     Background="{StaticResource ClipsyBg2Brush}"
@@ -375,7 +376,7 @@
                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                         <Grid>
                             <!-- Big T + small T (small caps style) -->
-                            <StackPanel Orientation="Horizontal"
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
                                         HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock x:Name="TextBtnGlyph" Text="T" FontWeight="SemiBold" FontSize="14" />
                                 <TextBlock x:Name="TextBtnGlyphSmall" Text="T" FontWeight="SemiBold" FontSize="9"
@@ -397,7 +398,7 @@
                             ToolTipService.ToolTip="Shapes"
                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                         <Grid>
-                            <Grid x:Name="ShapeIconContainer" Width="16" Height="16"
+                            <Grid x:Name="ShapeIconContainer" Width="16" Height="16" Margin="0,8,0,0"
                                   HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Rectangle x:Name="ShapeIconRect" Width="14" Height="14"
                                            Stroke="{StaticResource ClipsyText2Brush}"
@@ -432,7 +433,7 @@
                             ToolTipService.ToolTip="Find text"
                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                         <Grid>
-                            <Grid Width="18" Height="18"
+                            <Grid Width="18" Height="18" Margin="0,10,0,0"
                                   HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE721;" FontSize="16" />
                                 <TextBlock Text="T" FontSize="9" FontWeight="Bold"
