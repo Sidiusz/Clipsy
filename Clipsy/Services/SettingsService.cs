@@ -39,6 +39,9 @@ public sealed class AppSettings
     public bool CaptureScreenshotCursor { get; set; } = true;
     public bool CaptureVideoCursor { get; set; } = true;
 
+    // Capture overlay: dock toolbars to the corner where the selection drag ended
+    public bool DynamicToolbarIslands { get; set; } = false;
+
     // GIF
     public int GifColors { get; set; } = 256;
     public int GifFps { get; set; } = 12;

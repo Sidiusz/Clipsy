@@ -91,6 +91,16 @@ public sealed partial class CaptureOverlayWindow
                 DrawingCanvas.Children.Add(_activeLineVisual);
                 RootGrid.CapturePointer(pointer);
                 break;
+            case ToolKind.Arrow:
+                _mode = InteractionMode.DrawingRect;
+                _activeRectAnchor = pos;
+                _activeArrowEnd = pos;
+                _activeArrowVisual = BuildArrowVisual(pos, pos,
+                    new SolidColorBrush(_drawing.Settings.Color),
+                    _drawing.Settings.LineThickness);
+                DrawingCanvas.Children.Add(_activeArrowVisual);
+                RootGrid.CapturePointer(pointer);
+                break;
             case ToolKind.Text:
                 // Click-to-place: do not enter a drag mode and do not capture
                 // the pointer. PointerReleased resets _mode to Idle, and the
@@ -98,6 +108,55 @@ public sealed partial class CaptureOverlayWindow
                 StartTextEntry(pos);
                 break;
         }
+    }
+
+    // ---------- Arrow geometry ----------
+
+    private Microsoft.UI.Xaml.Shapes.Path? _activeArrowVisual;
+    private Point _activeArrowEnd;
+
+    private static Microsoft.UI.Xaml.Shapes.Path BuildArrowVisual(Point start, Point end, Brush stroke, double thickness)
+    {
+        return new Microsoft.UI.Xaml.Shapes.Path
+        {
+            Data = BuildArrowGeometry(start, end, thickness),
+            Stroke = stroke,
+            StrokeThickness = thickness,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round,
+        };
+    }
+
+    private static Geometry BuildArrowGeometry(Point start, Point end, double thickness)
+    {
+        var geo = new PathGeometry();
+        var shaft = new PathFigure { StartPoint = start, IsClosed = false, IsFilled = false };
+        shaft.Segments.Add(new LineSegment { Point = end });
+        geo.Figures.Add(shaft);
+
+        var (h1, h2) = ArrowHeadPoints(start, end, thickness);
+        var head = new PathFigure { StartPoint = h1, IsClosed = false, IsFilled = false };
+        head.Segments.Add(new LineSegment { Point = end });
+        head.Segments.Add(new LineSegment { Point = h2 });
+        geo.Figures.Add(head);
+        return geo;
+    }
+
+    private static (Point, Point) ArrowHeadPoints(Point a, Point b, double thickness)
+    {
+        double dx = b.X - a.X, dy = b.Y - a.Y;
+        double len = System.Math.Sqrt(dx * dx + dy * dy);
+        if (len < 1e-3) return (b, b);
+        double ux = dx / len, uy = dy / len;
+        // Head scales with the brush but never longer than the shaft itself.
+        double headLen = System.Math.Min(System.Math.Max(9.0, thickness * 3.0), len);
+        const double spread = 0.46; // ~26° per side
+        double cos = System.Math.Cos(spread), sin = System.Math.Sin(spread);
+        double bx = -ux, by = -uy;
+        var p1 = new Point(b.X + headLen * (bx * cos - by * sin), b.Y + headLen * (bx * sin + by * cos));
+        var p2 = new Point(b.X + headLen * (bx * cos + by * sin), b.Y + headLen * (-bx * sin + by * cos));
+        return (p1, p2);
     }
 
     private void ExtendStroke(Point pos)
@@ -128,6 +187,13 @@ public sealed partial class CaptureOverlayWindow
 
     private void UpdateActiveShape(Point pos)
     {
+        if (_activeArrowVisual != null)
+        {
+            _activeArrowEnd = pos;
+            _activeArrowVisual.Data = BuildArrowGeometry(_activeRectAnchor, pos, _activeArrowVisual.StrokeThickness);
+            return;
+        }
+
         if (_activeLineVisual != null)
         {
             _activeLineVisual.X2 = pos.X;
@@ -155,6 +221,27 @@ public sealed partial class CaptureOverlayWindow
 
     private void FinishActiveShape()
     {
+        if (_activeArrowVisual != null)
+        {
+            var a = _activeRectAnchor;
+            var b = _activeArrowEnd;
+            double thickness = _activeArrowVisual.StrokeThickness;
+            var stroke = _activeArrowVisual.Stroke;
+            DrawingCanvas.Children.Remove(_activeArrowVisual);
+            _activeArrowVisual = null;
+            if (System.Math.Abs(b.X - a.X) < 1 && System.Math.Abs(b.Y - a.Y) < 1) return;
+            var visual = BuildArrowVisual(a, b, stroke, thickness);
+            _drawing.Add(new LineElement
+            {
+                Visual = visual,
+                Start = a,
+                End = b,
+                Thickness = thickness,
+                EndArrow = true,
+            });
+            return;
+        }
+
         if (_activeLineVisual != null)
         {
             double x1 = _activeLineVisual.X1;
@@ -320,51 +407,38 @@ public sealed partial class CaptureOverlayWindow
 
         PencilBtn.Style = tool == ToolKind.Pencil ? selectedStyle : normalStyle;
         TextBtn.Style   = tool == ToolKind.Text   ? selectedStyle : normalStyle;
-        ShapesBtn.Style = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line
+        ShapesBtn.Style = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow
             ? selectedStyle : normalStyle;
 
         // The Shapes icon glyphs are Stroke-based shapes (not FontIcon
         // glyphs that inherit Foreground), so swap their stroke explicitly.
-        var shapesActive = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line;
+        var shapesActive = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow;
         var shapesStroke = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[
             shapesActive ? "ClipsyAccentBrush" : "ClipsyText2Brush"];
-        if (ShapeIconRect    != null) ShapeIconRect.Stroke    = shapesStroke;
-        if (ShapeIconEllipse != null) ShapeIconEllipse.Stroke = shapesStroke;
-        if (ShapeIconLine    != null) ShapeIconLine.Stroke    = shapesStroke;
+        if (ShapeIconRect      != null) ShapeIconRect.Stroke      = shapesStroke;
+        if (ShapeIconEllipse   != null) ShapeIconEllipse.Stroke   = shapesStroke;
+        if (ShapeIconLine      != null) ShapeIconLine.Stroke      = shapesStroke;
+        if (ShapeIconArrowLine != null) ShapeIconArrowLine.Stroke = shapesStroke;
+        if (ShapeIconArrowHead != null) ShapeIconArrowHead.Stroke = shapesStroke;
 
         // Show/hide shapes in flyout - selected shape is hidden, others visible
         // Use _currentShapeTool to determine which shape is currently selected
         RectBtn.Visibility = _currentShapeTool == ToolKind.Rectangle ? Visibility.Collapsed : Visibility.Visible;
         EllipseBtn.Visibility = _currentShapeTool == ToolKind.Ellipse ? Visibility.Collapsed : Visibility.Visible;
         LineBtn.Visibility = _currentShapeTool == ToolKind.Line ? Visibility.Collapsed : Visibility.Visible;
+        ArrowBtn.Visibility = _currentShapeTool == ToolKind.Arrow ? Visibility.Collapsed : Visibility.Visible;
 
         // Update shapes icon based on current shape tool
-        if (_currentShapeTool == ToolKind.Rectangle)
-        {
-            ShapeIconRect?.SetValue(UIElement.VisibilityProperty, Visibility.Visible);
-            ShapeIconEllipse?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
-            ShapeIconLine?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
-        }
-        else if (_currentShapeTool == ToolKind.Ellipse)
-        {
-            ShapeIconRect?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
-            ShapeIconEllipse?.SetValue(UIElement.VisibilityProperty, Visibility.Visible);
-            ShapeIconLine?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
-        }
-        else if (_currentShapeTool == ToolKind.Line)
-        {
-            ShapeIconRect?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
-            ShapeIconEllipse?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
-            ShapeIconLine?.SetValue(UIElement.VisibilityProperty, Visibility.Visible);
-        }
-        else
-        {
-            ShapeIconRect?.SetValue(UIElement.VisibilityProperty, Visibility.Visible);
-            ShapeIconEllipse?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
-            ShapeIconLine?.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
-        }
+        ShapeIconRect?.SetValue(UIElement.VisibilityProperty,
+            _currentShapeTool is ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow ? Visibility.Collapsed : Visibility.Visible);
+        ShapeIconEllipse?.SetValue(UIElement.VisibilityProperty,
+            _currentShapeTool == ToolKind.Ellipse ? Visibility.Visible : Visibility.Collapsed);
+        ShapeIconLine?.SetValue(UIElement.VisibilityProperty,
+            _currentShapeTool == ToolKind.Line ? Visibility.Visible : Visibility.Collapsed);
+        ShapeIconArrow?.SetValue(UIElement.VisibilityProperty,
+            _currentShapeTool == ToolKind.Arrow ? Visibility.Visible : Visibility.Collapsed);
 
-        if (tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
+        if (tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow)
         {
             UpdatePreviewForThickness(_drawing.Settings.BrushSize);
             if (_textPreview != null) _textPreview.Visibility = Visibility.Collapsed;

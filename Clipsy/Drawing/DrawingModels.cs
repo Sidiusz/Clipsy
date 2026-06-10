@@ -13,6 +13,7 @@ public enum ToolKind
     Rectangle,
     Ellipse,
     Line,
+    Arrow,
     Text,
 }
 
@@ -191,6 +192,9 @@ public sealed class LineElement : DrawElement
     public required Point Start { get; init; }
     public required Point End { get; init; }
     public double Thickness { get; init; }
+
+    /// <summary>Arrow tool: draw an open arrowhead at End.</summary>
+    public bool EndArrow { get; init; }
 
     public override Rect BoundingBox
     {

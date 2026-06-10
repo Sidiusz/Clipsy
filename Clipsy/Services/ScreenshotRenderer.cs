@@ -211,6 +211,8 @@ public static class ScreenshotRenderer
             EndCap = LineCap.Round,
             LineJoin = LineJoin.Round,
         };
+        using var arrowCap = line.EndArrow ? new AdjustableArrowCap(3f, 3.5f, false) : null;
+        if (arrowCap != null) pen.CustomEndCap = arrowCap;
         var a = new PointF((float)((line.Start.X - ox) * scale), (float)((line.Start.Y - oy) * scale));
         var b = new PointF((float)((line.End.X - ox) * scale), (float)((line.End.Y - oy) * scale));
         g.DrawLine(pen, a, b);
