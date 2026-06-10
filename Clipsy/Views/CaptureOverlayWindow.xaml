@@ -30,7 +30,11 @@
                IsHitTestVisible="False" />
 
         <!-- Even-odd dim cut-out for the selected region -->
+        <!-- Opacity starts at 0: the window's first frame is composed BEFORE
+             the intro animation runs, so a visible dim here flashed dark,
+             snapped transparent, then faded back in. -->
         <Path x:Name="DimPath"
+              Opacity="0"
               Fill="{StaticResource ClipsyOverlayDimBrush}"
               IsHitTestVisible="False">
             <Path.Data>
@@ -99,7 +103,7 @@
                             Style="{StaticResource ClipsyIconButtonDanger}"
                             Click="OnRecordClick"
                             ToolTipService.ToolTip="Record">
-                        <Grid Margin="0,8,0,0">
+                        <Grid Margin="0,6,0,0">
                             <Ellipse Width="18" Height="18"
                                    Stroke="{StaticResource ClipsyDangerBrush}"
                                    StrokeThickness="2"
@@ -112,29 +116,28 @@
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnScreenshotClick"
                             ToolTipService.ToolTip="Screenshot">
-                        <FontIcon Glyph="&#xE722;" FontSize="16" Margin="0,8,0,0" />
+                        <FontIcon Glyph="&#xE722;" FontSize="16" Margin="0,6,0,0" />
                     </Button>
                     <Button x:Name="CopyBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnCopyClick"
                             ToolTipService.ToolTip="Copy">
-                        <FontIcon Glyph="&#xE8C8;" FontSize="16" Margin="0,8,0,0" />
+                        <FontIcon Glyph="&#xE8C8;" FontSize="16" Margin="0,6,0,0" />
                     </Button>
                     <Border Style="{StaticResource ClipsyToolbarSeparator}" />
-                    <Button x:Name="CancelBtn" Height="38"
+                    <!-- Wider, not taller (38x32): the Esc label needs horizontal
+                         room, so the icon shifts right instead of down. -->
+                    <Button x:Name="CancelBtn" Width="38"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnCancelClick"
                             ToolTipService.ToolTip="Cancel (Esc)"
                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                         <Grid>
-                            <FontIcon Glyph="&#xE711;" FontSize="16" Margin="0,8,0,0"
+                            <FontIcon Glyph="&#xE711;" FontSize="16" Margin="8,6,0,0"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
-                                    Background="{StaticResource ClipsyBg2Brush}"
-                                    CornerRadius="3" Padding="2,0" Margin="1,1,0,0"
-                                    IsHitTestVisible="False">
-                                <TextBlock Text="Esc" FontSize="8" FontWeight="SemiBold" Opacity="0.85" />
-                            </Border>
+                            <TextBlock Text="Esc" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Margin="3,2,0,0" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                 </StackPanel>
@@ -304,7 +307,7 @@
                     <Button x:Name="ColorBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"
                             ToolTipService.ToolTip="Color">
-                        <Ellipse x:Name="ColorSwatch" Width="18" Height="18" Margin="0,8,0,0"
+                        <Ellipse x:Name="ColorSwatch" Width="18" Height="18" Margin="0,6,0,0"
                                  Fill="{StaticResource ClipsyDangerBrush}"
                                  Stroke="White" StrokeThickness="1.5" />
                         <Button.Flyout>
@@ -359,14 +362,11 @@
                              pins to the button's own top-left corner, not the icon's. -->
                         <Grid>
                             <!-- Icon nudged below the badge chip's row so they never overlap -->
-                            <FontIcon Glyph="&#xE70F;" FontSize="16" Margin="0,8,0,0"
+                            <FontIcon Glyph="&#xE70F;" FontSize="16" Margin="0,6,0,0"
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
-                                    Background="{StaticResource ClipsyBg2Brush}"
-                                    CornerRadius="3" Padding="2,0" Margin="1,1,0,0"
-                                    IsHitTestVisible="False">
-                                <TextBlock Text="1" FontSize="8" FontWeight="SemiBold" Opacity="0.85" />
-                            </Border>
+                            <TextBlock Text="1" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Margin="3,2,0,0" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                     <Button x:Name="TextBtn" Height="38"
@@ -378,18 +378,15 @@
                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                         <Grid>
                             <!-- Big T + small T (small caps style) -->
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
                                         HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock x:Name="TextBtnGlyph" Text="T" FontWeight="SemiBold" FontSize="14" />
                                 <TextBlock x:Name="TextBtnGlyphSmall" Text="T" FontWeight="SemiBold" FontSize="9"
                                            VerticalAlignment="Bottom" Margin="1,0,0,1" />
                             </StackPanel>
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
-                                    Background="{StaticResource ClipsyBg2Brush}"
-                                    CornerRadius="3" Padding="2,0" Margin="1,1,0,0"
-                                    IsHitTestVisible="False">
-                                <TextBlock Text="2" FontSize="8" FontWeight="SemiBold" Opacity="0.85" />
-                            </Border>
+                            <TextBlock Text="2" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Margin="3,2,0,0" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                     <Button x:Name="ShapesBtn" Height="38"
@@ -400,7 +397,7 @@
                             ToolTipService.ToolTip="Shapes"
                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                         <Grid>
-                            <Grid x:Name="ShapeIconContainer" Width="16" Height="16" Margin="0,8,0,0"
+                            <Grid x:Name="ShapeIconContainer" Width="16" Height="16" Margin="0,6,0,0"
                                   HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Rectangle x:Name="ShapeIconRect" Width="14" Height="14"
                                            Stroke="{StaticResource ClipsyText2Brush}"
@@ -420,12 +417,9 @@
                                               Fill="Transparent" />
                                 </Grid>
                             </Grid>
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
-                                    Background="{StaticResource ClipsyBg2Brush}"
-                                    CornerRadius="3" Padding="2,0" Margin="1,1,0,0"
-                                    IsHitTestVisible="False">
-                                <TextBlock Text="3" FontSize="8" FontWeight="SemiBold" Opacity="0.85" />
-                            </Border>
+                            <TextBlock Text="3" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Margin="3,2,0,0" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                     <Border Style="{StaticResource ClipsyToolbarSeparatorHorizontal}" />
@@ -435,19 +429,16 @@
                             ToolTipService.ToolTip="Find text"
                             HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                         <Grid>
-                            <Grid Width="18" Height="18" Margin="0,10,0,0"
+                            <Grid Width="18" Height="18" Margin="0,8,0,0"
                                   HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE721;" FontSize="16" />
                                 <TextBlock Text="T" FontSize="9" FontWeight="Bold"
                                            HorizontalAlignment="Right" VerticalAlignment="Top"
                                            Margin="0,-2,-2,0" />
                             </Grid>
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
-                                    Background="{StaticResource ClipsyBg2Brush}"
-                                    CornerRadius="3" Padding="2,0" Margin="1,1,0,0"
-                                    IsHitTestVisible="False">
-                                <TextBlock Text="4" FontSize="8" FontWeight="SemiBold" Opacity="0.85" />
-                            </Border>
+                            <TextBlock Text="4" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Margin="3,2,0,0" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                 </StackPanel>
@@ -537,10 +528,13 @@
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
                 Margin="0,72,0,0"
+                Opacity="0"
                 IsHitTestVisible="False">
-            <!-- Slid in from the top by the intro animation on overlay reveal -->
+            <!-- Starts hidden above its spot; the intro animation slides it in.
+                 Initial values match the animation's From so the pre-composed
+                 first frame shows nothing. -->
             <Border.RenderTransform>
-                <TranslateTransform x:Name="HintTranslate" />
+                <TranslateTransform x:Name="HintTranslate" Y="-56" />
             </Border.RenderTransform>
             <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
                 <!-- HintText carries the localized string set from code-behind
