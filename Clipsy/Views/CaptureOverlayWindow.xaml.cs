@@ -115,10 +115,20 @@ public sealed partial class CaptureOverlayWindow : Window
 
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = GetAppWindowForCurrentWindow();
-        // Cloak BEFORE the window is shown (ConfigureAsOverlay calls
-        // SetWindowPos with SWP_SHOWWINDOW). Cloaking afterwards left one
-        // uncomposited black frame visible — the "flash" on PrintScreen.
-        try { int cloak = 1; DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int)); } catch { }
+        // Hide BEFORE the window is shown (ConfigureAsOverlay calls
+        // SetWindowPos with SWP_SHOWWINDOW), two mechanisms together:
+        // - DWM cloak keeps the compositor from presenting the window;
+        // - WS_EX_LAYERED + alpha 0 stops the bare-HWND black background
+        //   erase WinUI 3 paints before the first XAML frame (same fix as
+        //   TrayMenuWindow / Settings — cloak alone still flashed black).
+        try
+        {
+            int cloak = 1;
+            DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
+            SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED);
+            SetLayeredWindowAttributes(_hwnd, 0, 0, LWA_ALPHA);
+        }
+        catch { }
         ConfigureAsOverlay();
         DisableDwmDecorations();
         // Load the frozen frame synchronously into the Image source so the
@@ -321,9 +331,10 @@ public sealed partial class CaptureOverlayWindow : Window
             int borderless = 1;
             DwmSetWindowAttribute(_hwnd, 20, ref borderless, sizeof(int)); // DWMWA_WINDOW_CORNER_PREFERENCE
 
-            // Set window style to remove all borders
+            // Set window style to remove all borders. Keep WS_EX_LAYERED —
+            // it is what suppresses the black first-frame erase.
             SetWindowLong(_hwnd, GWL_STYLE, WS_POPUP);
-            SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_TOOLWINDOW);
+            SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED);
 
             // Force Windows to recalculate the non-client area after style changes.
             // Without SWP_FRAMECHANGED the old border geometry stays active and blocks hits.
@@ -353,6 +364,9 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         if (!_cloaked) return;
         _cloaked = false;
+        // Frame is composed by now: make the layered window opaque first,
+        // then uncloak — the reveal is atomic, nothing black in between.
+        SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
         int cloak = 0;
         DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
         // The overlay is shown with SWP_NOACTIVATE (avoids taskbar flash), so
@@ -441,6 +455,11 @@ public sealed partial class CaptureOverlayWindow : Window
     private const uint WS_POPUP = 0x80000000;
     private const uint WS_EX_TOPMOST = 0x00000008;
     private const uint WS_EX_TOOLWINDOW = 0x00000080;
+    private const uint WS_EX_LAYERED = 0x00080000;
+    private const uint LWA_ALPHA = 0x00000002;
+
+    [DllImport("user32.dll")]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
 
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     private const uint SWP_NOACTIVATE   = 0x0010;
