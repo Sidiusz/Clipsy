@@ -109,6 +109,11 @@ public sealed partial class CaptureOverlayWindow
     {
         if (ShapesFlyout == null || ShapesBtn == null) return;
 
+        // A Collapsed element measures to 0x0, which broke the alignment math
+        // (the flyout's top landed mid-button). Reveal at opacity 0 first;
+        // ShowFlyout fades it in right after.
+        ShapesFlyout.Opacity = 0.0;
+        ShapesFlyout.Visibility = Visibility.Visible;
         ShapesFlyout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var flyoutSize = ShapesFlyout.DesiredSize;
 
@@ -116,9 +121,9 @@ public sealed partial class CaptureOverlayWindow
         var transform = ShapesBtn.TransformToVisual(RootGrid);
         var buttonPos = transform.TransformPoint(new Point(0, 0));
 
-        // Position flyout to the right of shapes button
+        // Right of the button, top-aligned with it
         double x = buttonPos.X + ShapesBtn.ActualWidth + 8;
-        double y = buttonPos.Y + (ShapesBtn.ActualHeight - flyoutSize.Height) / 2;
+        double y = buttonPos.Y;
 
         // Keep flyout within screen bounds
         if (x + flyoutSize.Width > RootGrid.ActualWidth - 8)
@@ -296,12 +301,15 @@ public sealed partial class CaptureOverlayWindow
     private void PositionFontsFlyout()
     {
         if (FontsFlyout == null || TextBtn == null) return;
+        // Same Collapsed-measures-to-zero pitfall as PositionShapesFlyout.
+        FontsFlyout.Opacity = 0.0;
+        FontsFlyout.Visibility = Visibility.Visible;
         FontsFlyout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var flyoutSize = FontsFlyout.DesiredSize;
         var transform = TextBtn.TransformToVisual(RootGrid);
         var buttonPos = transform.TransformPoint(new Point(0, 0));
         double x = buttonPos.X + TextBtn.ActualWidth + 8;
-        double y = buttonPos.Y + (TextBtn.ActualHeight - flyoutSize.Height) / 2;
+        double y = buttonPos.Y; // top-aligned with the button
         if (x + flyoutSize.Width > RootGrid.ActualWidth - 8)
             x = buttonPos.X - flyoutSize.Width - 8;
         y = System.Math.Clamp(y, 8, System.Math.Max(8, RootGrid.ActualHeight - flyoutSize.Height - 8));
