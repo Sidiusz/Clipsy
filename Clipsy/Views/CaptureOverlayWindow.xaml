@@ -97,13 +97,13 @@
                     Style="{StaticResource ClipsyToolbar}"
                     Visibility="Collapsed">
                 <StackPanel Orientation="Horizontal" Spacing="2">
-                    <!-- Toolbar buttons are 32x38: the extra top row is where the
-                         hotkey chips live, so icons sit slightly below center. -->
-                    <Button x:Name="RecordBtn" Height="38"
+                    <!-- Bottom island: square 32x32 buttons; only Cancel is wider
+                         (38x32) to fit its Esc label. -->
+                    <Button x:Name="RecordBtn"
                             Style="{StaticResource ClipsyIconButtonDanger}"
                             Click="OnRecordClick"
                             ToolTipService.ToolTip="Record">
-                        <Grid Margin="0,6,0,0">
+                        <Grid>
                             <Ellipse Width="18" Height="18"
                                    Stroke="{StaticResource ClipsyDangerBrush}"
                                    StrokeThickness="2"
@@ -112,17 +112,17 @@
                                    Fill="{StaticResource ClipsyDangerBrush}" />
                         </Grid>
                     </Button>
-                    <Button x:Name="ScreenshotBtn" Height="38"
+                    <Button x:Name="ScreenshotBtn"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnScreenshotClick"
                             ToolTipService.ToolTip="Screenshot">
-                        <FontIcon Glyph="&#xE722;" FontSize="16" Margin="0,6,0,0" />
+                        <FontIcon Glyph="&#xE722;" FontSize="16" />
                     </Button>
-                    <Button x:Name="CopyBtn" Height="38"
+                    <Button x:Name="CopyBtn"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnCopyClick"
                             ToolTipService.ToolTip="Copy">
-                        <FontIcon Glyph="&#xE8C8;" FontSize="16" Margin="0,6,0,0" />
+                        <FontIcon Glyph="&#xE8C8;" FontSize="16" />
                     </Button>
                     <Border Style="{StaticResource ClipsyToolbarSeparator}" />
                     <!-- Wider, not taller (38x32): the Esc label needs horizontal
