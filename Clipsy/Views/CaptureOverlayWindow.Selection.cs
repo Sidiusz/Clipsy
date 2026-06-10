@@ -143,16 +143,14 @@ public sealed partial class CaptureOverlayWindow
         }
 
         SelectionLayer.Visibility = Visibility.Visible;
-        SelectionLayer.Margin = new Thickness(_selectionRect.X, _selectionRect.Y, 0, 0);
-        SelectionLayer.Width = _selectionRect.Width;
-        SelectionLayer.Height = _selectionRect.Height;
+        // Position via render transform, not Margin — Margin invalidates the
+        // whole RootGrid layout on every pointer move, which is the main FPS
+        // killer on 1440p+ screens.
+        SelectionTranslate.X = _selectionRect.X;
+        SelectionTranslate.Y = _selectionRect.Y;
 
         SelectionBorder.Width = _selectionRect.Width;
         SelectionBorder.Height = _selectionRect.Height;
-        HandlesLayer.Width = _selectionRect.Width;
-        HandlesLayer.Height = _selectionRect.Height;
-        CursorPreviewLayer.Width = _selectionRect.Width;
-        CursorPreviewLayer.Height = _selectionRect.Height;
 
         PositionHandles();
         UpdateDimGeometry(_selectionRect);
@@ -176,10 +174,51 @@ public sealed partial class CaptureOverlayWindow
             : new Rect(0, 0, 0, 0);
     }
 
+    // ---------- Per-frame coalescing ----------
+
+    // Pointer events arrive far more often than the compositor renders
+    // (high-polling mice). Batch all selection-visual work to one pass per
+    // CompositionTarget.Rendering tick.
+    private bool _selectionVisualDirty;
+    private bool _selectionRenderHooked;
+
+    private void RequestSelectionVisualUpdate()
+    {
+        _selectionVisualDirty = true;
+        if (_selectionRenderHooked) return;
+        _selectionRenderHooked = true;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnSelectionRenderTick;
+    }
+
+    private void OnSelectionRenderTick(object? sender, object e)
+    {
+        if (_selectionVisualDirty)
+        {
+            _selectionVisualDirty = false;
+            UpdateSelectionVisual();
+            return; // stay hooked while updates keep coming
+        }
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSelectionRenderTick;
+        _selectionRenderHooked = false;
+    }
+
+    // ---------- Toolbars ----------
+
+    // Drag-end corner for "dynamic tool islands" (true = right/bottom).
+    private bool _anchorRight = true;
+    private bool _anchorBottom = true;
+
+    // Toolbar sizes are stable while dragging; measuring on every pointer
+    // move forces extra layout passes. Cached on ShowToolbars.
+    private Size _bottomTbSize;
+    private Size _rightTbSize;
+
     private void ShowToolbars()
     {
         BottomToolbar.Visibility = Visibility.Visible;
         RightToolbar.Visibility = Visibility.Visible;
+        _bottomTbSize = default;
+        _rightTbSize = default;
         PositionToolbars();
     }
 
@@ -192,38 +231,99 @@ public sealed partial class CaptureOverlayWindow
     private void PositionToolbars()
     {
         if (BottomToolbar.Visibility != Visibility.Visible || !_hasSelection) return;
-        BottomToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        RightToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        if (_bottomTbSize.Width <= 0)
+        {
+            BottomToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            _bottomTbSize = BottomToolbar.DesiredSize;
+        }
+        if (_rightTbSize.Width <= 0)
+        {
+            RightToolbar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            _rightTbSize = RightToolbar.DesiredSize;
+        }
         var rootW = RootGrid.ActualWidth;
         var rootH = RootGrid.ActualHeight;
 
-        double bw = BottomToolbar.DesiredSize.Width;
-        double bh = BottomToolbar.DesiredSize.Height;
-        double rw = RightToolbar.DesiredSize.Width;
-        double rh = RightToolbar.DesiredSize.Height;
+        double bw = _bottomTbSize.Width;
+        double bh = _bottomTbSize.Height;
+        double rw = _rightTbSize.Width;
+        double rh = _rightTbSize.Height;
 
-        double bx = _selectionRect.X + (_selectionRect.Width - bw) / 2;
-        double by = _selectionRect.Y + _selectionRect.Height + 12;
-        if (by + bh > rootH - 8)
+        double selX = _selectionRect.X;
+        double selY = _selectionRect.Y;
+        double selR = _selectionRect.X + _selectionRect.Width;
+        double selB = _selectionRect.Y + _selectionRect.Height;
+
+        double bx, by, rx, ry;
+
+        if (Clipsy.Services.SettingsService.Instance.Settings.DynamicToolbarIslands)
         {
-            by = _selectionRect.Y - bh - 12;
-            if (by < 8) by = _selectionRect.Y + _selectionRect.Height - bh - 8;
+            // Both islands dock to the corner where the selection drag ended,
+            // aligned edge-to-corner (not centered). Falls inside the
+            // selection when there is no room outside.
+            bx = _anchorRight ? selR - bw : selX;
+            by = _anchorBottom ? selB + 12 : selY - bh - 12;
+            bool bottomFits = _anchorBottom ? by + bh <= rootH - 8 : by >= 8;
+            if (!bottomFits) by = _anchorBottom ? selB - bh - 8 : selY + 8;
+
+            rx = _anchorRight ? selR + 12 : selX - rw - 12;
+            bool rightFits = _anchorRight ? rx + rw <= rootW - 8 : rx >= 8;
+            if (!rightFits) rx = _anchorRight ? selR - rw - 8 : selX + 8;
+            ry = _anchorBottom ? selB - rh : selY;
         }
+        else
+        {
+            bx = selX + (_selectionRect.Width - bw) / 2;
+            by = selB + 12;
+            if (by + bh > rootH - 8)
+            {
+                by = selY - bh - 12;
+                if (by < 8) by = selB - bh - 8;
+            }
+
+            rx = selR + 12;
+            ry = selY + (_selectionRect.Height - rh) / 2;
+            if (rx + rw > rootW - 8)
+            {
+                rx = selX - rw - 12;
+                if (rx < 8) rx = selR - rw - 8;
+            }
+        }
+
         bx = System.Math.Clamp(bx, 8, System.Math.Max(8, rootW - bw - 8));
+        ry = System.Math.Clamp(ry, 8, System.Math.Max(8, rootH - rh - 8));
+
+        // Islands must never overlap each other: slide the horizontal bar
+        // sideways past the vertical island; if that can't fit, slide the
+        // vertical island up/down instead.
+        if (RectsIntersect(bx, by, bw, bh, rx, ry, rw, rh))
+        {
+            double leftCand = rx - bw - 8;
+            double rightCand = rx + rw + 8;
+            bool preferLeft = bx + bw / 2 <= rx + rw / 2;
+            if (preferLeft && leftCand >= 8) bx = leftCand;
+            else if (rightCand + bw <= rootW - 8) bx = rightCand;
+            else if (leftCand >= 8) bx = leftCand;
+            else
+            {
+                double upCand = by - rh - 8;
+                double downCand = by + bh + 8;
+                bool preferUp = ry + rh / 2 <= by + bh / 2;
+                if (preferUp && upCand >= 8) ry = upCand;
+                else if (downCand + rh <= rootH - 8) ry = downCand;
+                else if (upCand >= 8) ry = upCand;
+            }
+        }
+
         Canvas.SetLeft(BottomToolbar, bx);
         Canvas.SetTop(BottomToolbar, by);
-
-        double rx = _selectionRect.X + _selectionRect.Width + 12;
-        double ry = _selectionRect.Y + (_selectionRect.Height - rh) / 2;
-        if (rx + rw > rootW - 8)
-        {
-            rx = _selectionRect.X - rw - 12;
-            if (rx < 8) rx = _selectionRect.X + _selectionRect.Width - rw - 8;
-        }
-        ry = System.Math.Clamp(ry, 8, System.Math.Max(8, rootH - rh - 8));
         Canvas.SetLeft(RightToolbar, rx);
         Canvas.SetTop(RightToolbar, ry);
     }
+
+    private static bool RectsIntersect(double ax, double ay, double aw, double ah,
+                                       double bx, double by, double bw, double bh)
+        => ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah;
 
     private void SelectAll()
     {

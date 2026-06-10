@@ -64,6 +64,8 @@ public sealed partial class SettingsWindow
         LblScreenshotFormat.Text    = Strings.Get("LblScreenshotFormat");
         LblScreenshotCursor.Text    = Strings.Get("LblScreenshotCursor");
         HelperScreenshotCursor.Text = Strings.Get("HelperScreenshotCursor");
+        LblDynamicIslands.Text      = Strings.Get("LblDynamicIslands");
+        HelperDynamicIslands.Text   = Strings.Get("HelperDynamicIslands");
         LblVideoFormat.Text         = Strings.Get("LblVideoFormat");
         LblVideoCursor.Text         = Strings.Get("LblVideoCursor");
         HelperVideoCursor.Text      = Strings.Get("HelperVideoCursor");

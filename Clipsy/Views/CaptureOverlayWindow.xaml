@@ -54,6 +54,11 @@
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
                 Visibility="Collapsed">
+            <!-- Positioned via translate transform (render-only), not Margin —
+                 Margin invalidates RootGrid layout on every pointer move. -->
+            <Canvas.RenderTransform>
+                <TranslateTransform x:Name="SelectionTranslate" />
+            </Canvas.RenderTransform>
             <Rectangle x:Name="SelectionBorder"
                        Stroke="{StaticResource ClipsyAccentBrush}"
                        StrokeThickness="1.5"
@@ -287,9 +292,14 @@
                     <Button x:Name="ColorBtn"
                             Style="{StaticResource ClipsyIconButton}"
                             ToolTipService.ToolTip="Color">
-                        <Ellipse x:Name="ColorSwatch" Width="18" Height="18"
-                                 Fill="{StaticResource ClipsyDangerBrush}"
-                                 Stroke="White" StrokeThickness="1.5" />
+                        <Grid>
+                            <Ellipse x:Name="ColorSwatch" Width="18" Height="18"
+                                     Fill="{StaticResource ClipsyDangerBrush}"
+                                     Stroke="White" StrokeThickness="1.5" />
+                            <TextBlock Text="5" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                       Margin="0,0,-5,-5" IsHitTestVisible="False" />
+                        </Grid>
                         <Button.Flyout>
                             <Flyout x:Name="ColorFlyout" Placement="Left"
                                     Opened="OnColorFlyoutOpened">
@@ -337,7 +347,12 @@
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnShapePick" Tag="Pencil"
                             ToolTipService.ToolTip="Pencil. LMB draw, RMB erase">
-                        <FontIcon Glyph="&#xE70F;" FontSize="16" />
+                        <Grid>
+                            <FontIcon Glyph="&#xE70F;" FontSize="16" />
+                            <TextBlock Text="1" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                       Margin="0,0,-5,-5" IsHitTestVisible="False" />
+                        </Grid>
                     </Button>
                     <Button x:Name="TextBtn"
                             Style="{StaticResource ClipsyIconButton}"
@@ -345,7 +360,17 @@
                             PointerEntered="OnTextPointerEntered"
                             PointerExited="OnTextPointerExited"
                             ToolTipService.ToolTip="Text. Click to place. Hover for font.">
-                        <TextBlock x:Name="TextBtnGlyph" Text="T" FontWeight="SemiBold" FontSize="14" />
+                        <Grid>
+                            <!-- Big T + small T (small caps style) -->
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="TextBtnGlyph" Text="T" FontWeight="SemiBold" FontSize="14" />
+                                <TextBlock x:Name="TextBtnGlyphSmall" Text="T" FontWeight="SemiBold" FontSize="9"
+                                           VerticalAlignment="Bottom" Margin="1,0,0,1" />
+                            </StackPanel>
+                            <TextBlock Text="2" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                       Margin="0,0,-5,-5" IsHitTestVisible="False" />
+                        </Grid>
                     </Button>
                     <Button x:Name="ShapesBtn"
                             Style="{StaticResource ClipsyIconButton}"
@@ -364,6 +389,16 @@
                             <Line x:Name="ShapeIconLine" X1="2" Y1="14" X2="14" Y2="2"
                                   Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5"
                                   Visibility="Collapsed" />
+                            <Grid x:Name="ShapeIconArrow" Visibility="Collapsed">
+                                <Line x:Name="ShapeIconArrowLine" X1="2" Y1="14" X2="14" Y2="2"
+                                      Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5" />
+                                <Polyline x:Name="ShapeIconArrowHead" Points="8,2 14,2 14,8"
+                                          Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5"
+                                          Fill="Transparent" />
+                            </Grid>
+                            <TextBlock Text="3" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                       Margin="0,0,-5,-5" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                     <Border Style="{StaticResource ClipsyToolbarSeparatorHorizontal}" />
@@ -376,6 +411,9 @@
                             <TextBlock Text="T" FontSize="9" FontWeight="Bold"
                                        HorizontalAlignment="Right" VerticalAlignment="Top"
                                        Margin="0,-2,-2,0" />
+                            <TextBlock Text="4" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                       Margin="0,0,-5,-5" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                 </StackPanel>
@@ -410,6 +448,18 @@
                             ToolTipService.ToolTip="Line">
                         <Line X1="2" Y1="14" X2="14" Y2="2"
                               Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5" />
+                    </Button>
+                    <Button x:Name="ArrowBtn"
+                            Style="{StaticResource ClipsyIconButton}"
+                            Click="OnShapePick" Tag="Arrow"
+                            ToolTipService.ToolTip="Arrow">
+                        <Grid>
+                            <Line X1="2" Y1="14" X2="14" Y2="2"
+                                  Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5" />
+                            <Polyline Points="8,2 14,2 14,8"
+                                      Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5"
+                                      Fill="Transparent" />
+                        </Grid>
                     </Button>
                 </StackPanel>
             </Border>

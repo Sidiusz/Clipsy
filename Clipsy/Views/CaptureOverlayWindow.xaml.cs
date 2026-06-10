@@ -195,6 +195,7 @@ public sealed partial class CaptureOverlayWindow : Window
         ToolTipService.SetToolTip(PencilBtn, Strings.Get("TipPencil"));
         ToolTipService.SetToolTip(EllipseBtn, Strings.Get("TipEllipse"));
         ToolTipService.SetToolTip(LineBtn,    Strings.Get("TipLine"));
+        if (ArrowBtn != null) ToolTipService.SetToolTip(ArrowBtn, Strings.Get("TipArrow"));
         ToolTipService.SetToolTip(TextBtn,    Strings.Get("TipText"));
         ToolTipService.SetToolTip(ShapesBtn,  Strings.Get("TipShapes"));
         ToolTipService.SetToolTip(OcrBtn,     Strings.Get("TipOcr"));

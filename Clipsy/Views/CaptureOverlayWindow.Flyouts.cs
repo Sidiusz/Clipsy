@@ -352,7 +352,12 @@ public sealed partial class CaptureOverlayWindow
         // Reflect choice on the toolbar T glyph so the user sees current font.
         if (TextBtnGlyph != null)
         {
-            try { TextBtnGlyph.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(family); }
+            try
+            {
+                var ff = new Microsoft.UI.Xaml.Media.FontFamily(family);
+                TextBtnGlyph.FontFamily = ff;
+                if (TextBtnGlyphSmall != null) TextBtnGlyphSmall.FontFamily = ff;
+            }
             catch { /* fallback to inherited font */ }
         }
     }
@@ -366,13 +371,14 @@ public sealed partial class CaptureOverlayWindow
             "Rectangle" => ToolKind.Rectangle,
             "Ellipse" => ToolKind.Ellipse,
             "Line" => ToolKind.Line,
+            "Arrow" => ToolKind.Arrow,
             "Text" => ToolKind.Text,
             _ => ToolKind.None,
         };
         // Cache shape selection BEFORE SetTool so the ShapesBtn icon
         // (which reads _currentShapeTool) renders the new pick, not the
         // previous one. Off-by-one if we set it after.
-        if (tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
+        if (tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow)
         {
             _currentShapeTool = tool;
         }

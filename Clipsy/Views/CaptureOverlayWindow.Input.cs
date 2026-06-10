@@ -107,7 +107,7 @@ public sealed partial class CaptureOverlayWindow
             return;
         }
         var local = new Point(pos.X - _selectionRect.X, pos.Y - _selectionRect.Y);
-        if (_drawing.Settings.Tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line)
+        if (_drawing.Settings.Tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow)
         {
             _pencilPreview.Visibility = Visibility.Visible;
             _textPreview.Visibility = Visibility.Collapsed;
@@ -138,7 +138,10 @@ public sealed partial class CaptureOverlayWindow
         {
             case InteractionMode.SelectingNew:
                 _selectionRect = MakeRect(_dragStart, pos);
-                UpdateSelectionVisual();
+                // Coalesce to one visual update per composition frame —
+                // high-polling mice (500-1000 Hz) otherwise trigger dozens of
+                // layout passes per frame, which tanks FPS on 1440p+ screens.
+                RequestSelectionVisualUpdate();
                 break;
             case InteractionMode.MovingSelection:
             {
@@ -149,12 +152,12 @@ public sealed partial class CaptureOverlayWindow
                     _selectionAtDragStart.Y + dy,
                     _selectionAtDragStart.Width,
                     _selectionAtDragStart.Height);
-                UpdateSelectionVisual();
+                RequestSelectionVisualUpdate();
                 break;
             }
             case InteractionMode.ResizingSelection:
                 _selectionRect = ResizeFromHandle(_selectionAtDragStart, _activeHandle, pos);
-                UpdateSelectionVisual();
+                RequestSelectionVisualUpdate();
                 break;
             case InteractionMode.DrawingStroke:
                 // GetIntermediatePoints returns all high-frequency samples buffered between
@@ -195,10 +198,31 @@ public sealed partial class CaptureOverlayWindow
                 }
                 _selectionRect = rect;
                 _hasSelection = true;
+                // Dynamic islands anchor to the corner where the drag ended.
+                _anchorRight = pos.X >= _dragStart.X;
+                _anchorBottom = pos.Y >= _dragStart.Y;
                 UpdateSelectionVisual();
                 ShowToolbars();
                 break;
             }
+            case InteractionMode.MovingSelection:
+                UpdateSelectionVisual();
+                break;
+            case InteractionMode.ResizingSelection:
+                // Re-anchor to the dragged handle's corner/edge.
+                switch (_activeHandle)
+                {
+                    case HandlePos.TL: _anchorRight = false; _anchorBottom = false; break;
+                    case HandlePos.T:  _anchorBottom = false; break;
+                    case HandlePos.TR: _anchorRight = true;  _anchorBottom = false; break;
+                    case HandlePos.R:  _anchorRight = true;  break;
+                    case HandlePos.BR: _anchorRight = true;  _anchorBottom = true;  break;
+                    case HandlePos.B:  _anchorBottom = true; break;
+                    case HandlePos.BL: _anchorRight = false; _anchorBottom = true;  break;
+                    case HandlePos.L:  _anchorRight = false; break;
+                }
+                UpdateSelectionVisual();
+                break;
             case InteractionMode.DrawingStroke:
                 FinishStroke();
                 break;
@@ -249,6 +273,11 @@ public sealed partial class CaptureOverlayWindow
                 : _drawing.Settings.RectangleThickness;
         if (_activeLineVisual != null)
             _activeLineVisual.StrokeThickness = _drawing.Settings.LineThickness;
+        if (_activeArrowVisual != null)
+        {
+            _activeArrowVisual.StrokeThickness = _drawing.Settings.LineThickness;
+            _activeArrowVisual.Data = BuildArrowGeometry(_activeRectAnchor, _activeArrowEnd, _drawing.Settings.LineThickness);
+        }
 
         e.Handled = true;
     }
@@ -319,7 +348,39 @@ public sealed partial class CaptureOverlayWindow
                 if (_inOcrMode) { _ = CopyOcrTextAsync(); return; }
                 _ = CopyAsync();
                 return;
+            case VirtualKey.Number1 or VirtualKey.Number2 or VirtualKey.Number3
+                 or VirtualKey.Number4 or VirtualKey.Number5 when !ctrl:
+                if (HandleToolHotkey(e.Key)) e.Handled = true;
+                return;
         }
+    }
+
+    // 1-5 on the top row mirror the right-toolbar tools (badges show the
+    // numbers). Pressing the active tool's key again deselects it, matching
+    // the click toggles.
+    private bool HandleToolHotkey(VirtualKey key)
+    {
+        if (!_hasSelection || _inOcrMode || _eyedropperActive) return false;
+        if (FocusManager.GetFocusedElement(RootGrid.XamlRoot) is TextBox) return false;
+        switch (key)
+        {
+            case VirtualKey.Number1:
+                SetTool(_drawing.Settings.Tool == ToolKind.Pencil ? ToolKind.None : ToolKind.Pencil);
+                return true;
+            case VirtualKey.Number2:
+                SetTool(_drawing.Settings.Tool == ToolKind.Text ? ToolKind.None : ToolKind.Text);
+                return true;
+            case VirtualKey.Number3:
+                SetTool(_drawing.Settings.Tool == _currentShapeTool ? ToolKind.None : _currentShapeTool);
+                return true;
+            case VirtualKey.Number4:
+                _ = EnterOcrModeAsync();
+                return true;
+            case VirtualKey.Number5:
+                try { ColorFlyout.ShowAt(ColorBtn); } catch { }
+                return true;
+        }
+        return false;
     }
 
     private void HandleEscape()
