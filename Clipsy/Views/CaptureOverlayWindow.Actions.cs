@@ -26,13 +26,14 @@ public sealed partial class CaptureOverlayWindow
         int h = (int)System.Math.Round(_selectionRect.Height * scale);
         if (w < 8 || h < 8) return;
         var dq = App.Current.HostWindow!.DispatcherQueue;
+        HideForClose();
         Close();
         await Task.Delay(150);
         dq.TryEnqueue(() => RecordingController.TryStart(x, y, w, h));
     }
     private void OnScreenshotClick(object sender, RoutedEventArgs e) => _ = SaveAsAsync();
     private void OnCopyClick(object sender, RoutedEventArgs e) => _ = CopyAsync();
-    private void OnCancelClick(object sender, RoutedEventArgs e) => Close();
+    private void OnCancelClick(object sender, RoutedEventArgs e) => CloseDeferred();
     private async void OnOcrClick(object sender, RoutedEventArgs e) => await EnterOcrModeAsync();
 
     // ---------- Screenshot save / copy ----------
@@ -40,10 +41,12 @@ public sealed partial class CaptureOverlayWindow
     // Closing the window while the context MenuFlyout is still tearing down
     // its popup crashes natively inside Microsoft.UI.Xaml (access violation).
     // Hide the flyout explicitly and defer Close to a later dispatcher pass
-    // so the popup finishes dismissing first.
+    // so the popup finishes dismissing first. HideForClose makes the window
+    // invisible immediately so the teardown's black frame is never seen.
     private void CloseDeferred()
     {
         try { OverlayMenu.Hide(); } catch { }
+        HideForClose();
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Close);
     }
 

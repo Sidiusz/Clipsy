@@ -399,7 +399,7 @@ public sealed partial class CaptureOverlayWindow
             SetTool(ToolKind.None);
             return;
         }
-        Close();
+        CloseDeferred();
     }
 
     private static bool IsCtrlDown()
