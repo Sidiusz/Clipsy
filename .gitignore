@@ -66,3 +66,11 @@ Clipsy UI _ standalone.html
 
 # Scratch / quarantined files awaiting deletion
 _trash/
+# Local dev files - never tracked in the public repo
+CLAUDE.md
+PROJECT_MAP.md
+docs/
+tools/
+_trash/
+DESIGN SCREENSHOTS/
+checkpoint.md
