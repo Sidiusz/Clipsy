@@ -301,6 +301,13 @@ public sealed class RecordingController
                     try { Recorder.SetExcludeFromCapture(_drawWin.Hwnd, false); } catch { }
                 }
                 _drawWin.SetActive(true);
+
+                // Drawing overlay is WS_EX_TOPMOST and created after the HUD,
+                // so it can sit above the HUD in z-order and swallow clicks
+                // on the bottom toolbar when the rects touch/overlap. Re-raise
+                // the HUD above it.
+                if (_hud != null)
+                    SetWindowPos(_hud.Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
             else
             {
@@ -649,4 +656,12 @@ public sealed class RecordingController
         }
         catch { /* ignore */ }
     }
+
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 }
