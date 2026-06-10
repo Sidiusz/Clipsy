@@ -36,7 +36,7 @@ public sealed partial class HudColorPickerWindow : Window
     public HudColorPickerWindow()
     {
         InitializeComponent();
-        if (Content is FrameworkElement fe) fe.RequestedTheme = ElementTheme.Dark; // recording chrome pinned dark
+        ThemeService.Register(Content as FrameworkElement);
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
 

@@ -106,10 +106,7 @@ public sealed partial class CaptureOverlayWindow : Window
         // Set window background to transparent to prevent white borders
         this.SystemBackdrop = null;
 
-        // The capture overlay is pinned to Dark in both themes — its UI sits
-        // on top of a dimmed screenshot, where light chrome reads poorly
-        // (same choice as Snipping Tool).
-        RootGrid.RequestedTheme = ElementTheme.Dark;
+        ThemeService.Register(RootGrid);
 
         // Wire up pre-allocated dim geometries once so UpdateDimGeometry only
         // mutates Rect, never allocates or modifies the Children collection.

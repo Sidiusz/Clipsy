@@ -137,6 +137,12 @@ public sealed partial class SettingsWindow : Window
         catch { }
 
         Closed += (_, _) => { _tipTimer?.Stop(); if (_open == this) _open = null; };
+
+        // Re-apply nav CheckStates once the tree is live: the initial pass in
+        // OnNavChecked runs during InitializeComponent when most radios are
+        // still null, and the theme is applied after parse.
+        if (Content is FrameworkElement rootFe)
+            rootFe.Loaded += (_, _) => SnapNavVisuals();
     }
 
     // One-time heavy init: title bar theming, content Load, nav. Runs during
@@ -935,6 +941,8 @@ public sealed partial class SettingsWindow : Window
         PaneNotifications.Visibility = key == "notifications" ? Visibility.Visible : Visibility.Collapsed;
         PaneInfo.Visibility          = key == "info"          ? Visibility.Visible : Visibility.Collapsed;
 
+        SnapNavVisuals();
+
         FrameworkElement? shown = key switch
         {
             "general"       => PaneGeneral,
@@ -965,6 +973,21 @@ public sealed partial class SettingsWindow : Window
             IconNavInfo.Foreground          = key == "info"          ? accent : dim;
         }
         catch { }
+    }
+
+    // Force the nav radios' CheckStates. Two reasons: the initial Checked
+    // state is not always applied when IsChecked is set in markup, and the
+    // Style-level Foreground (ThemeResource) resolves against the APP theme,
+    // not the window theme — labels showed the dark-theme grey until the
+    // first click applied a VisualState setter. GoToState re-applies the
+    // correctly themed setter immediately.
+    private void SnapNavVisuals()
+    {
+        foreach (var rb in new[] { NavGeneral, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
+        {
+            if (rb == null) continue;
+            VisualStateManager.GoToState(rb, rb.IsChecked == true ? "Checked" : "Unchecked", false);
+        }
     }
 
     // Snap every ClipsyMiniToggle in a freshly-revealed pane to its final

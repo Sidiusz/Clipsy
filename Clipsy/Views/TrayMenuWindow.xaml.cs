@@ -45,6 +45,7 @@ public sealed partial class TrayMenuWindow : Window
     public TrayMenuWindow()
     {
         InitializeComponent();
+        ThemeService.Register(Content as FrameworkElement);
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
 
