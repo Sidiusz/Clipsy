@@ -158,26 +158,18 @@ public sealed partial class CaptureOverlayWindow : Window
         BuildScreenMenu();
         Activated += OnActivated;
         RootGrid.SizeChanged += OnRootGridSizeChanged;
-        // Reveal only after the frozen frame is actually decoded AND two
-        // composition ticks have passed since. BitmapImage decodes
-        // asynchronously even via the synchronous SetSource, so counting
-        // render ticks alone uncloaked a still-black window on big screens.
-        FrozenImage.ImageOpened += (_, _) => _frozenImageReady = true;
-        FrozenImage.ImageFailed += (_, _) => _frozenImageReady = true; // don't stay cloaked forever
-        int composedAfterReady = 0;
+        // The frozen frame is decoded synchronously into a WriteableBitmap
+        // (TryLoadFrozenImage), so the second composition tick is guaranteed
+        // to contain it — uncloak then. No async-decode race, no delay.
+        int composed = 0;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFirstFrames;
         void OnFirstFrames(object? s, object e)
         {
-            if (!_frozenImageReady) return;
-            composedAfterReady++;
-            if (composedAfterReady < 2) return;
+            composed++;
+            if (composed < 2) return;
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFirstFrames;
             Uncloak();
         }
-        // Safety net: never leave the overlay invisible if ImageOpened is lost.
-        var uncloakFailsafe = new Microsoft.UI.Xaml.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
-        uncloakFailsafe.Tick += (_, _) => { uncloakFailsafe.Stop(); Uncloak(); };
-        uncloakFailsafe.Start();
 
         // Start in region select mode (no drawing tool active)
         SetTool(ToolKind.None);
@@ -355,7 +347,6 @@ public sealed partial class CaptureOverlayWindow : Window
     }
 
     private bool _cloaked = true;
-    private bool _frozenImageReady;
     private const int DWMWA_CLOAK = 13;
 
     private void Uncloak()
@@ -381,18 +372,34 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         try
         {
-            var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-            using (var writer = new Windows.Storage.Streams.DataWriter(stream.GetOutputStreamAt(0)))
+            // Decode synchronously into a WriteableBitmap. BitmapImage decodes
+            // asynchronously even via SetSource, which forced a choice between
+            // a black flash (uncloak too early) and a visible open delay
+            // (waiting for ImageOpened). A ready pixel buffer gives neither.
+            using var ms = new System.IO.MemoryStream(_frame.ImageBytes);
+            using var src = new System.Drawing.Bitmap(ms);
+            var wb = new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(src.Width, src.Height);
+            var data = src.LockBits(
+                new System.Drawing.Rectangle(0, 0, src.Width, src.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            try
             {
-                writer.WriteBytes(_frame.ImageBytes);
-                writer.StoreAsync().AsTask().GetAwaiter().GetResult();
-                writer.FlushAsync().AsTask().GetAwaiter().GetResult();
-                writer.DetachStream();
+                using var dst = wb.PixelBuffer.AsStream();
+                int rowBytes = src.Width * 4;
+                var row = new byte[rowBytes];
+                for (int y = 0; y < src.Height; y++)
+                {
+                    Marshal.Copy(data.Scan0 + y * data.Stride, row, 0, rowBytes);
+                    dst.Write(row, 0, rowBytes);
+                }
             }
-            stream.Seek(0);
-            var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
-            bmp.SetSource(stream);
-            FrozenImage.Source = bmp;
+            finally
+            {
+                src.UnlockBits(data);
+            }
+            wb.Invalidate();
+            FrozenImage.Source = wb;
 
             // Set exact image dimensions in DIPs
             var b = _frame.VirtualBounds;
