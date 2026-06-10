@@ -47,6 +47,45 @@ public static class ThemeService
         element.RequestedTheme = ResolveTheme(SettingsService.Instance.Settings.Theme);
     }
 
+    /// <summary>
+    /// Theme-aware brush lookup for code-behind. Application.Current.Resources[key]
+    /// resolves ThemeDictionaries against the APP theme, which can disagree with
+    /// the per-window RequestedTheme (and with windows pinned to Dark, like the
+    /// capture overlay). Pass the element whose actual theme should win.
+    /// </summary>
+    public static Microsoft.UI.Xaml.Media.Brush GetBrush(string key, FrameworkElement? context = null)
+    {
+        var theme = context?.ActualTheme ?? ResolveTheme(SettingsService.Instance.Settings.Theme);
+        if (theme == ElementTheme.Default)
+        {
+            theme = Application.Current.RequestedTheme == ApplicationTheme.Light
+                ? ElementTheme.Light : ElementTheme.Dark;
+        }
+        var dictKey = theme == ElementTheme.Light ? "Light" : "Default";
+        if (TryGetThemed(Application.Current.Resources, dictKey, key, out var v)
+            && v is Microsoft.UI.Xaml.Media.Brush b)
+        {
+            return b;
+        }
+        return (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[key];
+    }
+
+    private static bool TryGetThemed(ResourceDictionary rd, string dictKey, string key, out object? value)
+    {
+        value = null;
+        if (rd.ThemeDictionaries.TryGetValue(dictKey, out var td)
+            && td is ResourceDictionary themed
+            && themed.TryGetValue(key, out value))
+        {
+            return true;
+        }
+        foreach (var merged in rd.MergedDictionaries)
+        {
+            if (TryGetThemed(merged, dictKey, key, out value)) return true;
+        }
+        return false;
+    }
+
     private static void ApplyToRegistered()
     {
         List<FrameworkElement> live = new();

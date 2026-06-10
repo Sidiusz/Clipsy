@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
 
-    <Grid Background="{StaticResource ClipsyBg0Brush}">
+    <Grid Background="{ThemeResource ClipsyBg0Brush}">
         <!-- Round all input fields in Settings. Scoped here so overlay/HUD
              inputs keep their own look. BasedOn the keyed Clipsy styles which
              carry the input surface + border; FontFamily kept for Onest. -->
@@ -26,8 +26,8 @@
 
         <!-- ============== Custom titlebar (drag region for system caption) ============== -->
         <Grid x:Name="AppTitleBar" Grid.Row="0"
-              Background="{StaticResource ClipsyBg0Brush}"
-              BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+              Background="{ThemeResource ClipsyBg0Brush}"
+              BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
               BorderThickness="0,0,0,1">
             <StackPanel Orientation="Horizontal"
                         Spacing="8" Margin="12,0" VerticalAlignment="Center"
@@ -35,19 +35,19 @@
                 <Image Width="20" Height="20"
                        Source="ms-appx:///Assets/Icons/clipsy-32.png" />
                 <TextBlock Text="Clipsy" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}"
-                           Foreground="{StaticResource ClipsyTextBrush}"
+                           Foreground="{ThemeResource ClipsyTextBrush}"
                            VerticalAlignment="Center" />
                 <TextBlock Text="·" FontSize="14"
-                           Foreground="{StaticResource ClipsyText3Brush}"
+                           Foreground="{ThemeResource ClipsyText3Brush}"
                            VerticalAlignment="Center" />
                 <TextBlock x:Name="TitleBarSubtitle" Text="Settings" FontSize="13"
-                           Foreground="{StaticResource ClipsyText2Brush}"
+                           Foreground="{ThemeResource ClipsyText2Brush}"
                            VerticalAlignment="Center" />
             </StackPanel>
         </Grid>
 
         <!-- ============== Body ============== -->
-        <Grid Grid.Row="1" Background="{StaticResource ClipsyBg0Brush}">
+        <Grid Grid.Row="1" Background="{ThemeResource ClipsyBg0Brush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="230" />
                 <ColumnDefinition Width="*" />
@@ -59,8 +59,8 @@
 
             <!-- ============== Sidebar ============== -->
             <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0"
-                    Background="{StaticResource ClipsyBg0Brush}"
-                    BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                    Background="{ThemeResource ClipsyBg0Brush}"
+                    BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                     BorderThickness="0,0,1,0">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -199,8 +199,8 @@
                     </StackPanel>
 
                     <Border Grid.Row="2"
-                            Background="{StaticResource ClipsyBg1Brush}"
-                            BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                            Background="{ThemeResource ClipsyBg1Brush}"
+                            BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                             BorderThickness="1"
                             CornerRadius="6"
                             Margin="12,12,12,16"
@@ -217,7 +217,7 @@
 
             <!-- ============== Content ============== -->
             <Border Grid.Row="0" Grid.Column="1"
-                    Background="{StaticResource ClipsyBg1Brush}">
+                    Background="{ThemeResource ClipsyBg1Brush}">
                 <ScrollViewer Padding="32,28,32,20"
                               VerticalScrollBarVisibility="Auto">
                     <Grid>
@@ -269,8 +269,8 @@
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <Border Grid.Column="1"
-                                                Background="{StaticResource ClipsyBgInputBrush}"
-                                                BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                                Background="{ThemeResource ClipsyBgInputBrush}"
+                                                BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                                                 BorderThickness="1" CornerRadius="6" Padding="3"
                                                 VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal" Spacing="2">
@@ -677,8 +677,8 @@
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <Border Grid.Column="1"
-                                                Background="{StaticResource ClipsyBgInputBrush}"
-                                                BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                                Background="{ThemeResource ClipsyBgInputBrush}"
+                                                BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                                                 BorderThickness="1" CornerRadius="6" Padding="3"
                                                 VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal" Spacing="2">
@@ -770,14 +770,14 @@
                                         </Grid>
                                     </StackPanel>
 
-                                    <Border Background="{StaticResource ClipsyBg2Brush}"
-                                            BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                    <Border Background="{ThemeResource ClipsyBg2Brush}"
+                                            BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                                             BorderThickness="1"
                                             CornerRadius="6"
                                             Padding="12">
                                         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                             <FontIcon Glyph="&#xE946;" FontSize="14"
-                                                      Foreground="{StaticResource ClipsyText3Brush}" />
+                                                      Foreground="{ThemeResource ClipsyText3Brush}" />
                                             <TextBlock x:Name="EstFileSizeLabel"
                                                        Style="{StaticResource ClipsyHelper}"
                                                        VerticalAlignment="Center" />
@@ -995,8 +995,8 @@
                                            Style="{StaticResource ClipsyHelper}" />
                             </StackPanel>
 
-                            <Border Background="{StaticResource ClipsyBg2Brush}"
-                                    BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                            <Border Background="{ThemeResource ClipsyBg2Brush}"
+                                    BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8">
                                 <Grid>
@@ -1006,8 +1006,8 @@
                                     </Grid.RowDefinitions>
 
                                     <Border Grid.Row="0"
-                                            Background="{StaticResource ClipsyBg1Brush}"
-                                            BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                            Background="{ThemeResource ClipsyBg1Brush}"
+                                            BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                                             BorderThickness="0,0,0,1"
                                             Padding="14,8"
                                             CornerRadius="8,8,0,0">
@@ -1057,7 +1057,7 @@
                                                                    Text="{Binding Label}"
                                                                    FontSize="13"
                                                                    FontWeight="{StaticResource ClipsyFontWeightStrong}"
-                                                                   Foreground="{StaticResource ClipsyTextBrush}"
+                                                                   Foreground="{ThemeResource ClipsyTextBrush}"
                                                                    VerticalAlignment="Center" />
                                                         <Button Grid.Column="1"
                                                                 Style="{StaticResource ClipsyKeyChip}"
@@ -1068,7 +1068,7 @@
                                                         </Button>
                                                     </Grid>
                                                     <Border Grid.Row="1" Height="1"
-                                                            Background="{StaticResource ClipsyBorderSubtleBrush}"
+                                                            Background="{ThemeResource ClipsyBorderSubtleBrush}"
                                                             Margin="14,0,14,0" />
                                                 </Grid>
                                             </DataTemplate>
@@ -1201,15 +1201,15 @@
                         <StackPanel x:Name="PaneInfo" Spacing="16" HorizontalAlignment="Stretch" Visibility="Collapsed">
                             <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
                                 <Border Width="64" Height="64" CornerRadius="14"
-                                        Background="{StaticResource ClipsyAccentBrush}">
+                                        Background="{ThemeResource ClipsyAccentBrush}">
                                     <FontIcon Glyph="&#xE722;" FontSize="28" Foreground="White" />
                                 </Border>
                                 <StackPanel Spacing="6" VerticalAlignment="Center">
                                     <TextBlock Text="Clipsy" FontSize="26" FontWeight="{StaticResource ClipsyFontWeightTitle}"
-                                               Foreground="{StaticResource ClipsyTextBrush}" />
+                                               Foreground="{ThemeResource ClipsyTextBrush}" />
                                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                        <Border Background="{StaticResource ClipsyBg2Brush}"
-                                                BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                        <Border Background="{ThemeResource ClipsyBg2Brush}"
+                                                BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                                                 BorderThickness="1" CornerRadius="6" Padding="10,3">
                                             <TextBlock x:Name="VersionLabel"
                                                        Style="{StaticResource ClipsyMono}"
@@ -1285,8 +1285,8 @@
 
             <!-- ============== Footer ============== -->
             <Border Grid.Row="1" Grid.Column="1"
-                    Background="{StaticResource ClipsyBg0Brush}"
-                    BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                    Background="{ThemeResource ClipsyBg0Brush}"
+                    BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                     BorderThickness="0,1,0,0"
                     Padding="20,12">
                 <Grid>
@@ -1315,8 +1315,8 @@
 
             <!-- ============== Notification banner (bottom-right overlay) ============== -->
             <Border x:Name="NotifyBanner" Grid.Row="0" Grid.Column="1"
-                    Background="{StaticResource ClipsyBg2Brush}"
-                    BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                    Background="{ThemeResource ClipsyBg2Brush}"
+                    BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="14,10"
@@ -1326,15 +1326,15 @@
                     Visibility="Collapsed">
                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                     <Border x:Name="NotifyAccentBar" Width="3" Height="22"
-                            Background="{StaticResource ClipsyAccentBrush}"
+                            Background="{ThemeResource ClipsyAccentBrush}"
                             CornerRadius="2" />
                     <FontIcon x:Name="NotifyIcon" Glyph="&#xE73E;" FontSize="14"
-                              Foreground="{StaticResource ClipsyAccentBrush}"
+                              Foreground="{ThemeResource ClipsyAccentBrush}"
                               VerticalAlignment="Center" />
                     <TextBlock x:Name="NotifyMessage"
                                Style="{StaticResource ClipsyBody}"
                                VerticalAlignment="Center"
-                               Foreground="{StaticResource ClipsyTextBrush}" />
+                               Foreground="{ThemeResource ClipsyTextBrush}" />
                 </StackPanel>
             </Border>
         </Grid>

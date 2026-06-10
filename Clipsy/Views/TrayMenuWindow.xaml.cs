@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Clipsy.Localization;
@@ -170,10 +170,10 @@ public sealed partial class TrayMenuWindow : Window
     {
         _updateStatus = status;
 
-        var text3   = (SolidColorBrush)Application.Current.Resources["ClipsyText3Brush"];
-        var green   = (SolidColorBrush)Application.Current.Resources["ClipsySuccessBrush"];
-        var red     = (SolidColorBrush)Application.Current.Resources["ClipsyDangerBrush"];
-        var warning = (SolidColorBrush)Application.Current.Resources["ClipsyWarningBrush"];
+        var text3   = ThemeService.GetBrush("ClipsyText3Brush", Content as FrameworkElement);
+        var green   = ThemeService.GetBrush("ClipsySuccessBrush", Content as FrameworkElement);
+        var red     = ThemeService.GetBrush("ClipsyDangerBrush", Content as FrameworkElement);
+        var warning = ThemeService.GetBrush("ClipsyWarningBrush", Content as FrameworkElement);
 
         switch (status)
         {
@@ -312,7 +312,7 @@ public sealed partial class TrayMenuWindow : Window
     private void OnItemPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         if (sender is Grid g)
-            g.Background = (SolidColorBrush)Application.Current.Resources["ClipsyAccentPressedBrush"];
+            g.Background = ThemeService.GetBrush("ClipsyAccentPressedBrush", Content as FrameworkElement);
     }
 
     private void OnItemPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -324,11 +324,11 @@ public sealed partial class TrayMenuWindow : Window
     {
         if (!_parts.TryGetValue(row, out var p)) return;
 
-        var accent    = (SolidColorBrush)Application.Current.Resources["ClipsyAccentBrush"];
+        var accent    = ThemeService.GetBrush("ClipsyAccentBrush", Content as FrameworkElement);
         var black     = new SolidColorBrush(Colors.Black);
-        var textBrush = (SolidColorBrush)Application.Current.Resources["ClipsyTextBrush"];
-        var iconBrush = (SolidColorBrush)Application.Current.Resources["ClipsyText2Brush"];
-        var hintBrush = (SolidColorBrush)Application.Current.Resources["ClipsyText3Brush"];
+        var textBrush = ThemeService.GetBrush("ClipsyTextBrush", Content as FrameworkElement);
+        var iconBrush = ThemeService.GetBrush("ClipsyText2Brush", Content as FrameworkElement);
+        var hintBrush = ThemeService.GetBrush("ClipsyText3Brush", Content as FrameworkElement);
 
         row.Background     = on ? accent : s_transparent;
         p.Label.Foreground = on ? black  : textBrush;

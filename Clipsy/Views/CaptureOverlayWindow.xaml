@@ -35,7 +35,7 @@
              snapped transparent, then faded back in. -->
         <Path x:Name="DimPath"
               Opacity="0"
-              Fill="{StaticResource ClipsyOverlayDimBrush}"
+              Fill="{ThemeResource ClipsyOverlayDimBrush}"
               IsHitTestVisible="False">
             <Path.Data>
                 <GeometryGroup x:Name="DimGeometry" FillRule="EvenOdd" />
@@ -64,7 +64,7 @@
                 <TranslateTransform x:Name="SelectionTranslate" />
             </Canvas.RenderTransform>
             <Rectangle x:Name="SelectionBorder"
-                       Stroke="{StaticResource ClipsyAccentBrush}"
+                       Stroke="{ThemeResource ClipsyAccentBrush}"
                        StrokeThickness="1.5"
                        IsHitTestVisible="False" />
             <Canvas x:Name="HandlesLayer" />
@@ -83,7 +83,7 @@
             </Rectangle>
             <TextBlock x:Name="OcrStatusLabel"
                        Text="No text found"
-                       Foreground="{StaticResource ClipsyTextBrush}"
+                       Foreground="{ThemeResource ClipsyTextBrush}"
                        FontSize="16"
                        Visibility="Collapsed" />
             <Canvas x:Name="CursorPreviewLayer" IsHitTestVisible="False" />
@@ -105,11 +105,11 @@
                             ToolTipService.ToolTip="Record">
                         <Grid>
                             <Ellipse Width="18" Height="18"
-                                   Stroke="{StaticResource ClipsyDangerBrush}"
+                                   Stroke="{ThemeResource ClipsyDangerBrush}"
                                    StrokeThickness="2"
                                    Fill="Transparent" />
                             <Ellipse Width="10" Height="10"
-                                   Fill="{StaticResource ClipsyDangerBrush}" />
+                                   Fill="{ThemeResource ClipsyDangerBrush}" />
                         </Grid>
                     </Button>
                     <Button x:Name="ScreenshotBtn"
@@ -162,8 +162,8 @@
                         Visibility="Collapsed">
 
                 <Border x:Name="OcrTextPanel"
-                        Background="{StaticResource ClipsyBg1Brush}"
-                        BorderBrush="{StaticResource ClipsyBorderBrush}"
+                        Background="{ThemeResource ClipsyBg1Brush}"
+                        BorderBrush="{ThemeResource ClipsyBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="8">
                     <Grid>
@@ -173,8 +173,8 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <Border Grid.Row="0"
-                                Background="{StaticResource ClipsyBg2Brush}"
-                                BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                Background="{ThemeResource ClipsyBg2Brush}"
+                                BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                                 BorderThickness="0,0,0,1"
                                 CornerRadius="8,8,0,0"
                                 Padding="12,8"
@@ -193,12 +193,12 @@
                                      TextWrapping="Wrap"
                                      Background="Transparent"
                                      BorderThickness="0"
-                                     Foreground="{StaticResource ClipsyTextBrush}"
+                                     Foreground="{ThemeResource ClipsyTextBrush}"
                                      FontSize="13" />
                         </ScrollViewer>
                         <Border Grid.Row="2"
-                                Background="{StaticResource ClipsyBg2Brush}"
-                                BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                Background="{ThemeResource ClipsyBg2Brush}"
+                                BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                                 BorderThickness="0,1,0,0"
                                 CornerRadius="0,0,8,8"
                                 Padding="8,6">
@@ -233,8 +233,8 @@
                 </Border>
 
                 <Border x:Name="TranslatePanel"
-                        Background="{StaticResource ClipsyBg1Brush}"
-                        BorderBrush="{StaticResource ClipsyBorderBrush}"
+                        Background="{ThemeResource ClipsyBg1Brush}"
+                        BorderBrush="{ThemeResource ClipsyBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="8"
                         Visibility="Collapsed">
@@ -244,8 +244,8 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <Border Grid.Row="0"
-                                Background="{StaticResource ClipsyBg2Brush}"
-                                BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                                Background="{ThemeResource ClipsyBg2Brush}"
+                                BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                                 BorderThickness="0,0,0,1"
                                 CornerRadius="8,8,0,0"
                                 Padding="12,6"
@@ -268,16 +268,16 @@
                                 <Button Grid.Column="1" x:Name="TranslateFromBtn"
                                         Click="OnTranslateFromBtnClick"
                                         Padding="8,3" MinWidth="44"
-                                        Background="{StaticResource ClipsyBg3Brush}"
+                                        Background="{ThemeResource ClipsyBg3Brush}"
                                         BorderThickness="0" CornerRadius="4"
                                         FontSize="11" FontWeight="SemiBold" />
                                 <FontIcon Grid.Column="2" Glyph="&#xE72A;" FontSize="10"
                                           Margin="6,0" VerticalAlignment="Center"
-                                          Foreground="{StaticResource ClipsyText3Brush}" />
+                                          Foreground="{ThemeResource ClipsyText3Brush}" />
                                 <Button Grid.Column="3" x:Name="TranslateToBtn"
                                         Click="OnTranslateToBtnClick"
                                         Padding="8,3" MinWidth="44"
-                                        Background="{StaticResource ClipsyBg3Brush}"
+                                        Background="{ThemeResource ClipsyBg3Brush}"
                                         BorderThickness="0" CornerRadius="4"
                                         FontSize="11" FontWeight="SemiBold" />
                             </Grid>
@@ -291,7 +291,7 @@
                                      TextWrapping="Wrap"
                                      Background="Transparent"
                                      BorderThickness="0"
-                                     Foreground="{StaticResource ClipsyTextBrush}"
+                                     Foreground="{ThemeResource ClipsyTextBrush}"
                                      FontSize="13" />
                         </ScrollViewer>
                     </Grid>
@@ -308,7 +308,7 @@
                             Style="{StaticResource ClipsyIconButton}"
                             ToolTipService.ToolTip="Color">
                         <Ellipse x:Name="ColorSwatch" Width="18" Height="18" Margin="0,6,0,0"
-                                 Fill="{StaticResource ClipsyDangerBrush}"
+                                 Fill="{ThemeResource ClipsyDangerBrush}"
                                  Stroke="White" StrokeThickness="1.5" />
                         <Button.Flyout>
                             <Flyout x:Name="ColorFlyout" Placement="Left"
@@ -344,7 +344,7 @@
                                         <Button x:Name="ColorConfirmBtn" Grid.Column="3"
                                                 Click="OnColorConfirmClick"
                                                 Style="{StaticResource ClipsyIconButton}"
-                                                Background="{StaticResource ClipsyAccentBrush}"
+                                                Background="{ThemeResource ClipsyAccentBrush}"
                                                 ToolTipService.ToolTip="Apply">
                                             <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="Black" />
                                         </Button>
@@ -400,20 +400,20 @@
                             <Grid x:Name="ShapeIconContainer" Width="16" Height="16" Margin="0,6,0,0"
                                   HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Rectangle x:Name="ShapeIconRect" Width="14" Height="14"
-                                           Stroke="{StaticResource ClipsyText2Brush}"
+                                           Stroke="{ThemeResource ClipsyText2Brush}"
                                            StrokeThickness="1.5" />
                                 <Ellipse x:Name="ShapeIconEllipse" Width="14" Height="14"
-                                         Stroke="{StaticResource ClipsyText2Brush}"
+                                         Stroke="{ThemeResource ClipsyText2Brush}"
                                          StrokeThickness="1.5"
                                          Visibility="Collapsed" />
                                 <Line x:Name="ShapeIconLine" X1="2" Y1="14" X2="14" Y2="2"
-                                      Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5"
+                                      Stroke="{ThemeResource ClipsyText2Brush}" StrokeThickness="1.5"
                                       Visibility="Collapsed" />
                                 <Grid x:Name="ShapeIconArrow" Visibility="Collapsed">
                                     <Line x:Name="ShapeIconArrowLine" X1="2" Y1="14" X2="14" Y2="2"
-                                          Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5" />
+                                          Stroke="{ThemeResource ClipsyText2Brush}" StrokeThickness="1.5" />
                                     <Polyline x:Name="ShapeIconArrowHead" Points="8,2 14,2 14,8"
-                                              Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5"
+                                              Stroke="{ThemeResource ClipsyText2Brush}" StrokeThickness="1.5"
                                               Fill="Transparent" />
                                 </Grid>
                             </Grid>
@@ -456,7 +456,7 @@
                             Click="OnShapePick" Tag="Rectangle"
                             ToolTipService.ToolTip="Rectangle">
                         <Rectangle Width="14" Height="14"
-                                   Stroke="{StaticResource ClipsyText2Brush}"
+                                   Stroke="{ThemeResource ClipsyText2Brush}"
                                    StrokeThickness="1.5" />
                     </Button>
                     <Button x:Name="EllipseBtn"
@@ -464,7 +464,7 @@
                             Click="OnShapePick" Tag="Ellipse"
                             ToolTipService.ToolTip="Ellipse">
                         <Ellipse Width="14" Height="14"
-                                 Stroke="{StaticResource ClipsyText2Brush}"
+                                 Stroke="{ThemeResource ClipsyText2Brush}"
                                  StrokeThickness="1.5" />
                     </Button>
                     <Button x:Name="LineBtn"
@@ -472,7 +472,7 @@
                             Click="OnShapePick" Tag="Line"
                             ToolTipService.ToolTip="Line">
                         <Line X1="2" Y1="14" X2="14" Y2="2"
-                              Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5" />
+                              Stroke="{ThemeResource ClipsyText2Brush}" StrokeThickness="1.5" />
                     </Button>
                     <Button x:Name="ArrowBtn"
                             Style="{StaticResource ClipsyIconButton}"
@@ -480,9 +480,9 @@
                             ToolTipService.ToolTip="Arrow">
                         <Grid>
                             <Line X1="2" Y1="14" X2="14" Y2="2"
-                                  Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5" />
+                                  Stroke="{ThemeResource ClipsyText2Brush}" StrokeThickness="1.5" />
                             <Polyline Points="8,2 14,2 14,8"
-                                      Stroke="{StaticResource ClipsyText2Brush}" StrokeThickness="1.5"
+                                      Stroke="{ThemeResource ClipsyText2Brush}" StrokeThickness="1.5"
                                       Fill="Transparent" />
                         </Grid>
                     </Button>
@@ -520,8 +520,8 @@
 
         <!-- ============== Hint (shown when no selection yet) ============== -->
         <Border x:Name="Hint"
-                Background="{StaticResource ClipsyBg1Brush}"
-                BorderBrush="{StaticResource ClipsyBorderBrush}"
+                Background="{ThemeResource ClipsyBg1Brush}"
+                BorderBrush="{ThemeResource ClipsyBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="12"
                 Padding="18,10"
@@ -541,9 +541,9 @@
                      (was Hint.Text on the old TextBlock). -->
                 <TextBlock x:Name="HintText"
                            Text="Drag to select"
-                           Foreground="{StaticResource ClipsyTextBrush}"
+                           Foreground="{ThemeResource ClipsyTextBrush}"
                            FontSize="14" FontWeight="SemiBold" />
-                <Border Width="1" Background="{StaticResource ClipsyBorderBrush}" />
+                <Border Width="1" Background="{ThemeResource ClipsyBorderBrush}" />
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                     <Border Style="{StaticResource ClipsyKbd}">
                         <TextBlock Text="Ctrl" Style="{StaticResource ClipsyMono}" />
@@ -552,15 +552,15 @@
                         <TextBlock Text="A" Style="{StaticResource ClipsyMono}" />
                     </Border>
                     <TextBlock x:Name="HintFullScreenLabel" Text="full screen"
-                               Foreground="{StaticResource ClipsyText2Brush}" FontSize="12" />
+                               Foreground="{ThemeResource ClipsyText2Brush}" FontSize="12" />
                 </StackPanel>
-                <Border Width="1" Background="{StaticResource ClipsyBorderBrush}" />
+                <Border Width="1" Background="{ThemeResource ClipsyBorderBrush}" />
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                     <Border Style="{StaticResource ClipsyKbd}">
                         <TextBlock Text="Esc" Style="{StaticResource ClipsyMono}" />
                     </Border>
                     <TextBlock x:Name="HintCancelLabel" Text="cancel"
-                               Foreground="{StaticResource ClipsyText2Brush}" FontSize="12" />
+                               Foreground="{ThemeResource ClipsyText2Brush}" FontSize="12" />
                 </StackPanel>
             </StackPanel>
         </Border>

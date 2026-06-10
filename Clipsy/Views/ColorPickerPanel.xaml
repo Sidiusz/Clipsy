@@ -41,7 +41,7 @@
             </Button>
             <Button x:Name="ConfirmBtn" Grid.Column="3"
                     Style="{StaticResource ClipsyIconButton}"
-                    Background="{StaticResource ClipsyAccentBrush}"
+                    Background="{ThemeResource ClipsyAccentBrush}"
                     Click="OnConfirmClick">
                 <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="Black" />
             </Button>

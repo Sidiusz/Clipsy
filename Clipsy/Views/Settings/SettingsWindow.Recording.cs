@@ -44,8 +44,8 @@ public sealed partial class SettingsWindow
         try
         {
             var fg = (Brush)Application.Current.Resources[installed ? "ClipsySuccessBrush" : "ClipsyText3Brush"];
-            var bg = (Brush)Application.Current.Resources["ClipsyBg2Brush"];
-            var bd = (Brush)Application.Current.Resources["ClipsyBorderSubtleBrush"];
+            var bg = ThemeService.GetBrush("ClipsyBg2Brush", Content as FrameworkElement);
+            var bd = ThemeService.GetBrush("ClipsyBorderSubtleBrush", Content as FrameworkElement);
             FfmpegStatusText.Foreground   = fg;
             FfmpegStatusBadge.Background  = bg;
             FfmpegStatusBadge.BorderBrush = bd;

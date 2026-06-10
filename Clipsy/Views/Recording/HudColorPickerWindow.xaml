@@ -13,8 +13,8 @@
     xmlns:views="using:Clipsy.Views">
 
     <Border x:Name="Root"
-            Background="{StaticResource ClipsyBg1Brush}"
-            BorderBrush="{StaticResource ClipsyBorderBrush}"
+            Background="{ThemeResource ClipsyBg1Brush}"
+            BorderBrush="{ThemeResource ClipsyBorderBrush}"
             BorderThickness="1"
             Padding="12"
             VerticalAlignment="Top">

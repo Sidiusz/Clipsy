@@ -6,8 +6,8 @@
 
     <Grid x:Name="RootGrid" Background="Transparent">
         <Border x:Name="CardBorder"
-                Background="{StaticResource ClipsyBg2Brush}"
-                BorderBrush="{StaticResource ClipsyBorderBrush}"
+                Background="{ThemeResource ClipsyBg2Brush}"
+                BorderBrush="{ThemeResource ClipsyBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="8"
                 Width="380"
@@ -34,12 +34,12 @@
                                    FontFamily="{StaticResource ClipsyFontFamily}"
                                    FontSize="13"
                                    FontWeight="{StaticResource ClipsyFontWeightStrong}"
-                                   Foreground="{StaticResource ClipsyTextBrush}"
+                                   Foreground="{ThemeResource ClipsyTextBrush}"
                                    TextWrapping="Wrap" />
                         <TextBlock x:Name="BodyText"
                                    FontFamily="{StaticResource ClipsyFontFamily}"
                                    FontSize="12"
-                                   Foreground="{StaticResource ClipsyText3Brush}"
+                                   Foreground="{ThemeResource ClipsyText3Brush}"
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed" />
                     </StackPanel>

@@ -702,7 +702,7 @@ public sealed partial class SettingsWindow : Window
         {
             // Orange dot rendered after the label sits at the trailing corner of
             // the param / nav row, so changed items pop without obscuring the text.
-            var warn = (Brush)Application.Current.Resources["ClipsyWarningBrush"];
+            var warn = ThemeService.GetBrush("ClipsyWarningBrush", lbl);
             lbl.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
             {
                 Text = "  ●",
@@ -954,8 +954,8 @@ public sealed partial class SettingsWindow : Window
 
         try
         {
-            var accent = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentBrush"];
-            var dim = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyText2Brush"];
+            var accent = ThemeService.GetBrush("ClipsyAccentBrush", Content as FrameworkElement);
+            var dim = ThemeService.GetBrush("ClipsyText2Brush", Content as FrameworkElement);
             IconNavGeneral.Foreground = key == "general" ? accent : dim;
             IconNavVideo.Foreground   = key == "video"   ? accent : dim;
             IconNavOcr.Foreground     = key == "ocr"     ? accent : dim;

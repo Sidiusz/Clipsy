@@ -9,21 +9,21 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Grid x:Name="HudRoot" Background="{StaticResource ClipsyBg1Brush}">
+    <Grid x:Name="HudRoot" Background="{ThemeResource ClipsyBg1Brush}">
         <Border x:Name="Root" Style="{StaticResource ClipsyToolbar}" BorderThickness="0">
             <StackPanel Orientation="Horizontal" Spacing="2">
                 <!-- Timer + REC dot -->
-                <Border BorderBrush="{StaticResource ClipsyBorderSubtleBrush}"
+                <Border BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
                         BorderThickness="0,0,1,0"
                         Padding="8,0,10,0"
                         Margin="0,0,2,0">
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Height="32">
                         <Ellipse x:Name="RecDot"
                                  Width="8" Height="8"
-                                 Fill="{StaticResource ClipsyDangerBrush}" />
+                                 Fill="{ThemeResource ClipsyDangerBrush}" />
                         <TextBlock x:Name="TimerText"
                                    Text="00:00"
-                                   Foreground="{StaticResource ClipsyTextBrush}"
+                                   Foreground="{ThemeResource ClipsyTextBrush}"
                                    FontFamily="Cascadia Mono, Consolas, monospace"
                                    FontSize="13"
                                    FontWeight="{StaticResource ClipsyFontWeightStrong}"
@@ -43,7 +43,7 @@
                         Style="{StaticResource ClipsyIconButtonDanger}"
                         Click="OnStopClick"
                         ToolTipService.ToolTip="Stop and save to last folder">
-                    <Rectangle Width="10" Height="10" Fill="{StaticResource ClipsyDangerBrush}" />
+                    <Rectangle Width="10" Height="10" Fill="{ThemeResource ClipsyDangerBrush}" />
                 </Button>
                 <Button x:Name="StopSaveBtn"
                         Style="{StaticResource ClipsyIconButton}"
@@ -71,7 +71,7 @@
                         Click="OnDrawColorBtnClick"
                         ToolTipService.ToolTip="Pen color">
                     <Ellipse x:Name="DrawColorSwatch" Width="16" Height="16"
-                             Fill="{StaticResource ClipsyDangerBrush}"
+                             Fill="{ThemeResource ClipsyDangerBrush}"
                              Stroke="White" StrokeThickness="1.5" />
                 </Button>
 
@@ -86,7 +86,7 @@
                         <FontIcon x:Name="MicIcon" Glyph="&#xE720;" FontSize="16" />
                         <Line x:Name="MicMuteSlash"
                               X1="13" Y1="1" X2="3" Y2="15"
-                              Stroke="{StaticResource ClipsyText3Brush}"
+                              Stroke="{ThemeResource ClipsyText3Brush}"
                               StrokeThickness="2"
                               StrokeStartLineCap="Round"
                               StrokeEndLineCap="Round"

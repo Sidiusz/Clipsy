@@ -2,97 +2,289 @@
 <!--
   Clipsy design tokens.
   Surface stack, semantic colors, brushes, type tokens, radii, font families.
-  Mirrors components/tokens.jsx from the design mockup. Drop into Themes/ and
-  merge from App.xaml.
+
+  Color/brush tokens live in ThemeDictionaries (Default = dark, Light) so the
+  app can switch themes at runtime. Consumers must reference brushes with
+  {ThemeResource ...}, not {StaticResource ...}, or they will not re-resolve
+  when the theme changes. Non-color tokens (fonts, sizes, radii) stay shared.
 -->
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     >
 
-    <!-- ===== Colors: surface stack ===== -->
-    <Color x:Key="ClipsyBg0">#FF1A1B1E</Color>
-    <Color x:Key="ClipsyBg1">#FF232428</Color>
-    <Color x:Key="ClipsyBg2">#FF2B2D31</Color>
-    <Color x:Key="ClipsyBg3">#FF35373C</Color>
-    <Color x:Key="ClipsyBgInput">#FF1E1F22</Color>
-    <Color x:Key="ClipsyBgHover">#FF393B40</Color>
-    <Color x:Key="ClipsyBgActive">#FF404249</Color>
+    <ResourceDictionary.ThemeDictionaries>
 
-    <!-- Borders -->
-    <Color x:Key="ClipsyBorderSubtle">#FF1F2023</Color>
-    <Color x:Key="ClipsyBorder">#FF3F4147</Color>
-    <Color x:Key="ClipsyBorderStrong">#FF4E5058</Color>
+        <!-- ===================== DARK (Default) ===================== -->
+        <ResourceDictionary x:Key="Default">
+            <!-- Colors: surface stack -->
+            <Color x:Key="ClipsyBg0">#FF1A1B1E</Color>
+            <Color x:Key="ClipsyBg1">#FF232428</Color>
+            <Color x:Key="ClipsyBg2">#FF2B2D31</Color>
+            <Color x:Key="ClipsyBg3">#FF35373C</Color>
+            <Color x:Key="ClipsyBgInput">#FF1E1F22</Color>
+            <Color x:Key="ClipsyBgHover">#FF393B40</Color>
+            <Color x:Key="ClipsyBgActive">#FF404249</Color>
 
-    <!-- Text -->
-    <Color x:Key="ClipsyText">#FFF2F3F5</Color>
-    <Color x:Key="ClipsyText2">#FFB5BAC1</Color>
-    <Color x:Key="ClipsyText3">#FF80848E</Color>
-    <Color x:Key="ClipsyText4">#FF5C5E66</Color>
+            <!-- Borders -->
+            <Color x:Key="ClipsyBorderSubtle">#FF1F2023</Color>
+            <Color x:Key="ClipsyBorder">#FF3F4147</Color>
+            <Color x:Key="ClipsyBorderStrong">#FF4E5058</Color>
 
-    <!-- Accent (Discord blurple) -->
-    <!-- Brand accent: amber/orange. Hover goes slightly lighter so the
-         hover state reads as a highlight, not a state change to grey;
-         Pressed goes darker. Dim is the same hue at low alpha for
-         subtle backgrounds (selected tool fills, focus rings). -->
-    <Color x:Key="ClipsyAccent">#FFE87D0D</Color>
-    <Color x:Key="ClipsyAccentHover">#FFFF9333</Color>
-    <Color x:Key="ClipsyAccentPressed">#FFC66808</Color>
-    <Color x:Key="ClipsyAccentDim">#28E87D0D</Color>
-    <Color x:Key="ClipsyAccentDimStrong">#3DE87D0D</Color>
+            <!-- Text -->
+            <Color x:Key="ClipsyText">#FFF2F3F5</Color>
+            <Color x:Key="ClipsyText2">#FFB5BAC1</Color>
+            <Color x:Key="ClipsyText3">#FF80848E</Color>
+            <Color x:Key="ClipsyText4">#FF5C5E66</Color>
 
-    <!-- Semantic -->
-    <Color x:Key="ClipsyDanger">#FFF23F42</Color>
-    <Color x:Key="ClipsyDangerHover">#FFD43539</Color>
-    <Color x:Key="ClipsyDangerDim">#28F23F42</Color>
-    <Color x:Key="ClipsySuccess">#FF23A55A</Color>
-    <Color x:Key="ClipsyWarning">#FFF0B232</Color>
+            <!-- Brand accent: amber/orange. Hover slightly lighter, Pressed
+                 darker, Dim = same hue at low alpha for subtle backgrounds. -->
+            <Color x:Key="ClipsyAccent">#FFE87D0D</Color>
+            <Color x:Key="ClipsyAccentHover">#FFFF9333</Color>
+            <Color x:Key="ClipsyAccentPressed">#FFC66808</Color>
+            <Color x:Key="ClipsyAccentDim">#28E87D0D</Color>
+            <Color x:Key="ClipsyAccentDimStrong">#3DE87D0D</Color>
 
-    <!-- Selection on capture overlay (alpha for cut-outs) -->
-    <Color x:Key="ClipsyOverlayDim">#800A0B0D</Color>
-    <Color x:Key="ClipsyOverlayPanel">#F0232428</Color>
+            <!-- Semantic -->
+            <Color x:Key="ClipsyDanger">#FFF23F42</Color>
+            <Color x:Key="ClipsyDangerHover">#FFD43539</Color>
+            <Color x:Key="ClipsyDangerDim">#28F23F42</Color>
+            <Color x:Key="ClipsySuccess">#FF23A55A</Color>
+            <Color x:Key="ClipsyWarning">#FFF0B232</Color>
 
-    <!-- ===== Brushes ===== -->
-    <SolidColorBrush x:Key="ClipsyBg0Brush"            Color="{StaticResource ClipsyBg0}" />
-    <SolidColorBrush x:Key="ClipsyBg1Brush"            Color="{StaticResource ClipsyBg1}" />
-    <SolidColorBrush x:Key="ClipsyBg2Brush"            Color="{StaticResource ClipsyBg2}" />
-    <SolidColorBrush x:Key="ClipsyBg3Brush"            Color="{StaticResource ClipsyBg3}" />
-    <SolidColorBrush x:Key="ClipsyBgInputBrush"        Color="{StaticResource ClipsyBgInput}" />
-    <SolidColorBrush x:Key="ClipsyBgHoverBrush"        Color="{StaticResource ClipsyBgHover}" />
-    <SolidColorBrush x:Key="ClipsyBgActiveBrush"       Color="{StaticResource ClipsyBgActive}" />
+            <!-- Selection on capture overlay (alpha for cut-outs) -->
+            <Color x:Key="ClipsyOverlayDim">#800A0B0D</Color>
+            <Color x:Key="ClipsyOverlayPanel">#F0232428</Color>
 
-    <SolidColorBrush x:Key="ClipsyBorderSubtleBrush"   Color="{StaticResource ClipsyBorderSubtle}" />
-    <SolidColorBrush x:Key="ClipsyBorderBrush"         Color="{StaticResource ClipsyBorder}" />
-    <SolidColorBrush x:Key="ClipsyBorderStrongBrush"   Color="{StaticResource ClipsyBorderStrong}" />
+            <!-- Brushes -->
+            <SolidColorBrush x:Key="ClipsyBg0Brush"            Color="{StaticResource ClipsyBg0}" />
+            <SolidColorBrush x:Key="ClipsyBg1Brush"            Color="{StaticResource ClipsyBg1}" />
+            <SolidColorBrush x:Key="ClipsyBg2Brush"            Color="{StaticResource ClipsyBg2}" />
+            <SolidColorBrush x:Key="ClipsyBg3Brush"            Color="{StaticResource ClipsyBg3}" />
+            <SolidColorBrush x:Key="ClipsyBgInputBrush"        Color="{StaticResource ClipsyBgInput}" />
+            <SolidColorBrush x:Key="ClipsyBgHoverBrush"        Color="{StaticResource ClipsyBgHover}" />
+            <SolidColorBrush x:Key="ClipsyBgActiveBrush"       Color="{StaticResource ClipsyBgActive}" />
 
-    <SolidColorBrush x:Key="ClipsyTextBrush"           Color="{StaticResource ClipsyText}" />
-    <SolidColorBrush x:Key="ClipsyText2Brush"          Color="{StaticResource ClipsyText2}" />
-    <SolidColorBrush x:Key="ClipsyText3Brush"          Color="{StaticResource ClipsyText3}" />
-    <SolidColorBrush x:Key="ClipsyText4Brush"          Color="{StaticResource ClipsyText4}" />
+            <SolidColorBrush x:Key="ClipsyBorderSubtleBrush"   Color="{StaticResource ClipsyBorderSubtle}" />
+            <SolidColorBrush x:Key="ClipsyBorderBrush"         Color="{StaticResource ClipsyBorder}" />
+            <SolidColorBrush x:Key="ClipsyBorderStrongBrush"   Color="{StaticResource ClipsyBorderStrong}" />
 
-    <SolidColorBrush x:Key="ClipsyAccentBrush"         Color="{StaticResource ClipsyAccent}" />
-    <SolidColorBrush x:Key="ClipsyAccentHoverBrush"    Color="{StaticResource ClipsyAccentHover}" />
-    <SolidColorBrush x:Key="ClipsyAccentPressedBrush"  Color="{StaticResource ClipsyAccentPressed}" />
-    <SolidColorBrush x:Key="ClipsyAccentDimBrush"      Color="{StaticResource ClipsyAccentDim}" />
-    <SolidColorBrush x:Key="ClipsyAccentDimStrongBrush" Color="{StaticResource ClipsyAccentDimStrong}" />
-    <!-- Codec / RadioCard checked fill — amber tint at low alpha so the
-         selected card reads as branded, not as the old indigo state. -->
-    <SolidColorBrush x:Key="ClipsyCodecSelectedBrush"  Color="#33E87D0D" />
+            <SolidColorBrush x:Key="ClipsyTextBrush"           Color="{StaticResource ClipsyText}" />
+            <SolidColorBrush x:Key="ClipsyText2Brush"          Color="{StaticResource ClipsyText2}" />
+            <SolidColorBrush x:Key="ClipsyText3Brush"          Color="{StaticResource ClipsyText3}" />
+            <SolidColorBrush x:Key="ClipsyText4Brush"          Color="{StaticResource ClipsyText4}" />
 
-    <SolidColorBrush x:Key="ClipsyDangerBrush"         Color="{StaticResource ClipsyDanger}" />
-    <SolidColorBrush x:Key="ClipsyDangerHoverBrush"    Color="{StaticResource ClipsyDangerHover}" />
-    <SolidColorBrush x:Key="ClipsyDangerDimBrush"      Color="{StaticResource ClipsyDangerDim}" />
-    <SolidColorBrush x:Key="ClipsySuccessBrush"        Color="{StaticResource ClipsySuccess}" />
-    <SolidColorBrush x:Key="ClipsyWarningBrush"        Color="{StaticResource ClipsyWarning}" />
-    <SolidColorBrush x:Key="ClipsyWarningDimBrush"     Color="#28F0B232" />
+            <SolidColorBrush x:Key="ClipsyAccentBrush"         Color="{StaticResource ClipsyAccent}" />
+            <SolidColorBrush x:Key="ClipsyAccentHoverBrush"    Color="{StaticResource ClipsyAccentHover}" />
+            <SolidColorBrush x:Key="ClipsyAccentPressedBrush"  Color="{StaticResource ClipsyAccentPressed}" />
+            <SolidColorBrush x:Key="ClipsyAccentDimBrush"      Color="{StaticResource ClipsyAccentDim}" />
+            <SolidColorBrush x:Key="ClipsyAccentDimStrongBrush" Color="{StaticResource ClipsyAccentDimStrong}" />
+            <!-- Codec / RadioCard checked fill — amber tint at low alpha -->
+            <SolidColorBrush x:Key="ClipsyCodecSelectedBrush"  Color="#33E87D0D" />
 
-    <SolidColorBrush x:Key="ClipsyOverlayDimBrush"     Color="{StaticResource ClipsyOverlayDim}" />
-    <SolidColorBrush x:Key="ClipsyOverlayPanelBrush"   Color="{StaticResource ClipsyOverlayPanel}" />
+            <SolidColorBrush x:Key="ClipsyDangerBrush"         Color="{StaticResource ClipsyDanger}" />
+            <SolidColorBrush x:Key="ClipsyDangerHoverBrush"    Color="{StaticResource ClipsyDangerHover}" />
+            <SolidColorBrush x:Key="ClipsyDangerDimBrush"      Color="{StaticResource ClipsyDangerDim}" />
+            <SolidColorBrush x:Key="ClipsySuccessBrush"        Color="{StaticResource ClipsySuccess}" />
+            <SolidColorBrush x:Key="ClipsyWarningBrush"        Color="{StaticResource ClipsyWarning}" />
+            <SolidColorBrush x:Key="ClipsyWarningDimBrush"     Color="#28F0B232" />
 
-    <!-- ===== Type tokens ===== -->
-    <!-- Bundled Onest variable font. ms-appx URI lets WinUI 3 resolve the
-         .ttf shipped under Assets/Fonts/ without a system install. Fallbacks
-         keep the UI legible if the font file is missing for any reason. -->
+            <SolidColorBrush x:Key="ClipsyOverlayDimBrush"     Color="{StaticResource ClipsyOverlayDim}" />
+            <SolidColorBrush x:Key="ClipsyOverlayPanelBrush"   Color="{StaticResource ClipsyOverlayPanel}" />
+
+            <!-- Knob/contrast color that must stay readable on the accent -->
+            <SolidColorBrush x:Key="ClipsyOnAccentBrush"       Color="#FFF2F3F5" />
+
+            <!-- WinUI default overrides -->
+            <StaticResource x:Key="ApplicationPageBackgroundThemeBrush" ResourceKey="ClipsyBg1Brush" />
+            <StaticResource x:Key="TextFillColorPrimaryBrush"   ResourceKey="ClipsyTextBrush" />
+            <StaticResource x:Key="TextFillColorSecondaryBrush" ResourceKey="ClipsyText2Brush" />
+            <StaticResource x:Key="TextFillColorTertiaryBrush"  ResourceKey="ClipsyText3Brush" />
+            <StaticResource x:Key="SystemAccentColor"           ResourceKey="ClipsyAccent" />
+            <StaticResource x:Key="AccentFillColorDefaultBrush" ResourceKey="ClipsyAccentBrush" />
+            <StaticResource x:Key="AccentFillColorSecondaryBrush" ResourceKey="ClipsyAccentHoverBrush" />
+            <StaticResource x:Key="AccentFillColorTertiaryBrush"  ResourceKey="ClipsyAccentPressedBrush" />
+
+            <StaticResource x:Key="ComboBoxBackground"            ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundPressed"     ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundDisabled"    ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundUnfocused"   ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundFocused"     ResourceKey="ClipsyBgInputBrush" />
+
+            <StaticResource x:Key="TextControlBackground"            ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="TextControlBackgroundFocused"     ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="TextControlBackgroundDisabled"    ResourceKey="ClipsyBgInputBrush" />
+
+            <StaticResource x:Key="ComboBoxBorderBrush"            ResourceKey="ClipsyBorderSubtleBrush" />
+            <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="ClipsyBorderBrush" />
+            <StaticResource x:Key="ComboBoxBorderBrushPressed"     ResourceKey="ClipsyBorderBrush" />
+            <StaticResource x:Key="TextControlBorderBrush"             ResourceKey="ClipsyBorderSubtleBrush" />
+            <StaticResource x:Key="TextControlBorderBrushPointerOver"  ResourceKey="ClipsyBorderBrush" />
+            <StaticResource x:Key="TextControlBorderBrushFocused"      ResourceKey="ClipsyAccentBrush" />
+
+            <StaticResource x:Key="ComboBoxDropDownBackground"            ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxItemBackground"                ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundPointerOver"     ResourceKey="ClipsyBg3Brush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundPressed"         ResourceKey="ClipsyBgActiveBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelected"        ResourceKey="ClipsyBg3Brush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="ClipsyBg3Brush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed"     ResourceKey="ClipsyBgActiveBrush" />
+
+            <!-- MenuFlyout: brand accent hover with black text -->
+            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver"   Color="{StaticResource ClipsyAccent}" />
+            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed"       Color="{StaticResource ClipsyAccentPressed}" />
+            <SolidColorBrush x:Key="MenuFlyoutItemForegroundPointerOver"   Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutItemForegroundPressed"       Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPointerOver" Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPressed"     Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPointerOver"     Color="{StaticResource ClipsyAccent}" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPressed"         Color="{StaticResource ClipsyAccentPressed}" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened"   Color="{StaticResource ClipsyAccent}" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPointerOver"     Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPressed"         Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundSubMenuOpened"   Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemChevronPointerOver"        Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemChevronPressed"            Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemChevronSubMenuOpened"      Color="Black" />
+        </ResourceDictionary>
+
+        <!-- ===================== LIGHT ===================== -->
+        <ResourceDictionary x:Key="Light">
+            <!-- Colors: surface stack (inverted) -->
+            <Color x:Key="ClipsyBg0">#FFE3E5E8</Color>
+            <Color x:Key="ClipsyBg1">#FFF2F3F5</Color>
+            <Color x:Key="ClipsyBg2">#FFEBEDEF</Color>
+            <Color x:Key="ClipsyBg3">#FFDFE2E6</Color>
+            <Color x:Key="ClipsyBgInput">#FFFFFFFF</Color>
+            <Color x:Key="ClipsyBgHover">#FFD7DADF</Color>
+            <Color x:Key="ClipsyBgActive">#FFCDD1D6</Color>
+
+            <!-- Borders -->
+            <Color x:Key="ClipsyBorderSubtle">#FFDBDEE2</Color>
+            <Color x:Key="ClipsyBorder">#FFC4C9CF</Color>
+            <Color x:Key="ClipsyBorderStrong">#FFAEB4BC</Color>
+
+            <!-- Text -->
+            <Color x:Key="ClipsyText">#FF1E1F22</Color>
+            <Color x:Key="ClipsyText2">#FF4E5058</Color>
+            <Color x:Key="ClipsyText3">#FF6D7178</Color>
+            <Color x:Key="ClipsyText4">#FFA8ADB4</Color>
+
+            <!-- Accent: same brand amber; pressed darker for contrast on light -->
+            <Color x:Key="ClipsyAccent">#FFE87D0D</Color>
+            <Color x:Key="ClipsyAccentHover">#FFD97408</Color>
+            <Color x:Key="ClipsyAccentPressed">#FFB85F06</Color>
+            <Color x:Key="ClipsyAccentDim">#28E87D0D</Color>
+            <Color x:Key="ClipsyAccentDimStrong">#3DE87D0D</Color>
+
+            <!-- Semantic -->
+            <Color x:Key="ClipsyDanger">#FFD93C3F</Color>
+            <Color x:Key="ClipsyDangerHover">#FFBC3134</Color>
+            <Color x:Key="ClipsyDangerDim">#28F23F42</Color>
+            <Color x:Key="ClipsySuccess">#FF1D8E4E</Color>
+            <Color x:Key="ClipsyWarning">#FFCC8F12</Color>
+
+            <!-- Capture overlay stays dark regardless of theme; same values -->
+            <Color x:Key="ClipsyOverlayDim">#800A0B0D</Color>
+            <Color x:Key="ClipsyOverlayPanel">#F0232428</Color>
+
+            <!-- Brushes -->
+            <SolidColorBrush x:Key="ClipsyBg0Brush"            Color="{StaticResource ClipsyBg0}" />
+            <SolidColorBrush x:Key="ClipsyBg1Brush"            Color="{StaticResource ClipsyBg1}" />
+            <SolidColorBrush x:Key="ClipsyBg2Brush"            Color="{StaticResource ClipsyBg2}" />
+            <SolidColorBrush x:Key="ClipsyBg3Brush"            Color="{StaticResource ClipsyBg3}" />
+            <SolidColorBrush x:Key="ClipsyBgInputBrush"        Color="{StaticResource ClipsyBgInput}" />
+            <SolidColorBrush x:Key="ClipsyBgHoverBrush"        Color="{StaticResource ClipsyBgHover}" />
+            <SolidColorBrush x:Key="ClipsyBgActiveBrush"       Color="{StaticResource ClipsyBgActive}" />
+
+            <SolidColorBrush x:Key="ClipsyBorderSubtleBrush"   Color="{StaticResource ClipsyBorderSubtle}" />
+            <SolidColorBrush x:Key="ClipsyBorderBrush"         Color="{StaticResource ClipsyBorder}" />
+            <SolidColorBrush x:Key="ClipsyBorderStrongBrush"   Color="{StaticResource ClipsyBorderStrong}" />
+
+            <SolidColorBrush x:Key="ClipsyTextBrush"           Color="{StaticResource ClipsyText}" />
+            <SolidColorBrush x:Key="ClipsyText2Brush"          Color="{StaticResource ClipsyText2}" />
+            <SolidColorBrush x:Key="ClipsyText3Brush"          Color="{StaticResource ClipsyText3}" />
+            <SolidColorBrush x:Key="ClipsyText4Brush"          Color="{StaticResource ClipsyText4}" />
+
+            <SolidColorBrush x:Key="ClipsyAccentBrush"         Color="{StaticResource ClipsyAccent}" />
+            <SolidColorBrush x:Key="ClipsyAccentHoverBrush"    Color="{StaticResource ClipsyAccentHover}" />
+            <SolidColorBrush x:Key="ClipsyAccentPressedBrush"  Color="{StaticResource ClipsyAccentPressed}" />
+            <SolidColorBrush x:Key="ClipsyAccentDimBrush"      Color="{StaticResource ClipsyAccentDim}" />
+            <SolidColorBrush x:Key="ClipsyAccentDimStrongBrush" Color="{StaticResource ClipsyAccentDimStrong}" />
+            <SolidColorBrush x:Key="ClipsyCodecSelectedBrush"  Color="#33E87D0D" />
+
+            <SolidColorBrush x:Key="ClipsyDangerBrush"         Color="{StaticResource ClipsyDanger}" />
+            <SolidColorBrush x:Key="ClipsyDangerHoverBrush"    Color="{StaticResource ClipsyDangerHover}" />
+            <SolidColorBrush x:Key="ClipsyDangerDimBrush"      Color="{StaticResource ClipsyDangerDim}" />
+            <SolidColorBrush x:Key="ClipsySuccessBrush"        Color="{StaticResource ClipsySuccess}" />
+            <SolidColorBrush x:Key="ClipsyWarningBrush"        Color="{StaticResource ClipsyWarning}" />
+            <SolidColorBrush x:Key="ClipsyWarningDimBrush"     Color="#28F0B232" />
+
+            <SolidColorBrush x:Key="ClipsyOverlayDimBrush"     Color="{StaticResource ClipsyOverlayDim}" />
+            <SolidColorBrush x:Key="ClipsyOverlayPanelBrush"   Color="{StaticResource ClipsyOverlayPanel}" />
+
+            <SolidColorBrush x:Key="ClipsyOnAccentBrush"       Color="#FFFFFFFF" />
+
+            <!-- WinUI default overrides -->
+            <StaticResource x:Key="ApplicationPageBackgroundThemeBrush" ResourceKey="ClipsyBg1Brush" />
+            <StaticResource x:Key="TextFillColorPrimaryBrush"   ResourceKey="ClipsyTextBrush" />
+            <StaticResource x:Key="TextFillColorSecondaryBrush" ResourceKey="ClipsyText2Brush" />
+            <StaticResource x:Key="TextFillColorTertiaryBrush"  ResourceKey="ClipsyText3Brush" />
+            <StaticResource x:Key="SystemAccentColor"           ResourceKey="ClipsyAccent" />
+            <StaticResource x:Key="AccentFillColorDefaultBrush" ResourceKey="ClipsyAccentBrush" />
+            <StaticResource x:Key="AccentFillColorSecondaryBrush" ResourceKey="ClipsyAccentHoverBrush" />
+            <StaticResource x:Key="AccentFillColorTertiaryBrush"  ResourceKey="ClipsyAccentPressedBrush" />
+
+            <StaticResource x:Key="ComboBoxBackground"            ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundPressed"     ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundDisabled"    ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundUnfocused"   ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundFocused"     ResourceKey="ClipsyBgInputBrush" />
+
+            <StaticResource x:Key="TextControlBackground"            ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="TextControlBackgroundFocused"     ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="TextControlBackgroundDisabled"    ResourceKey="ClipsyBgInputBrush" />
+
+            <StaticResource x:Key="ComboBoxBorderBrush"            ResourceKey="ClipsyBorderSubtleBrush" />
+            <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="ClipsyBorderBrush" />
+            <StaticResource x:Key="ComboBoxBorderBrushPressed"     ResourceKey="ClipsyBorderBrush" />
+            <StaticResource x:Key="TextControlBorderBrush"             ResourceKey="ClipsyBorderSubtleBrush" />
+            <StaticResource x:Key="TextControlBorderBrushPointerOver"  ResourceKey="ClipsyBorderBrush" />
+            <StaticResource x:Key="TextControlBorderBrushFocused"      ResourceKey="ClipsyAccentBrush" />
+
+            <StaticResource x:Key="ComboBoxDropDownBackground"            ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxItemBackground"                ResourceKey="ClipsyBgInputBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundPointerOver"     ResourceKey="ClipsyBg3Brush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundPressed"         ResourceKey="ClipsyBgActiveBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelected"        ResourceKey="ClipsyBg3Brush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="ClipsyBg3Brush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed"     ResourceKey="ClipsyBgActiveBrush" />
+
+            <!-- MenuFlyout: accent hover, black text reads fine on amber -->
+            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver"   Color="{StaticResource ClipsyAccent}" />
+            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed"       Color="{StaticResource ClipsyAccentPressed}" />
+            <SolidColorBrush x:Key="MenuFlyoutItemForegroundPointerOver"   Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutItemForegroundPressed"       Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPointerOver" Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPressed"     Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPointerOver"     Color="{StaticResource ClipsyAccent}" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPressed"         Color="{StaticResource ClipsyAccentPressed}" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened"   Color="{StaticResource ClipsyAccent}" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPointerOver"     Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPressed"         Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundSubMenuOpened"   Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemChevronPointerOver"        Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemChevronPressed"            Color="Black" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemChevronSubMenuOpened"      Color="Black" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- ===== Type tokens (theme-independent) ===== -->
     <x:String x:Key="ClipsyFontFamily">ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, Segoe UI, sans-serif</x:String>
     <x:String x:Key="ClipsyFontFamilyMono">JetBrains Mono, Cascadia Mono, Consolas, monospace</x:String>
 
@@ -102,9 +294,6 @@
     <x:Double x:Key="ClipsyFontSizeTitle">20</x:Double>
     <x:Double x:Key="ClipsyFontSizeHero">26</x:Double>
 
-    <!-- Font weights. All semantic — change one to retune that category
-         independently. Currently: Strong/Title/Label = SemiBold,
-         Body = Normal, Heavy = Bold. -->
     <FontWeight x:Key="ClipsyFontWeightBody">Normal</FontWeight>
     <FontWeight x:Key="ClipsyFontWeightStrong">SemiBold</FontWeight>
     <FontWeight x:Key="ClipsyFontWeightTitle">SemiBold</FontWeight>
@@ -123,71 +312,5 @@
     <x:Double x:Key="ClipsyToolGlyphSize">16</x:Double>
     <x:Double x:Key="ClipsyControlHeight">30</x:Double>
     <x:Double x:Key="ClipsyControlHeightSm">26</x:Double>
-
-    <!-- ===== WinUI default overrides — make every built-in control inherit Clipsy palette ===== -->
-    <!-- Page background -->
-    <StaticResource x:Key="ApplicationPageBackgroundThemeBrush" ResourceKey="ClipsyBg1Brush" />
-
-    <!-- Text foreground -->
-    <StaticResource x:Key="TextFillColorPrimaryBrush"   ResourceKey="ClipsyTextBrush" />
-    <StaticResource x:Key="TextFillColorSecondaryBrush" ResourceKey="ClipsyText2Brush" />
-    <StaticResource x:Key="TextFillColorTertiaryBrush"  ResourceKey="ClipsyText3Brush" />
-
-    <!-- Accent (Discord blurple bleeds into ToggleSwitch, focus rings, etc.) -->
-    <StaticResource x:Key="SystemAccentColor"          ResourceKey="ClipsyAccent" />
-    <StaticResource x:Key="AccentFillColorDefaultBrush" ResourceKey="ClipsyAccentBrush" />
-    <StaticResource x:Key="AccentFillColorSecondaryBrush" ResourceKey="ClipsyAccentHoverBrush" />
-    <StaticResource x:Key="AccentFillColorTertiaryBrush"  ResourceKey="ClipsyAccentPressedBrush" />
-
-    <!-- ComboBox / TextBox / NumberBox backgrounds -->
-    <StaticResource x:Key="ComboBoxBackground"            ResourceKey="ClipsyBgInputBrush" />
-    <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="ClipsyBgInputBrush" />
-    <StaticResource x:Key="ComboBoxBackgroundPressed"     ResourceKey="ClipsyBgInputBrush" />
-    <StaticResource x:Key="ComboBoxBackgroundDisabled"    ResourceKey="ClipsyBgInputBrush" />
-    <StaticResource x:Key="ComboBoxBackgroundUnfocused"   ResourceKey="ClipsyBgInputBrush" />
-    <StaticResource x:Key="ComboBoxBackgroundFocused"     ResourceKey="ClipsyBgInputBrush" />
-
-    <StaticResource x:Key="TextControlBackground"            ResourceKey="ClipsyBgInputBrush" />
-    <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ClipsyBgInputBrush" />
-    <StaticResource x:Key="TextControlBackgroundFocused"     ResourceKey="ClipsyBgInputBrush" />
-    <StaticResource x:Key="TextControlBackgroundDisabled"    ResourceKey="ClipsyBgInputBrush" />
-
-    <!-- ComboBox / TextBox border colors (subtle) -->
-    <StaticResource x:Key="ComboBoxBorderBrush"            ResourceKey="ClipsyBorderSubtleBrush" />
-    <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="ClipsyBorderBrush" />
-    <StaticResource x:Key="ComboBoxBorderBrushPressed"     ResourceKey="ClipsyBorderBrush" />
-    <StaticResource x:Key="TextControlBorderBrush"             ResourceKey="ClipsyBorderSubtleBrush" />
-    <StaticResource x:Key="TextControlBorderBrushPointerOver"  ResourceKey="ClipsyBorderBrush" />
-    <StaticResource x:Key="TextControlBorderBrushFocused"      ResourceKey="ClipsyAccentBrush" />
-
-    <!-- Surfaces used in ComboBox popup -->
-    <StaticResource x:Key="ComboBoxDropDownBackground"            ResourceKey="ClipsyBgInputBrush" />
-    <StaticResource x:Key="ComboBoxItemBackground"                ResourceKey="ClipsyBgInputBrush" />
-    <StaticResource x:Key="ComboBoxItemBackgroundPointerOver"     ResourceKey="ClipsyBg3Brush" />
-    <StaticResource x:Key="ComboBoxItemBackgroundPressed"         ResourceKey="ClipsyBgActiveBrush" />
-    <StaticResource x:Key="ComboBoxItemBackgroundSelected"        ResourceKey="ClipsyBg3Brush" />
-    <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="ClipsyBg3Brush" />
-    <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed"     ResourceKey="ClipsyBgActiveBrush" />
-
-    <!-- MenuFlyoutItem / MenuFlyoutSubItem: paint hover/press with the
-         brand accent and flip foreground + icon to black so the text
-         reads cleanly on the amber fill. Default WinUI uses a subtle
-         grey tint that ignored our accent. -->
-    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver"   Color="{StaticResource ClipsyAccent}" />
-    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed"       Color="{StaticResource ClipsyAccentPressed}" />
-    <SolidColorBrush x:Key="MenuFlyoutItemForegroundPointerOver"   Color="Black" />
-    <SolidColorBrush x:Key="MenuFlyoutItemForegroundPressed"       Color="Black" />
-    <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPointerOver" Color="Black" />
-    <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPressed"     Color="Black" />
-
-    <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPointerOver"     Color="{StaticResource ClipsyAccent}" />
-    <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPressed"         Color="{StaticResource ClipsyAccentPressed}" />
-    <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened"   Color="{StaticResource ClipsyAccent}" />
-    <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPointerOver"     Color="Black" />
-    <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPressed"         Color="Black" />
-    <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundSubMenuOpened"   Color="Black" />
-    <SolidColorBrush x:Key="MenuFlyoutSubItemChevronPointerOver"        Color="Black" />
-    <SolidColorBrush x:Key="MenuFlyoutSubItemChevronPressed"            Color="Black" />
-    <SolidColorBrush x:Key="MenuFlyoutSubItemChevronSubMenuOpened"      Color="Black" />
 
 </ResourceDictionary>
