@@ -7,16 +7,14 @@ Screenshot and screen recording tool for Windows. Lives in the tray, pops up an 
 - Capture a region, window or full screen with a hotkey
 - Draw on screenshots: pencil, shapes, lines, arrows, text
 - Color picker and eyedropper with magnifier
-- Screen recording (with ffmpeg if installed) including a region border and floating HUD
-- GIF export, with a built-in encoder if ffmpeg is missing
+- Screen recording including a region border and floating HUD
+- GIF export
 - Mic toggle while recording
 - OCR text recognition on captures, with translation
 - Copy to clipboard, save to file, or open the saved folder right away
 - Light and dark theme
 - Customizable hotkeys
-- Multiple languages (UI localization)
-- Auto-update check from GitHub releases
-- Runs from the system tray, autostart on login
+- Multiple languages
 
 ## Install
 
