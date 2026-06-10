@@ -36,7 +36,7 @@ public sealed class AppSettings
     public string HotkeyMicToggle { get; set; } = "";        // empty = disabled
 
     // Cursor capture
-    public bool CaptureScreenshotCursor { get; set; } = true;
+    public bool CaptureScreenshotCursor { get; set; } = false;
     public bool CaptureVideoCursor { get; set; } = true;
 
     // Capture overlay: dock toolbars to the corner where the selection drag ended

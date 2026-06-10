@@ -20,7 +20,10 @@ public sealed class ScreenFreezeService
 
     public sealed class FrozenFrame
     {
-        public required byte[] PngBytes { get; init; }
+        // BMP-encoded frame. PNG encoding of a full 1440p/4K virtual screen
+        // takes seconds and delayed overlay open after PrintScreen; BMP is a
+        // raw memcpy both ways and decodes instantly. Buffer is transient.
+        public required byte[] ImageBytes { get; init; }
         public required Rectangle VirtualBounds { get; init; }
         public required IReadOnlyList<MonitorInfo> Monitors { get; init; }
     }
@@ -49,11 +52,11 @@ public sealed class ScreenFreezeService
         }
 
         using var ms = new MemoryStream();
-        bmp.Save(ms, ImageFormat.Png);
+        bmp.Save(ms, ImageFormat.Bmp);
 
         return new FrozenFrame
         {
-            PngBytes = ms.ToArray(),
+            ImageBytes = ms.ToArray(),
             VirtualBounds = bounds,
             Monitors = monitors,
         };

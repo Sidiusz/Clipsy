@@ -115,6 +115,10 @@ public sealed partial class CaptureOverlayWindow : Window
 
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = GetAppWindowForCurrentWindow();
+        // Cloak BEFORE the window is shown (ConfigureAsOverlay calls
+        // SetWindowPos with SWP_SHOWWINDOW). Cloaking afterwards left one
+        // uncomposited black frame visible — the "flash" on PrintScreen.
+        try { int cloak = 1; DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int)); } catch { }
         ConfigureAsOverlay();
         DisableDwmDecorations();
         // Load the frozen frame synchronously into the Image source so the
@@ -352,6 +356,11 @@ public sealed partial class CaptureOverlayWindow : Window
         _cloaked = false;
         int cloak = 0;
         DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
+        // The overlay is shown with SWP_NOACTIVATE (avoids taskbar flash), so
+        // it never receives keyboard focus — Esc/Ctrl+A were dead until the
+        // first click. Take the foreground explicitly once visible.
+        SetForegroundWindow(_hwnd);
+        RootGrid.Focus(FocusState.Programmatic);
     }
 
     private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
@@ -367,7 +376,7 @@ public sealed partial class CaptureOverlayWindow : Window
             var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
             using (var writer = new Windows.Storage.Streams.DataWriter(stream.GetOutputStreamAt(0)))
             {
-                writer.WriteBytes(_frame.PngBytes);
+                writer.WriteBytes(_frame.ImageBytes);
                 writer.StoreAsync().AsTask().GetAwaiter().GetResult();
                 writer.FlushAsync().AsTask().GetAwaiter().GetResult();
                 writer.DetachStream();
@@ -408,6 +417,9 @@ public sealed partial class CaptureOverlayWindow : Window
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     private const int GWL_STYLE = -16;
     private const int GWL_EXSTYLE = -20;

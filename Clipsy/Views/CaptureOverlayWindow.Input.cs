@@ -93,6 +93,8 @@ public sealed partial class CaptureOverlayWindow
         _hasSelection = false;
         _dragStart = pos;
         _selectionRect = new Rect(pos.X, pos.Y, 0, 0);
+        // Old islands must not linger frozen in place while a new region is dragged.
+        HideToolbars();
         UpdateSelectionVisual();
         Hint.Visibility = Visibility.Collapsed;
         RootGrid.CapturePointer(e.Pointer);
@@ -349,7 +351,7 @@ public sealed partial class CaptureOverlayWindow
                 _ = CopyAsync();
                 return;
             case VirtualKey.Number1 or VirtualKey.Number2 or VirtualKey.Number3
-                 or VirtualKey.Number4 or VirtualKey.Number5 when !ctrl:
+                 or VirtualKey.Number4 when !ctrl:
                 if (HandleToolHotkey(e.Key)) e.Handled = true;
                 return;
         }
@@ -375,9 +377,6 @@ public sealed partial class CaptureOverlayWindow
                 return true;
             case VirtualKey.Number4:
                 _ = EnterOcrModeAsync();
-                return true;
-            case VirtualKey.Number5:
-                try { ColorFlyout.ShowAt(ColorBtn); } catch { }
                 return true;
         }
         return false;

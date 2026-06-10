@@ -292,14 +292,9 @@
                     <Button x:Name="ColorBtn"
                             Style="{StaticResource ClipsyIconButton}"
                             ToolTipService.ToolTip="Color">
-                        <Grid>
-                            <Ellipse x:Name="ColorSwatch" Width="18" Height="18"
-                                     Fill="{StaticResource ClipsyDangerBrush}"
-                                     Stroke="White" StrokeThickness="1.5" />
-                            <TextBlock Text="5" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
-                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                       Margin="0,0,-5,-5" IsHitTestVisible="False" />
-                        </Grid>
+                        <Ellipse x:Name="ColorSwatch" Width="18" Height="18"
+                                 Fill="{StaticResource ClipsyDangerBrush}"
+                                 Stroke="White" StrokeThickness="1.5" />
                         <Button.Flyout>
                             <Flyout x:Name="ColorFlyout" Placement="Left"
                                     Opened="OnColorFlyoutOpened">
@@ -350,8 +345,8 @@
                         <Grid>
                             <FontIcon Glyph="&#xE70F;" FontSize="16" />
                             <TextBlock Text="1" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
-                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                       Margin="0,0,-5,-5" IsHitTestVisible="False" />
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Margin="-5,-5,0,0" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                     <Button x:Name="TextBtn"
@@ -368,8 +363,8 @@
                                            VerticalAlignment="Bottom" Margin="1,0,0,1" />
                             </StackPanel>
                             <TextBlock Text="2" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
-                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                       Margin="0,0,-5,-5" IsHitTestVisible="False" />
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Margin="-5,-5,0,0" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                     <Button x:Name="ShapesBtn"
@@ -397,8 +392,8 @@
                                           Fill="Transparent" />
                             </Grid>
                             <TextBlock Text="3" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
-                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                       Margin="0,0,-5,-5" IsHitTestVisible="False" />
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Margin="-5,-5,0,0" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                     <Border Style="{StaticResource ClipsyToolbarSeparatorHorizontal}" />
@@ -412,8 +407,8 @@
                                        HorizontalAlignment="Right" VerticalAlignment="Top"
                                        Margin="0,-2,-2,0" />
                             <TextBlock Text="4" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
-                                       HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                       Margin="0,0,-5,-5" IsHitTestVisible="False" />
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Margin="-5,-5,0,0" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
                 </StackPanel>
