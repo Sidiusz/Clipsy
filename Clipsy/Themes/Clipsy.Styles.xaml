@@ -934,12 +934,24 @@
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
 
-                                <!-- OFF states: animate knob to 0, reset colors -->
+                                <!-- Slide the knob over 0.15s on real state changes.
+                                     States below snap X instantly (Duration 0); this
+                                     transition supplies the animation. GoToState(...,
+                                     useTransitions:false) skips it for instant snaps. -->
+                                <VisualStateGroup.Transitions>
+                                    <VisualTransition GeneratedDuration="0:0:0.15">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                </VisualStateGroup.Transitions>
+
+                                <!-- OFF states: knob at 0, reset colors -->
                                 <VisualState x:Name="Normal">
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="KnobTransform"
                                                          Storyboard.TargetProperty="X"
-                                                         To="0" Duration="0:0:0.15" />
+                                                         To="0" Duration="0" />
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Track"
                                                                         Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0">
@@ -971,7 +983,7 @@
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="KnobTransform"
                                                          Storyboard.TargetProperty="X"
-                                                         To="0" Duration="0:0:0.15" />
+                                                         To="0" Duration="0" />
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Track"
                                                                         Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0">
@@ -1031,12 +1043,12 @@
                                     </Storyboard>
                                 </VisualState>
 
-                                <!-- ON states: animate knob to 16, accent colors -->
+                                <!-- ON states: knob at 16, accent colors -->
                                 <VisualState x:Name="Checked">
                                     <Storyboard>
                                         <DoubleAnimation Storyboard.TargetName="KnobTransform"
                                                          Storyboard.TargetProperty="X"
-                                                         To="16" Duration="0:0:0.15" />
+                                                         To="16" Duration="0" />
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Track"
                                                                         Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0">
