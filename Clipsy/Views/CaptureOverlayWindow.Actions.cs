@@ -37,6 +37,16 @@ public sealed partial class CaptureOverlayWindow
 
     // ---------- Screenshot save / copy ----------
 
+    // Closing the window while the context MenuFlyout is still tearing down
+    // its popup crashes natively inside Microsoft.UI.Xaml (access violation).
+    // Hide the flyout explicitly and defer Close to a later dispatcher pass
+    // so the popup finishes dismissing first.
+    private void CloseDeferred()
+    {
+        try { OverlayMenu.Hide(); } catch { }
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Close);
+    }
+
     private async Task SaveSilentAsync()
     {
         if (!_hasSelection) return;
@@ -54,7 +64,7 @@ public sealed partial class CaptureOverlayWindow
             await File.WriteAllBytesAsync(fullPath, bytes);
             NotificationService.ScreenshotSaved(name, bytes.LongLength / 1024L, fullPath);
             AfterSaveAction.Run(fullPath, settings.Settings.AfterSaveAction);
-            Close();
+            CloseDeferred();
         }
         catch (Exception ex)
         {
@@ -120,7 +130,7 @@ public sealed partial class CaptureOverlayWindow
                 settings.Save();
             }
             AfterSaveAction.Run(finalPath, settings.Settings.AfterSaveAction);
-            Close();
+            CloseDeferred();
         }
         catch (Exception ex)
         {
@@ -137,7 +147,7 @@ public sealed partial class CaptureOverlayWindow
             var png = ScreenshotRenderer.RenderPng(_frame, _selectionRect, _drawing.Elements, DpiScale);
             await ClipboardService.SetImageAsync(png);
             NotificationService.CopiedToClipboard();
-            Close();
+            CloseDeferred();
         }
         catch (Exception ex)
         {
@@ -199,5 +209,5 @@ public sealed partial class CaptureOverlayWindow
         UpdateDimGeometry(null);
         Hint.Visibility = Visibility.Visible;
     }
-    private void OnMenuCancel(object sender, RoutedEventArgs e) => Close();
+    private void OnMenuCancel(object sender, RoutedEventArgs e) => CloseDeferred();
 }
