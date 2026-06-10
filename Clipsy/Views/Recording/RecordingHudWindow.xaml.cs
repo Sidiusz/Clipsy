@@ -95,9 +95,13 @@ public sealed partial class RecordingHudWindow : Window
     public void SetMicMuted(bool muted)
     {
         MicBtn.IsChecked = !muted;
-        MicIcon.Foreground = muted
-            ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyText3Brush"]
-            : null;
+        // Never assign null to Foreground: in WinUI a local null is NOT
+        // "inherit", it's a null brush — the glyph simply vanished when the
+        // mic was active. ClearValue restores the template-driven color.
+        if (muted)
+            MicIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyText3Brush"];
+        else
+            MicIcon.ClearValue(IconElement.ForegroundProperty);
         MicMuteSlash.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
         UpdateMicTooltip();
     }
@@ -254,11 +258,13 @@ public sealed partial class RecordingHudWindow : Window
     {
         if (!GetCursorPos(out POINT pt) || !GetWindowRect(_hwnd, out RECT wr))
             return;
-        int cx = (wr.Left + wr.Right) / 2;
-        int cy = (wr.Top + wr.Bottom) / 2;
-        double dist = System.Math.Sqrt((pt.X - cx) * (pt.X - cx) + (pt.Y - cy) * (pt.Y - cy));
-        double half = System.Math.Max(wr.Right - wr.Left, wr.Bottom - wr.Top);
-        bool far = dist >= half * 1.3;
+        // Reveal only when the cursor is near the HUD itself, not anywhere in
+        // the recorded region — the old centre-distance radius (1.3× the HUD
+        // width) covered most of the region below the HUD.
+        const int pad = 32;
+        bool near = pt.X >= wr.Left - pad && pt.X <= wr.Right + pad
+                 && pt.Y >= wr.Top - pad && pt.Y <= wr.Bottom + pad;
+        bool far = !near;
         if (far != _hudFar) ApplyHudFar(far);
     }
 
