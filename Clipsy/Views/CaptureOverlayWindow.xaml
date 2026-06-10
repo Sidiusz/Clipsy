@@ -93,11 +93,13 @@
                     Style="{StaticResource ClipsyToolbar}"
                     Visibility="Collapsed">
                 <StackPanel Orientation="Horizontal" Spacing="2">
-                    <Button x:Name="RecordBtn"
+                    <!-- Toolbar buttons are 32x38: the extra top row is where the
+                         hotkey chips live, so icons sit slightly below center. -->
+                    <Button x:Name="RecordBtn" Height="38"
                             Style="{StaticResource ClipsyIconButtonDanger}"
                             Click="OnRecordClick"
                             ToolTipService.ToolTip="Record">
-                        <Grid>
+                        <Grid Margin="0,8,0,0">
                             <Ellipse Width="18" Height="18"
                                    Stroke="{StaticResource ClipsyDangerBrush}"
                                    StrokeThickness="2"
@@ -106,20 +108,20 @@
                                    Fill="{StaticResource ClipsyDangerBrush}" />
                         </Grid>
                     </Button>
-                    <Button x:Name="ScreenshotBtn"
+                    <Button x:Name="ScreenshotBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnScreenshotClick"
                             ToolTipService.ToolTip="Screenshot">
-                        <FontIcon Glyph="&#xE722;" FontSize="16" />
+                        <FontIcon Glyph="&#xE722;" FontSize="16" Margin="0,8,0,0" />
                     </Button>
-                    <Button x:Name="CopyBtn"
+                    <Button x:Name="CopyBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnCopyClick"
                             ToolTipService.ToolTip="Copy">
-                        <FontIcon Glyph="&#xE8C8;" FontSize="16" />
+                        <FontIcon Glyph="&#xE8C8;" FontSize="16" Margin="0,8,0,0" />
                     </Button>
                     <Border Style="{StaticResource ClipsyToolbarSeparator}" />
-                    <Button x:Name="CancelBtn"
+                    <Button x:Name="CancelBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnCancelClick"
                             ToolTipService.ToolTip="Cancel (Esc)"
@@ -299,10 +301,10 @@
                     Style="{StaticResource ClipsyToolbar}"
                     Visibility="Collapsed">
                 <StackPanel Orientation="Vertical" Spacing="2">
-                    <Button x:Name="ColorBtn"
+                    <Button x:Name="ColorBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"
                             ToolTipService.ToolTip="Color">
-                        <Ellipse x:Name="ColorSwatch" Width="18" Height="18"
+                        <Ellipse x:Name="ColorSwatch" Width="18" Height="18" Margin="0,8,0,0"
                                  Fill="{StaticResource ClipsyDangerBrush}"
                                  Stroke="White" StrokeThickness="1.5" />
                         <Button.Flyout>
@@ -348,7 +350,7 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
-                    <Button x:Name="PencilBtn"
+                    <Button x:Name="PencilBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnShapePick" Tag="Pencil"
                             ToolTipService.ToolTip="Pencil. LMB draw, RMB erase"
@@ -367,7 +369,7 @@
                             </Border>
                         </Grid>
                     </Button>
-                    <Button x:Name="TextBtn"
+                    <Button x:Name="TextBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnTextClick"
                             PointerEntered="OnTextPointerEntered"
@@ -390,7 +392,7 @@
                             </Border>
                         </Grid>
                     </Button>
-                    <Button x:Name="ShapesBtn"
+                    <Button x:Name="ShapesBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnShapesClick"
                             PointerEntered="OnShapesPointerEntered"
@@ -427,7 +429,7 @@
                         </Grid>
                     </Button>
                     <Border Style="{StaticResource ClipsyToolbarSeparatorHorizontal}" />
-                    <Button x:Name="OcrBtn"
+                    <Button x:Name="OcrBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"
                             Click="OnOcrClick"
                             ToolTipService.ToolTip="Find text"
@@ -536,6 +538,10 @@
                 VerticalAlignment="Top"
                 Margin="0,72,0,0"
                 IsHitTestVisible="False">
+            <!-- Slid in from the top by the intro animation on overlay reveal -->
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="HintTranslate" />
+            </Border.RenderTransform>
             <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
                 <!-- HintText carries the localized string set from code-behind
                      (was Hint.Text on the old TextBlock). -->

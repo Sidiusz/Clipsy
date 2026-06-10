@@ -380,6 +380,58 @@ public sealed partial class CaptureOverlayWindow : Window
         // first click. Take the foreground explicitly once visible.
         SetForegroundWindow(_hwnd);
         RootGrid.Focus(FocusState.Programmatic);
+        PlayIntroAnimations();
+    }
+
+    // Soft entrance on reveal: the dim fades up over ~120 ms and the hint
+    // pill slides in from the top. Masks whatever single-frame seam remains
+    // between the desktop and the frozen snapshot.
+    private void PlayIntroAnimations()
+    {
+        try
+        {
+            var sb = new Storyboard();
+
+            var dimFade = new DoubleAnimation
+            {
+                From = 0.0,
+                To = 1.0,
+                Duration = new Duration(TimeSpan.FromMilliseconds(120)),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            };
+            Storyboard.SetTarget(dimFade, DimPath);
+            Storyboard.SetTargetProperty(dimFade, "Opacity");
+            sb.Children.Add(dimFade);
+
+            if (Hint.Visibility == Visibility.Visible)
+            {
+                var hintSlide = new DoubleAnimation
+                {
+                    From = -56.0,
+                    To = 0.0,
+                    Duration = new Duration(TimeSpan.FromMilliseconds(200)),
+                    EnableDependentAnimation = true,
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                };
+                Storyboard.SetTarget(hintSlide, HintTranslate);
+                Storyboard.SetTargetProperty(hintSlide, "Y");
+                sb.Children.Add(hintSlide);
+
+                var hintFade = new DoubleAnimation
+                {
+                    From = 0.0,
+                    To = 1.0,
+                    Duration = new Duration(TimeSpan.FromMilliseconds(160)),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                };
+                Storyboard.SetTarget(hintFade, Hint);
+                Storyboard.SetTargetProperty(hintFade, "Opacity");
+                sb.Children.Add(hintFade);
+            }
+
+            sb.Begin();
+        }
+        catch { /* purely cosmetic — never block the overlay */ }
     }
 
     private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
