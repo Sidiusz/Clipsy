@@ -126,11 +126,11 @@ public static class NotificationService
 
     // ── Update available ─────────────────────────────────────────
 
-    public static void UpdateAvailable(string version, string notes, string releaseUrl, Action skipVersion)
+    public static void UpdateAvailable(UpdateInfo info, string notes, Action skipVersion)
     {
         Post(
             NotificationLevel.Info,
-            $"Clipsy {version}",
+            $"Clipsy {info.Version}",
             notes,
             ToastCategory.Update,
             action1Icon:     "\xE769",
@@ -138,8 +138,28 @@ public static class NotificationService
             action1:         skipVersion,
             action2Icon:     "\xE896",
             action2Tooltip:  Strings.Get("ToastDownload"),
-            action2:         () => OpenUrl(releaseUrl),
+            action2:         () => StartUpdate(info),
             action2IsPrimary: true);
+    }
+
+    // Download the installer from the release asset and hand off to it; the
+    // app must exit so the installer can overwrite Clipsy.exe. Releases
+    // without an installer asset (or failed downloads) fall back to opening
+    // the release page in the browser.
+    private static async void StartUpdate(UpdateInfo info)
+    {
+        if (!string.IsNullOrEmpty(info.InstallerUrl))
+        {
+            Post(NotificationLevel.Info, Strings.Get("ToastUpdateDownloading"), null, ToastCategory.Update);
+            bool ok = await UpdateService.DownloadAndLaunchInstallerAsync(info);
+            if (ok)
+            {
+                try { Microsoft.UI.Xaml.Application.Current.Exit(); } catch { }
+                return;
+            }
+            Post(NotificationLevel.Warning, Strings.Get("ToastUpdateDownloadFailed"), null, ToastCategory.Update);
+        }
+        OpenUrl(info.Url);
     }
 
     // ── Private helpers ──────────────────────────────────────────

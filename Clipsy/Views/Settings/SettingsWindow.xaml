@@ -1231,7 +1231,7 @@
                                             <TextBlock x:Name="LblAuthorName" Text="Sidiusz"
                                                        Style="{StaticResource ClipsyHelper}" />
                                             <TextBlock Text="·" Style="{StaticResource ClipsyHelper}" />
-                                            <TextBlock x:Name="LblMit" Text="MIT" Style="{StaticResource ClipsyHelper}" />
+                                            <TextBlock x:Name="LblMit" Text="Source-available license" Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                     </StackPanel>
 

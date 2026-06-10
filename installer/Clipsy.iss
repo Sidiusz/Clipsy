@@ -36,6 +36,10 @@ PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesInstallIn64BitMode=x64
 ArchitecturesAllowed=x64
 WizardStyle=modern
+; In-app updater downloads the new setup and exits Clipsy before running it;
+; CloseApplications covers the case where the app is still holding files.
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
