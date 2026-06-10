@@ -980,7 +980,16 @@ public sealed partial class SettingsWindow : Window
         for (int i = 0; i < count; i++)
         {
             var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
-            if (child is ToggleButton tb)
+            if (child is RadioButton rb)
+            {
+                // RadioButton IS-A ToggleButton but keeps Checked/Unchecked in a
+                // separate CheckStates group; forcing "Checked" + "Normal" (the
+                // ToggleButton flip below) left every radio visually selected.
+                bool on = rb.IsChecked == true;
+                VisualStateManager.GoToState(rb, on ? "Unchecked" : "Checked", false);
+                VisualStateManager.GoToState(rb, on ? "Checked" : "Unchecked", false);
+            }
+            else if (child is ToggleButton tb)
             {
                 bool on = tb.IsChecked == true;
                 // Flip to the opposite state first, then the correct one — both

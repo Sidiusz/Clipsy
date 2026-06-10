@@ -934,12 +934,49 @@
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
 
-                                <!-- Slide the knob over 0.15s on real state changes.
-                                     States below snap X instantly (Duration 0); this
-                                     transition supplies the animation. GoToState(...,
-                                     useTransitions:false) skips it for instant snaps. -->
+                                <!-- Slide the knob over 0.15s ONLY when crossing the
+                                     on/off boundary. A blanket (From/To-less) transition
+                                     also fired on hover/press, and since Brushes cannot
+                                     interpolate the track flashed its base grey for the
+                                     whole transition. States snap X instantly (Duration 0);
+                                     these explicit transitions supply the slide. -->
                                 <VisualStateGroup.Transitions>
-                                    <VisualTransition GeneratedDuration="0:0:0.15">
+                                    <VisualTransition From="Normal" To="Checked" GeneratedDuration="0:0:0.15">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                    <VisualTransition From="Checked" To="Normal" GeneratedDuration="0:0:0.15">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                    <VisualTransition From="PointerOver" To="CheckedPointerOver" GeneratedDuration="0:0:0.15">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                    <VisualTransition From="CheckedPointerOver" To="PointerOver" GeneratedDuration="0:0:0.15">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                    <VisualTransition From="Pressed" To="Checked" GeneratedDuration="0:0:0.15">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                    <VisualTransition From="Pressed" To="CheckedPointerOver" GeneratedDuration="0:0:0.15">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                    <VisualTransition From="CheckedPressed" To="Normal" GeneratedDuration="0:0:0.15">
+                                        <VisualTransition.GeneratedEasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </VisualTransition.GeneratedEasingFunction>
+                                    </VisualTransition>
+                                    <VisualTransition From="CheckedPressed" To="PointerOver" GeneratedDuration="0:0:0.15">
                                         <VisualTransition.GeneratedEasingFunction>
                                             <CubicEase EasingMode="EaseOut" />
                                         </VisualTransition.GeneratedEasingFunction>
