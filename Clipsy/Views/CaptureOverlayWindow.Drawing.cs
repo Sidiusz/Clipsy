@@ -413,8 +413,8 @@ public sealed partial class CaptureOverlayWindow
         // The Shapes icon glyphs are Stroke-based shapes (not FontIcon
         // glyphs that inherit Foreground), so swap their stroke explicitly.
         var shapesActive = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow;
-        var shapesStroke = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[
-            shapesActive ? "ClipsyAccentBrush" : "ClipsyText2Brush"];
+        var shapesStroke = Clipsy.Services.ThemeService.GetBrush(
+            shapesActive ? "ClipsyAccentBrush" : "ClipsyText2Brush", RootGrid);
         if (ShapeIconRect      != null) ShapeIconRect.Stroke      = shapesStroke;
         if (ShapeIconEllipse   != null) ShapeIconEllipse.Stroke   = shapesStroke;
         if (ShapeIconLine      != null) ShapeIconLine.Stroke      = shapesStroke;

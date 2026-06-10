@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Clipsy.Localization;
+using Clipsy.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -90,8 +91,8 @@ public sealed partial class SettingsWindow
         b.Content = Strings.Get("HkPressKeys");
         try
         {
-            b.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyBg2Brush"];
-            b.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyAccentBrush"];
+            b.Background = ThemeService.GetBrush("ClipsyBg2Brush", Content as FrameworkElement);
+            b.BorderBrush = ThemeService.GetBrush("ClipsyAccentBrush", Content as FrameworkElement);
         }
         catch { }
         Content.KeyDown -= OnRebindKeyDown;

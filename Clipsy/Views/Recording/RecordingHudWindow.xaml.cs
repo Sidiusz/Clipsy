@@ -51,7 +51,7 @@ public sealed partial class RecordingHudWindow : Window
     public RecordingHudWindow()
     {
         InitializeComponent();
-        ThemeService.Register(Content as FrameworkElement);
+        if (Content is FrameworkElement fe) fe.RequestedTheme = ElementTheme.Dark; // recording chrome pinned dark
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
         if (_appWindow.Presenter is OverlappedPresenter op)
@@ -99,7 +99,7 @@ public sealed partial class RecordingHudWindow : Window
         // "inherit", it's a null brush — the glyph simply vanished when the
         // mic was active. ClearValue restores the template-driven color.
         if (muted)
-            MicIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["ClipsyText3Brush"];
+            MicIcon.Foreground = ThemeService.GetBrush("ClipsyText3Brush", Content as FrameworkElement);
         else
             MicIcon.ClearValue(IconElement.ForegroundProperty);
         MicMuteSlash.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;

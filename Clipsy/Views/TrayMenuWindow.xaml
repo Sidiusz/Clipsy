@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Grid x:Name="RootGrid"
-          Background="{StaticResource ClipsyBg2Brush}"
+          Background="{ThemeResource ClipsyBg2Brush}"
           Width="264">
         <StackPanel Padding="6,6,6,4">
 
@@ -22,10 +22,10 @@
                 <StackPanel Grid.Column="1" Margin="10,0,10,0"
                             VerticalAlignment="Center" Spacing="1">
                     <TextBlock Text="Clipsy" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}"
-                               Foreground="{StaticResource ClipsyTextBrush}"
+                               Foreground="{ThemeResource ClipsyTextBrush}"
                                FontFamily="{StaticResource ClipsyFontFamily}"/>
                     <TextBlock x:Name="HeaderVersion" FontSize="11"
-                               Foreground="{StaticResource ClipsyText3Brush}"
+                               Foreground="{ThemeResource ClipsyText3Brush}"
                                FontFamily="{StaticResource ClipsyFontFamily}"/>
                 </StackPanel>
                 <!-- Update button — same size as the logo, right-aligned.
@@ -47,7 +47,7 @@
 
             <!-- ── Separator 1 ── -->
             <Rectangle Height="1" Margin="2,0,2,4"
-                       Fill="{StaticResource ClipsyBorderBrush}" Opacity="0.7"/>
+                       Fill="{ThemeResource ClipsyBorderBrush}" Opacity="0.7"/>
 
             <!-- ── Capture screen ── -->
             <Grid x:Name="CaptureRow" Height="34" Margin="0,1" CornerRadius="6"
@@ -61,14 +61,14 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <FontIcon x:Name="CaptureIcon" Glyph="&#xE722;" FontSize="15"
-                          Foreground="{StaticResource ClipsyText2Brush}"
+                          Foreground="{ThemeResource ClipsyText2Brush}"
                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 <TextBlock x:Name="CaptureTxt" Grid.Column="1" Text="Capture screen"
-                           FontSize="13" Foreground="{StaticResource ClipsyTextBrush}"
+                           FontSize="13" Foreground="{ThemeResource ClipsyTextBrush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center"/>
                 <TextBlock x:Name="CaptureShortcut" Grid.Column="2" Text="PrtSc"
-                           FontSize="11" Foreground="{StaticResource ClipsyText3Brush}"
+                           FontSize="11" Foreground="{ThemeResource ClipsyText3Brush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center" Margin="0,0,10,0"/>
             </Grid>
@@ -84,10 +84,10 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <FontIcon x:Name="ScreenshotsFolderIcon" Glyph="&#xE8B7;" FontSize="15"
-                          Foreground="{StaticResource ClipsyText2Brush}"
+                          Foreground="{ThemeResource ClipsyText2Brush}"
                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 <TextBlock x:Name="ScreenshotsFolderTxt" Grid.Column="1"
-                           FontSize="13" Foreground="{StaticResource ClipsyTextBrush}"
+                           FontSize="13" Foreground="{ThemeResource ClipsyTextBrush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center"/>
             </Grid>
@@ -103,17 +103,17 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <FontIcon x:Name="VideoFolderIcon" Glyph="&#xE8B2;" FontSize="15"
-                          Foreground="{StaticResource ClipsyText2Brush}"
+                          Foreground="{ThemeResource ClipsyText2Brush}"
                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 <TextBlock x:Name="VideoFolderTxt" Grid.Column="1"
-                           FontSize="13" Foreground="{StaticResource ClipsyTextBrush}"
+                           FontSize="13" Foreground="{ThemeResource ClipsyTextBrush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center"/>
             </Grid>
 
             <!-- ── Separator 2 ── -->
             <Rectangle Height="1" Margin="2,4,2,4"
-                       Fill="{StaticResource ClipsyBorderBrush}" Opacity="0.7"/>
+                       Fill="{ThemeResource ClipsyBorderBrush}" Opacity="0.7"/>
 
             <!-- ── Settings ── -->
             <Grid x:Name="SettingsRow" Height="34" Margin="0,1" CornerRadius="6"
@@ -127,21 +127,21 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <FontIcon x:Name="SettingsIcon" Glyph="&#xE713;" FontSize="15"
-                          Foreground="{StaticResource ClipsyText2Brush}"
+                          Foreground="{ThemeResource ClipsyText2Brush}"
                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 <TextBlock x:Name="SettingsTxt" Grid.Column="1" Text="Settings"
-                           FontSize="13" Foreground="{StaticResource ClipsyTextBrush}"
+                           FontSize="13" Foreground="{ThemeResource ClipsyTextBrush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center"/>
                 <TextBlock x:Name="SettingsShortcut" Grid.Column="2" Text="Ctrl ,"
-                           FontSize="11" Foreground="{StaticResource ClipsyText3Brush}"
+                           FontSize="11" Foreground="{ThemeResource ClipsyText3Brush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center" Margin="0,0,10,0"/>
             </Grid>
 
             <!-- ── Separator 3 ── -->
             <Rectangle Height="1" Margin="2,4,2,4"
-                       Fill="{StaticResource ClipsyBorderBrush}" Opacity="0.7"/>
+                       Fill="{ThemeResource ClipsyBorderBrush}" Opacity="0.7"/>
 
             <!-- ── Exit ── -->
             <Grid x:Name="ExitRow" Height="34" Margin="0,1,0,2" CornerRadius="6"
@@ -154,10 +154,10 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <FontIcon x:Name="ExitIcon" Glyph="&#xE711;" FontSize="15"
-                          Foreground="{StaticResource ClipsyText2Brush}"
+                          Foreground="{ThemeResource ClipsyText2Brush}"
                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 <TextBlock x:Name="ExitTxt" Grid.Column="1" Text="Exit"
-                           FontSize="13" Foreground="{StaticResource ClipsyTextBrush}"
+                           FontSize="13" Foreground="{ThemeResource ClipsyTextBrush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center"/>
             </Grid>

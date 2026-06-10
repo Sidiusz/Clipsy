@@ -39,7 +39,7 @@ public sealed partial class RegionBorderWindow : Window
     public RegionBorderWindow()
     {
         InitializeComponent();
-        ThemeService.Register(Content as FrameworkElement);
+        if (Content is FrameworkElement fe) fe.RequestedTheme = ElementTheme.Dark; // recording chrome pinned dark
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
         if (_appWindow.Presenter is OverlappedPresenter op)
