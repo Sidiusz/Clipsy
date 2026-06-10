@@ -158,19 +158,26 @@ public sealed partial class CaptureOverlayWindow : Window
         BuildScreenMenu();
         Activated += OnActivated;
         RootGrid.SizeChanged += OnRootGridSizeChanged;
-        // Wait for the second composition tick before revealing the window —
-        // the first Rendering event fires before the swap chain has the
-        // frozen-frame image, so Low-priority dispatcher posting still flashed
-        // black on some machines.
-        int composed = 0;
+        // Reveal only after the frozen frame is actually decoded AND two
+        // composition ticks have passed since. BitmapImage decodes
+        // asynchronously even via the synchronous SetSource, so counting
+        // render ticks alone uncloaked a still-black window on big screens.
+        FrozenImage.ImageOpened += (_, _) => _frozenImageReady = true;
+        FrozenImage.ImageFailed += (_, _) => _frozenImageReady = true; // don't stay cloaked forever
+        int composedAfterReady = 0;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFirstFrames;
         void OnFirstFrames(object? s, object e)
         {
-            composed++;
-            if (composed < 2) return;
+            if (!_frozenImageReady) return;
+            composedAfterReady++;
+            if (composedAfterReady < 2) return;
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFirstFrames;
             Uncloak();
         }
+        // Safety net: never leave the overlay invisible if ImageOpened is lost.
+        var uncloakFailsafe = new Microsoft.UI.Xaml.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
+        uncloakFailsafe.Tick += (_, _) => { uncloakFailsafe.Stop(); Uncloak(); };
+        uncloakFailsafe.Start();
 
         // Start in region select mode (no drawing tool active)
         SetTool(ToolKind.None);
@@ -348,6 +355,7 @@ public sealed partial class CaptureOverlayWindow : Window
     }
 
     private bool _cloaked = true;
+    private bool _frozenImageReady;
     private const int DWMWA_CLOAK = 13;
 
     private void Uncloak()
