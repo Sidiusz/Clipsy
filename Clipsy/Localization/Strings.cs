@@ -284,7 +284,7 @@ public static class Strings
         ["LblGithubLine"]         = New("Source, issues, releases",                        "Исходники, баги, релизы."),
         ["LblUpdateStatus"]       = New("You are on the latest version.",                  "Установлена последняя версия."),
         ["LblAuthorHeader"]       = New("Author",                                          "Автор"),
-        ["LblMit"]                = New("Source-available license",                        "Source-available лицензия"),
+        ["LblMit"]                = New("CPIUL-1.2 license",                               "Лицензия CPIUL-1.2"),
         ["BtnStar"]               = New("Star",                                            "Star"),
         ["BtnOpen"]               = New("Open",                                            "Открыть"),
         ["BtnSaveChanges"]        = New("Save changes",                                    "Сохранить"),

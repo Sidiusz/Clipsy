@@ -34,8 +34,8 @@ public static class UpdateService
             var url = root.TryGetProperty("html_url", out var u) ? u.GetString() ?? "" : "";
             var notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
 
-            // Pick the first .exe asset as the installer (BuildInstaller.cmd
-            // produces a single setup exe per release).
+            // Releases carry both a setup exe and a zip archive. Prefer the
+            // asset with "setup" in its name; fall back to any .exe.
             string? installerUrl = null;
             string? installerName = null;
             if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
@@ -44,9 +44,14 @@ public static class UpdateService
                 {
                     var name = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
                     if (name == null || !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
-                    installerUrl = asset.TryGetProperty("browser_download_url", out var d) ? d.GetString() : null;
-                    installerName = name;
-                    break;
+                    var dlUrl = asset.TryGetProperty("browser_download_url", out var d) ? d.GetString() : null;
+                    bool isSetup = name.Contains("setup", StringComparison.OrdinalIgnoreCase);
+                    if (installerUrl == null || isSetup)
+                    {
+                        installerUrl = dlUrl;
+                        installerName = name;
+                        if (isSetup) break;
+                    }
                 }
             }
 
