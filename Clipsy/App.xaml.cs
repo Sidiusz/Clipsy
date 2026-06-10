@@ -232,6 +232,9 @@ public partial class App : Application
     {
         SettingsService.Instance.SettingsChanged -= OnSettingsChangedRewireHotkeys;
         Hotkey?.Dispose();
+        HostWindow?.TrayIconControl.Dispose();
+        _trayMenu?.Close();
+        _trayMenu = null;
         Application.Current.Exit();
     }
 
