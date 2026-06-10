@@ -86,6 +86,7 @@ public sealed partial class SettingsWindow : Window
         ["ss-format"] = "general",
         ["jpg-q"] = "general",
         ["ss-cursor"] = "general",
+        ["dyn-islands"] = "general",
         ["after-save"] = "general",
         ["update-int"] = "general",
         ["notif"] = "notifications",
@@ -268,6 +269,7 @@ public sealed partial class SettingsWindow : Window
         RememberFolderSwitch.IsChecked   = _draft.RememberLastFolder;
         AutostartSwitch.IsChecked        = _initialAutostart;
         ScreenshotCursorSwitch.IsChecked = _draft.CaptureScreenshotCursor;
+        DynamicIslandsSwitch.IsChecked   = _draft.DynamicToolbarIslands;
         VideoCursorSwitch.IsChecked      = _draft.CaptureVideoCursor;
         MicEnabledSwitch.IsChecked       = _draft.MicrophoneEnabled;
         GifDitherSwitch.IsChecked        = _draft.GifDither;
@@ -319,6 +321,7 @@ public sealed partial class SettingsWindow : Window
 
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
         ScreenshotCursorSwitch.IsChecked = _draft.CaptureScreenshotCursor;
+        DynamicIslandsSwitch.IsChecked   = _draft.DynamicToolbarIslands;
         SelectComboByTag(VideoFormatBox, _draft.VideoFormat);
         VideoCursorSwitch.IsChecked = _draft.CaptureVideoCursor;
 
@@ -403,6 +406,7 @@ public sealed partial class SettingsWindow : Window
         _draft.RememberLastFolder = RememberFolderSwitch.IsChecked == true;
         _draft.ScreenshotFormat = SelectedComboTag(ScreenshotFormatBox);
         _draft.CaptureScreenshotCursor = ScreenshotCursorSwitch.IsChecked == true;
+        _draft.DynamicToolbarIslands = DynamicIslandsSwitch.IsChecked == true;
         _draft.VideoFormat = SelectedComboTag(VideoFormatBox);
         _draft.CaptureVideoCursor = VideoCursorSwitch.IsChecked == true;
         _draft.JpgQuality = (int)JpgQualitySlider.Value;
@@ -599,6 +603,7 @@ public sealed partial class SettingsWindow : Window
         if ((AutostartSwitch.IsChecked == true) != _initialAutostart) _dirty.Add("autostart");
         if (_draft.ScreenshotFormat != _initial.ScreenshotFormat) _dirty.Add("ss-format");
         if (_draft.CaptureScreenshotCursor != _initial.CaptureScreenshotCursor) _dirty.Add("ss-cursor");
+        if (_draft.DynamicToolbarIslands != _initial.DynamicToolbarIslands) _dirty.Add("dyn-islands");
         if (_draft.VideoFormat != _initial.VideoFormat) _dirty.Add("vid-format");
         if (_draft.CaptureVideoCursor != _initial.CaptureVideoCursor) _dirty.Add("vid-cursor");
         if (_draft.JpgQuality != _initial.JpgQuality) _dirty.Add("jpg-q");
@@ -647,6 +652,7 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblAutostart, "LblAutostart", _dirty.Contains("autostart"));
         SetLabel(LblScreenshotFormat, "LblScreenshotFormat", _dirty.Contains("ss-format"));
         SetLabel(LblScreenshotCursor, "LblScreenshotCursor", _dirty.Contains("ss-cursor"));
+        SetLabel(LblDynamicIslands, "LblDynamicIslands", _dirty.Contains("dyn-islands"));
         SetLabel(LblVideoFormat, "LblVideoFormat", _dirty.Contains("vid-format"));
         SetLabel(LblVideoCursor, "LblVideoCursor", _dirty.Contains("vid-cursor"));
         SetLabel(LblJpgQuality, "LblJpgQuality", _dirty.Contains("jpg-q"));
@@ -940,7 +946,11 @@ public sealed partial class SettingsWindow : Window
             "info"          => PaneInfo,
             _               => null,
         };
-        if (shown != null) FadeInPane(shown);
+        if (shown != null)
+        {
+            SnapToggles(shown);
+            FadeInPane(shown);
+        }
 
         try
         {
@@ -955,6 +965,34 @@ public sealed partial class SettingsWindow : Window
             IconNavInfo.Foreground          = key == "info"          ? accent : dim;
         }
         catch { }
+    }
+
+    // Snap every ClipsyMiniToggle in a freshly-revealed pane to its final
+    // visual state WITHOUT transitions. Toggle Checked/Normal storyboards are
+    // started during initial Load while the pane is Collapsed; a collapsed
+    // element defers its storyboards, so the knob-slide replays the first time
+    // the pane is shown (ON = slides 0->16, OFF = no-op). GoToState(...,false)
+    // re-applies the current state instantly, cancelling the pending animation.
+    // Real user clicks happen while the pane is visible, so they still animate.
+    private static void SnapToggles(DependencyObject root)
+    {
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is ToggleButton tb)
+            {
+                bool on = tb.IsChecked == true;
+                // Flip to the opposite state first, then the correct one — both
+                // without transitions. GoToState is a no-op when already in the
+                // target state, so it would not cancel the transition queued
+                // (and deferred) during Load while the pane was Collapsed. The
+                // flip forces an instant re-apply, snapping the knob with no slide.
+                VisualStateManager.GoToState(tb, on ? "Normal" : "Checked", false);
+                VisualStateManager.GoToState(tb, on ? "Checked" : "Normal", false);
+            }
+            SnapToggles(child);
+        }
     }
 
     // Quick fade-in when a settings pane becomes visible — softens the
