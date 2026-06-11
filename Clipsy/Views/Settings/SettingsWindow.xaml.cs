@@ -95,6 +95,7 @@ public sealed partial class SettingsWindow : Window
         ["translate-to"]   = "ocr",
         ["codec"] = "video",
         ["resolution"] = "video",
+        ["framerate"] = "video",
         ["vid-cursor"] = "video",
         ["bitrate"] = "video",
         ["vid-format"] = "video",
@@ -351,6 +352,7 @@ public sealed partial class SettingsWindow : Window
 
         SelectRadio(_draft.VideoCodec, RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
         SelectSegment(_draft.VideoResolution, ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal);
+        SelectSegment(_draft.VideoFramerate.ToString(), FpsBtn60, FpsBtn15, FpsBtn30, FpsBtnNative);
         UpdateBitrateBounds(_draft.VideoResolution);
         BitrateSlider.Value = System.Math.Clamp(_draft.VideoBitrateMbps, (int)BitrateSlider.Minimum, (int)BitrateSlider.Maximum);
         UpdateBitrateLabel();
@@ -429,6 +431,7 @@ public sealed partial class SettingsWindow : Window
 
         _draft.VideoCodec = SelectedRadioTag(RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
         _draft.VideoResolution = SelectedSegmentTag(ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal);
+        _draft.VideoFramerate = int.TryParse(SelectedSegmentTag(FpsBtn15, FpsBtn30, FpsBtn60, FpsBtnNative), out var vfps) ? vfps : 60;
         _draft.VideoBitrateMbps = (int)BitrateSlider.Value;
 
         _draft.MicrophoneEnabled = MicEnabledSwitch.IsChecked == true;
@@ -625,6 +628,7 @@ public sealed partial class SettingsWindow : Window
             _dirty.Add("notif");
         if (_draft.VideoCodec != _initial.VideoCodec) _dirty.Add("codec");
         if (_draft.VideoResolution != _initial.VideoResolution) _dirty.Add("resolution");
+        if (_draft.VideoFramerate != _initial.VideoFramerate) _dirty.Add("framerate");
         if (_draft.VideoBitrateMbps != _initial.VideoBitrateMbps) _dirty.Add("bitrate");
         if (_draft.GifColors != _initial.GifColors) _dirty.Add("gif-color");
         if (_draft.GifFps != _initial.GifFps) _dirty.Add("gif-fps");
@@ -667,6 +671,7 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblNotifyMaster, "LblNotifyMaster", _dirty.Contains("notif"));
         SetLabel(LblCodec, "LblCodec", _dirty.Contains("codec"));
         SetLabel(LblResolution, "LblResolution", _dirty.Contains("resolution"));
+        SetLabel(LblVideoFps, "LblVideoFps", _dirty.Contains("framerate"));
         SetLabel(LblBitrate, "LblBitrate", _dirty.Contains("bitrate"));
         SetLabel(LblGifColors, "LblGifColors", _dirty.Contains("gif-color"));
         SetLabel(LblGifFps, "LblGifFps", _dirty.Contains("gif-fps"));

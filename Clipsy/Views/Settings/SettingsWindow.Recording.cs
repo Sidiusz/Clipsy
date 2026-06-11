@@ -22,6 +22,14 @@ public sealed partial class SettingsWindow
         MarkChanged();
     }
 
+    private void OnFpsSegmentClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton clicked) return;
+        foreach (var btn in new[] { FpsBtn15, FpsBtn30, FpsBtn60, FpsBtnNative })
+            btn.IsChecked = btn == clicked;
+        MarkChanged();
+    }
+
     private void OnVideoFormatChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_loading) MarkChanged();
