@@ -1,3 +1,4 @@
+using Clipsy.Drawing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -342,6 +343,44 @@ public sealed partial class CaptureOverlayWindow
     {
         var rect = new Rect(0, 0, RootGrid.ActualWidth, RootGrid.ActualHeight);
         SetSelection(rect);
+    }
+
+    // Snap the selection to the whole monitor under the cursor (double-click
+    // empty area). Inside an existing selection it does nothing — the user is
+    // interacting with that region, not picking a new monitor. Returns true
+    // when a monitor was selected.
+    private bool TrySelectMonitorAt(Point pos)
+    {
+        if (_inOcrMode || _eyedropperActive) return false;
+        if (_drawing.Settings.Tool != ToolKind.None) return false;
+        // The first click of the double-click already dropped a 100x100 fallback
+        // selection under the cursor, so the second click lands "inside" it. Only
+        // a deliberate (dragged) selection blocks monitor-snap.
+        if (_hasSelection && !_selectionFromFallback && IsInsideSelection(pos)) return false;
+
+        var b = _frame.VirtualBounds;
+        // Map physical virtual-desktop px -> RootGrid coords using the grid's
+        // own ratio, not GetDpiForWindow/RasterizationScale (those can disagree
+        // and leave the monitor rects misaligned so no click ever matches).
+        double gw = RootGrid.ActualWidth, gh = RootGrid.ActualHeight;
+        if (gw <= 0 || gh <= 0 || b.Width <= 0 || b.Height <= 0) return false;
+        double sx = gw / b.Width;
+        double sy = gh / b.Height;
+        foreach (var m in _frame.Monitors)
+        {
+            double mx = (m.Bounds.X - b.X) * sx;
+            double my = (m.Bounds.Y - b.Y) * sy;
+            double mw = m.Bounds.Width * sx;
+            double mh = m.Bounds.Height * sy;
+            if (pos.X >= mx && pos.X <= mx + mw && pos.Y >= my && pos.Y <= my + mh)
+            {
+                if (_drawing.Elements.Count > 0) _drawing.ClearAll();
+                SetSelection(new Rect(mx, my, mw, mh));
+                _selectionFromFallback = false;
+                return true;
+            }
+        }
+        return false;
     }
 
     private void SetSelection(Rect rect)

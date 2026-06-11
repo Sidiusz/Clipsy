@@ -40,7 +40,8 @@ public sealed class FFmpegRecordingService : IDisposable
 
         bool micEnabled = s.MicrophoneEnabled;
         string? micDevice = micEnabled && !string.IsNullOrEmpty(s.MicrophoneDevice) ? s.MicrophoneDevice : null;
-        var args = BuildArgs(x, y, w, h, codec, kbps, _tempPath, withAudio: true, micEnabled: micEnabled, micFriendlyName: micDevice);
+        int fps = RecordingService.ResolveFramerate(s.VideoFramerate);
+        var args = BuildArgs(x, y, w, h, codec, kbps, fps, _tempPath, withAudio: true, micEnabled: micEnabled, micFriendlyName: micDevice);
         _process = Launch(args);
 
         if (_process == null)
@@ -114,7 +115,7 @@ public sealed class FFmpegRecordingService : IDisposable
 
     private static string BuildArgs(
         int x, int y, int w, int h,
-        string codec, int bitrateMbps, string output,
+        string codec, int bitrateMbps, int fps, string output,
         bool withAudio, bool micEnabled = false, string? micFriendlyName = null)
     {
         // ── Video encoder flags ──────────────────────────────────────────────
@@ -127,7 +128,7 @@ public sealed class FFmpegRecordingService : IDisposable
         // ── Inputs ──────────────────────────────────────────────────────────
         // gdigrab: Windows GDI screen capture (includes DWM-composited output)
         var sb = new System.Text.StringBuilder();
-        sb.Append($"-f gdigrab -framerate 30 -offset_x {x} -offset_y {y}");
+        sb.Append($"-f gdigrab -framerate {fps} -offset_x {x} -offset_y {y}");
         sb.Append($" -video_size {w}x{h} -draw_mouse 1 -i desktop");
 
         bool hasMic = withAudio && micEnabled;
@@ -145,7 +146,7 @@ public sealed class FFmpegRecordingService : IDisposable
         }
 
         // ── Encoding ────────────────────────────────────────────────────────
-        sb.Append($" -c:v {videoEncoder} -b:v {bitrateMbps}M -r 30");
+        sb.Append($" -c:v {videoEncoder} -b:v {bitrateMbps}M -r {fps}");
 
         if (withAudio && hasMic)
         {
