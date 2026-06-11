@@ -123,17 +123,18 @@ public partial class App : Application
 
             _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Checking);
 
-            var info = await UpdateService.CheckLatestAsync();
+            var result = await UpdateService.CheckLatestAsync();
             s.LastUpdateCheckUtc = DateTime.UtcNow;
             SettingsService.Instance.Save();
 
-            if (info == null)
+            if (result.Status == UpdateCheckStatus.Failed)
             {
                 if (force) NotificationService.Warning("UpdateCheckFailed");
                 _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Failed);
                 return;
             }
-            if (!UpdateService.IsNewer(info.Version, UpdateService.CurrentVersion()))
+            var info = result.Info;
+            if (info == null || !UpdateService.IsNewer(info.Version, UpdateService.CurrentVersion()))
             {
                 if (force) NotificationService.Info("UpdateUpToDate");
                 _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.UpToDate);

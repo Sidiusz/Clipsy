@@ -10,9 +10,26 @@ namespace Clipsy.Services;
 /// or null when the release has no installer attached.</param>
 public sealed record UpdateInfo(string Version, string Url, string Notes, string? InstallerUrl, string? InstallerName);
 
+/// <summary>Outcome of a release check, distinct from "an update exists".</summary>
+public enum UpdateCheckStatus
+{
+    Found,       // a published release was located (see UpdateInfo)
+    NoReleases,  // the repo simply has no releases — not an error
+    Failed,      // network / API error — the check could not complete
+}
+
+public sealed record UpdateCheckResult(UpdateCheckStatus Status, UpdateInfo? Info);
+
 public static class UpdateService
 {
-    private const string LatestReleaseUrl = "https://api.github.com/repos/Sidiusz/Clipsy/releases/latest";
+    private const string ApiLatestUrl  = "https://api.github.com/repos/Sidiusz/Clipsy/releases/latest";
+    // Public web redirect: github.com/.../releases/latest 302s to
+    // /releases/tag/<tag> when a release exists, or /releases when none does.
+    // Lives on github.com (not api.github.com), so it is unaffected by the
+    // unauthenticated API rate limit / 403s that block the API endpoint from
+    // some networks — and reachable wherever release downloads already work.
+    private const string WebLatestUrl  = "https://github.com/Sidiusz/Clipsy/releases/latest";
+    private const string ReleasesPage  = "https://github.com/Sidiusz/Clipsy/releases";
     private static readonly HttpClient _http;
 
     static UpdateService()
@@ -22,45 +39,99 @@ public static class UpdateService
         _http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
     }
 
-    public static async Task<UpdateInfo?> CheckLatestAsync()
+    public static async Task<UpdateCheckResult> CheckLatestAsync()
     {
+        // Primary: GitHub API — richest data (assets, release notes).
         try
         {
-            var json = await _http.GetStringAsync(LatestReleaseUrl);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
-            if (string.IsNullOrEmpty(tag)) return null;
-            var url = root.TryGetProperty("html_url", out var u) ? u.GetString() ?? "" : "";
-            var notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
-
-            // Releases carry both a setup exe and a zip archive. Prefer the
-            // asset with "setup" in its name; fall back to any .exe.
-            string? installerUrl = null;
-            string? installerName = null;
-            if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+            using var resp = await _http.GetAsync(ApiLatestUrl, HttpCompletionOption.ResponseContentRead);
+            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return new UpdateCheckResult(UpdateCheckStatus.NoReleases, null);
+            if (resp.IsSuccessStatusCode)
             {
-                foreach (var asset in assets.EnumerateArray())
-                {
-                    var name = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
-                    if (name == null || !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
-                    var dlUrl = asset.TryGetProperty("browser_download_url", out var d) ? d.GetString() : null;
-                    bool isSetup = name.Contains("setup", StringComparison.OrdinalIgnoreCase);
-                    if (installerUrl == null || isSetup)
-                    {
-                        installerUrl = dlUrl;
-                        installerName = name;
-                        if (isSetup) break;
-                    }
-                }
+                var json = await resp.Content.ReadAsStringAsync();
+                var info = ParseApiRelease(json);
+                if (info != null) return new UpdateCheckResult(UpdateCheckStatus.Found, info);
             }
-
-            return new UpdateInfo(tag.TrimStart('v', 'V'), url, notes, installerUrl, installerName);
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[Clipsy] Update API returned {(int)resp.StatusCode}; trying web fallback.");
+            }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Update check failed: {ex.Message}");
-            return null;
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Update API check failed: {ex.Message}");
+        }
+
+        // Fallback: github.com web redirect. Survives API 403 / rate limits.
+        return await CheckViaWebRedirectAsync();
+    }
+
+    private static UpdateInfo? ParseApiRelease(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
+        if (string.IsNullOrEmpty(tag)) return null;
+        var url = root.TryGetProperty("html_url", out var u) ? u.GetString() ?? "" : "";
+        var notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
+
+        // Releases carry both a setup exe and a zip archive. Prefer the
+        // asset with "setup" in its name; fall back to any .exe.
+        string? installerUrl = null;
+        string? installerName = null;
+        if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var asset in assets.EnumerateArray())
+            {
+                var name = asset.TryGetProperty("name", out var n) ? n.GetString() : null;
+                if (name == null || !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
+                var dlUrl = asset.TryGetProperty("browser_download_url", out var d) ? d.GetString() : null;
+                bool isSetup = name.Contains("setup", StringComparison.OrdinalIgnoreCase);
+                if (installerUrl == null || isSetup)
+                {
+                    installerUrl = dlUrl;
+                    installerName = name;
+                    if (isSetup) break;
+                }
+            }
+        }
+
+        return new UpdateInfo(tag.TrimStart('v', 'V'), url, notes, installerUrl, installerName);
+    }
+
+    private static async Task<UpdateCheckResult> CheckViaWebRedirectAsync()
+    {
+        try
+        {
+            using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(12) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd($"Clipsy/{CurrentVersion()} (+github.com/Sidiusz/Clipsy)");
+
+            using var resp = await http.GetAsync(WebLatestUrl, HttpCompletionOption.ResponseHeadersRead);
+            var location = resp.Headers.Location?.ToString();
+            if (string.IsNullOrEmpty(location))
+                return new UpdateCheckResult(UpdateCheckStatus.Failed, null);
+
+            // .../releases/tag/<tag> → a release exists. .../releases → none.
+            const string marker = "/releases/tag/";
+            int idx = location.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0)
+                return new UpdateCheckResult(UpdateCheckStatus.NoReleases, null);
+
+            var tag = location[(idx + marker.Length)..].Trim('/');
+            if (string.IsNullOrEmpty(tag))
+                return new UpdateCheckResult(UpdateCheckStatus.NoReleases, null);
+
+            // No assets/notes available this way — the notification falls back
+            // to opening the release page for a manual download.
+            var info = new UpdateInfo(tag.TrimStart('v', 'V'), location, "", null, null);
+            return new UpdateCheckResult(UpdateCheckStatus.Found, info);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Update web fallback failed: {ex.Message}");
+            return new UpdateCheckResult(UpdateCheckStatus.Failed, null);
         }
     }
 
