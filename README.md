@@ -2,6 +2,10 @@
 
 Screenshot and screen recording tool for Windows. Lives in the tray, pops up an overlay when you hit a hotkey, and gets out of your way.
 
+![Uploading clipsy_main.png…]()
+![Uploading clipsy_themes.png…]()
+
+
 ## What it does
 
 - Capture a region, window or full screen with a hotkey
