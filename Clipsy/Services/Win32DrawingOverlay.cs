@@ -105,6 +105,7 @@ public sealed class Win32DrawingOverlay
             AllocDib();
             Render();
         }
+        if (_hasHole) ApplyRegion(); // region is in window-local coords; reapply after move
     }
 
     public void SetActive(bool active)
@@ -119,6 +120,46 @@ public sealed class Win32DrawingOverlay
         if (active) InstallKbHook();
         else { _engine.HideCursor(); UninstallKbHook(); }
         Render();
+    }
+
+    // Cut a hole in the overlay's window region so a rect (screen coords, e.g.
+    // the recording HUD) stays clickable even when the overlay covers it. The
+    // overlay otherwise swallows every click across the whole region via its
+    // 1/255 alpha background, which traps the HUD when the region touches the
+    // screen bottom and the HUD tucks inside it. Pixels outside the region
+    // don't belong to the window, so clicks there fall through to the HUD.
+    private bool _hasHole;
+    private int _holeX, _holeY, _holeW, _holeH;
+
+    public void SetExcludeRect(int screenX, int screenY, int w, int h)
+    {
+        _hasHole = true;
+        _holeX = screenX; _holeY = screenY; _holeW = w; _holeH = h;
+        ApplyRegion();
+    }
+
+    public void ClearExcludeRect()
+    {
+        if (!_hasHole) return;
+        _hasHole = false;
+        ApplyRegion();
+    }
+
+    private void ApplyRegion()
+    {
+        if (!_created) return;
+        if (!_hasHole)
+        {
+            SetWindowRgn(_hwnd, IntPtr.Zero, true);
+            return;
+        }
+        IntPtr full = CreateRectRgn(0, 0, _w, _h);
+        // screen -> window-local (overlay origin is _x,_y)
+        int lx = _holeX - _x, ly = _holeY - _y;
+        IntPtr hole = CreateRectRgn(lx, ly, lx + _holeW, ly + _holeH);
+        CombineRgn(full, full, hole, RGN_DIFF);
+        DeleteObject(hole);
+        SetWindowRgn(_hwnd, full, true); // system takes ownership of 'full'
     }
 
     public void SetColor(byte r, byte g, byte b) => _engine.SetColor(r, g, b);
@@ -498,4 +539,8 @@ public sealed class Win32DrawingOverlay
     [DllImport("gdi32.dll")] private static extern IntPtr CreateDIBSection(IntPtr hdc, ref BITMAPINFO bmi, uint usage, out IntPtr ppvBits, IntPtr hSection, uint offset);
     [DllImport("gdi32.dll")] private static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr hObject);
+    [DllImport("gdi32.dll")] private static extern IntPtr CreateRectRgn(int l, int t, int r, int b);
+    [DllImport("gdi32.dll")] private static extern int CombineRgn(IntPtr dst, IntPtr src1, IntPtr src2, int mode);
+    [DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
+    private const int RGN_DIFF = 4;
 }

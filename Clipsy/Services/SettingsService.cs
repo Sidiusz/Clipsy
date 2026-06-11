@@ -27,6 +27,7 @@ public sealed class AppSettings
     public string VideoFormat { get; set; } = "mp4";        // mp4 / avi / mkv / gif
     public string VideoCodec { get; set; } = "H.264";       // H.264 / H.265 / VP9 / AV1
     public string VideoResolution { get; set; } = "1080p";  // 480p / 720p / 1080p / 1440p / Original
+    public int VideoFramerate { get; set; } = 60;           // 15 / 30 / 60 / 0 = native (display refresh rate)
     public int VideoBitrateMbps { get; set; } = 8;
 
     // Microphone

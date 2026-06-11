@@ -14,6 +14,13 @@ public sealed partial class CaptureOverlayWindow
 {
     // ---------- Pointer input ----------
 
+    private long _lastClickTick;
+    private Point _lastClickPos;
+    private bool _selectionFromFallback;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetDoubleClickTime();
+
     private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         var cp = e.GetCurrentPoint(RootGrid);
@@ -64,6 +71,28 @@ public sealed partial class CaptureOverlayWindow
         if (rmb) return; // let RightTapped surface the overlay context menu
 
         if (!lmb) return;
+
+        // Double-click snaps the selection to the whole monitor under the
+        // cursor. Checked BEFORE the handle / inside-selection branches because
+        // the first click leaves a 100x100 fallback selection right under the
+        // cursor, so the second click would otherwise be treated as a move.
+        // Detected manually since XAML DoubleTapped fires only after click 1
+        // has already committed that fallback.
+        long nowTick = Environment.TickCount64;
+        bool isDouble = nowTick - _lastClickTick <= GetDoubleClickTime()
+            && System.Math.Abs(pos.X - _lastClickPos.X) < 8
+            && System.Math.Abs(pos.Y - _lastClickPos.Y) < 8;
+        _lastClickTick = nowTick;
+        _lastClickPos = pos;
+        if (isDouble)
+        {
+            _lastClickTick = 0; // consume so a triple-click doesn't re-trigger
+            if (TrySelectMonitorAt(pos))
+            {
+                e.Handled = true;
+                return;
+            }
+        }
 
         if (_hasSelection && TryGetHandle(pos, out var hp))
         {
@@ -197,7 +226,9 @@ public sealed partial class CaptureOverlayWindow
                     double x = _dragStart.X - SingleClickFallbackSize / 2;
                     double y = _dragStart.Y - SingleClickFallbackSize / 2;
                     rect = new Rect(x, y, SingleClickFallbackSize, SingleClickFallbackSize);
+                    _selectionFromFallback = true; // a double-click may replace it with a full monitor
                 }
+                else _selectionFromFallback = false;
                 _selectionRect = rect;
                 _hasSelection = true;
                 // Dynamic islands anchor to the corner where the drag ended.

@@ -56,8 +56,22 @@ public sealed class RecordingController
         _stopAndSave = true;
         _saveAsDialog = false;
         _hud?.Shutdown();
+        DestroyVisualOverlays();
         _service?.Stop();
         _ffmpegRec?.Stop();
+    }
+
+    // Tear down the always-on-top region border + drawing overlay the moment
+    // recording stops. Otherwise they linger (topmost) over the Save As file
+    // dialog and any annotations cover Explorer until Cleanup runs much later.
+    private void DestroyVisualOverlays()
+    {
+        try { _border?.Destroy(); } catch (Exception ex) { Diagnostics.Log("DestroyVisualOverlays border", ex); }
+        try { _drawWin?.Destroy(); } catch (Exception ex) { Diagnostics.Log("DestroyVisualOverlays drawWin", ex); }
+        try { _resizeWin?.Destroy(); } catch (Exception ex) { Diagnostics.Log("DestroyVisualOverlays resizeWin", ex); }
+        _border = null;
+        _drawWin = null;
+        _resizeWin = null;
     }
 
     private void Start(int x, int y, int w, int h)
@@ -169,6 +183,7 @@ public sealed class RecordingController
         Diagnostics.Log($"  captured _hudHwnd=0x{_hudHwnd.ToInt64():X}");
         try { _hud?.Shutdown(); Diagnostics.Log("  _hud.Shutdown OK"); }
         catch (Exception ex) { Diagnostics.Log("OnStopRequested _hud.Shutdown", ex); }
+        DestroyVisualOverlays();
         try { _service?.Stop(); Diagnostics.Log("  _service.Stop OK"); }
         catch (Exception ex) { Diagnostics.Log("OnStopRequested _service.Stop", ex); }
         try { _ffmpegRec?.Stop(); Diagnostics.Log("  _ffmpegRec.Stop OK"); }
@@ -187,6 +202,7 @@ public sealed class RecordingController
         Diagnostics.Log($"  captured _hudHwnd=0x{_hudHwnd.ToInt64():X}");
         try { _hud?.Shutdown(); Diagnostics.Log("  _hud.Shutdown OK"); }
         catch (Exception ex) { Diagnostics.Log("OnStopSaveRequested _hud.Shutdown", ex); }
+        DestroyVisualOverlays();
         try { _service?.Stop(); Diagnostics.Log("  _service.Stop OK"); }
         catch (Exception ex) { Diagnostics.Log("OnStopSaveRequested _service.Stop", ex); }
         try { _ffmpegRec?.Stop(); Diagnostics.Log("  _ffmpegRec.Stop OK"); }
@@ -204,6 +220,7 @@ public sealed class RecordingController
         _hudHwnd = _hud?.Hwnd ?? IntPtr.Zero;
         try { _hud?.Shutdown(); Diagnostics.Log("  _hud.Shutdown OK"); }
         catch (Exception ex) { Diagnostics.Log("OnCancelRequested _hud.Shutdown", ex); }
+        DestroyVisualOverlays();
         try { _service?.Stop(); Diagnostics.Log("  _service.Stop OK"); }
         catch (Exception ex) { Diagnostics.Log("OnCancelRequested _service.Stop", ex); }
         try { _ffmpegRec?.Stop(); Diagnostics.Log("  _ffmpegRec.Stop OK"); }
@@ -302,12 +319,13 @@ public sealed class RecordingController
                 }
                 _drawWin.SetActive(true);
 
-                // Drawing overlay is WS_EX_TOPMOST and created after the HUD,
-                // so it can sit above the HUD in z-order and swallow clicks
-                // on the bottom toolbar when the rects touch/overlap. Re-raise
-                // the HUD above it.
-                if (_hud != null)
-                    SetWindowPos(_hud.Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                // The overlay swallows clicks across its whole rect via a 1/255
+                // alpha background. When the region touches the screen bottom the
+                // HUD tucks INSIDE the region, so the overlay covers it and traps
+                // every button. Cut a hole in the overlay's window region over the
+                // HUD so its toolbar stays clickable and strokes skip that area.
+                if (_hud != null && GetWindowRect(_hud.Hwnd, out RECT hud))
+                    _drawWin.SetExcludeRect(hud.left, hud.top, hud.right - hud.left, hud.bottom - hud.top);
             }
             else
             {
@@ -315,6 +333,7 @@ public sealed class RecordingController
                 // not auto-wipe on toggle. RMB-drag erases; full clear requires
                 // a dedicated UI hook (TODO).
                 _drawWin?.SetActive(false);
+                _drawWin?.ClearExcludeRect();
             }
         }
         catch (Exception ex)
@@ -657,11 +676,9 @@ public sealed class RecordingController
         catch { /* ignore */ }
     }
 
-    private static readonly IntPtr HWND_TOPMOST = new(-1);
-    private const uint SWP_NOMOVE = 0x0002;
-    private const uint SWP_NOSIZE = 0x0001;
-    private const uint SWP_NOACTIVATE = 0x0010;
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT { public int left, top, right, bottom; }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 }
