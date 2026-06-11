@@ -208,6 +208,19 @@ public sealed partial class SettingsWindow : Window
             // Refresh values in case settings changed since warm-up.
             _draft = SettingsService.Instance.Settings.Clone();
             Load();
+            // Promote from tool-window (used to keep the off-screen warm render
+            // out of the taskbar) to a normal app window, so the visible
+            // settings window shows in the taskbar and Alt+Tab. The taskbar
+            // button is only re-evaluated while the window is hidden, so toggle
+            // visibility around the style change.
+            try
+            {
+                _appWindow?.Hide();
+                int ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
+                ex = (ex & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW;
+                SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
+            }
+            catch (Exception ex) { Diagnostics.Log("SettingsWindow.Reveal promote", ex); }
             _appWindow?.Move(new Windows.Graphics.PointInt32(CenterX(), CenterY()));
             Activate();
             SetForegroundWindow(_hwnd);
@@ -226,6 +239,7 @@ public sealed partial class SettingsWindow : Window
     private const int WinW = 940, WinH = 640;
     private const int GWL_EXSTYLE      = -20;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const int WS_EX_APPWINDOW  = 0x00040000;
     [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr h, int n);
     [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr h, int n, int v);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
@@ -910,18 +924,20 @@ public sealed partial class SettingsWindow : Window
         try
         {
             ShowNotification("NotifyUpdateChecking", "info");
-            var info = await UpdateService.CheckLatestAsync();
-            if (info == null)
+            var result = await UpdateService.CheckLatestAsync();
+            if (result.Status == UpdateCheckStatus.Failed)
             {
                 ShowNotification("NotifyUpdateFailed", "error");
                 return;
             }
-            if (UpdateService.IsNewer(info.Version, UpdateService.CurrentVersion()))
+            if (result.Status == UpdateCheckStatus.Found && result.Info != null &&
+                UpdateService.IsNewer(result.Info.Version, UpdateService.CurrentVersion()))
             {
-                ShowNotificationText(string.Format(Strings.Get("NotifyUpdateAvailable"), info.Version), "info");
+                ShowNotificationText(string.Format(Strings.Get("NotifyUpdateAvailable"), result.Info.Version), "info");
             }
             else
             {
+                // No releases, or the latest is not newer → up to date.
                 ShowNotification("NotifyUpdateUpToDate", "success");
             }
         }
