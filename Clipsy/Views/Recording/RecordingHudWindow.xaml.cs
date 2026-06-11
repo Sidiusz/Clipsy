@@ -135,6 +135,10 @@ public sealed partial class RecordingHudWindow : Window
         _hideTimer.Stop();
         _recPulse?.Stop();
         _recPulse = null;
+        // Hide the always-on-top HUD immediately. Otherwise the toolbar lingers
+        // over the Save As dialog / Explorer until Cleanup closes the window
+        // much later in the save flow.
+        try { _appWindow.Hide(); } catch (Exception ex) { Diagnostics.Log("HUD.Shutdown Hide", ex); }
     }
 
     // Slow opacity pulse on the REC dot — the universal "live" cue.

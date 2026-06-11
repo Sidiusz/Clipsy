@@ -186,5 +186,12 @@ Write-Host "Compiling installer with $iscc ..." -ForegroundColor Cyan
 & $iscc "/DClipsyVersion=$Version" $iss
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit $LASTEXITCODE" }
 
+# ---------- Portable zip ----------
+# Same publish output as the installer, zipped for the GitHub release.
+$zipPath = Join-Path $outputDir "Clipsy-$Version-win-x64.zip"
+Write-Host "Creating portable archive $zipPath ..." -ForegroundColor Cyan
+if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $zipPath -CompressionLevel Optimal
+
 Write-Host "Done. Output: $outputDir" -ForegroundColor Green
 Get-ChildItem $outputDir | Format-Table Name, Length, LastWriteTime
