@@ -21,8 +21,12 @@ public sealed class FFmpegService
     private readonly string _ffmpegDir;
     private readonly string _ffmpegExe;
 
-    // gyan.dev latest essentials release (Windows x64, ~100 MB zip)
+    // BtbN nightly build from GitHub Releases (Windows x64, ~150 MB zip).
+    // GitHub's CDN is far faster and more reliable than gyan.dev, which is
+    // kept only as a fallback when GitHub is unreachable.
     private const string FFMPEG_URL =
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip";
+    private const string FFMPEG_URL_FALLBACK =
         "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";
 
     private FFmpegService()
@@ -51,13 +55,24 @@ public sealed class FFmpegService
             progress.Report((0, "Connecting…"));
 
             using var http = new HttpClient();
-            http.Timeout = TimeSpan.FromMinutes(15);
+            http.Timeout = TimeSpan.FromMinutes(30);
             http.DefaultRequestHeaders.UserAgent.ParseAdd("Clipsy/1.0");
 
-            using var response = await http.GetAsync(
-                FFMPEG_URL, HttpCompletionOption.ResponseHeadersRead, ct);
-            response.EnsureSuccessStatusCode();
+            HttpResponseMessage response;
+            try
+            {
+                response = await http.GetAsync(
+                    FFMPEG_URL, HttpCompletionOption.ResponseHeadersRead, ct);
+                response.EnsureSuccessStatusCode();
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                response = await http.GetAsync(
+                    FFMPEG_URL_FALLBACK, HttpCompletionOption.ResponseHeadersRead, ct);
+                response.EnsureSuccessStatusCode();
+            }
 
+            using var _ = response;
             long? total = response.Content.Headers.ContentLength;
 
             progress.Report((2, "Downloading FFmpeg…"));
@@ -65,17 +80,19 @@ public sealed class FFmpegService
             await using (var fs = File.Create(zipPath))
             await using (var stream = await response.Content.ReadAsStreamAsync(ct))
             {
-                var buf = new byte[65536];
+                var buf = new byte[1 << 20];
                 long done = 0;
+                long lastMb = -1;
                 int read;
                 while ((read = await stream.ReadAsync(buf, ct)) > 0)
                 {
                     await fs.WriteAsync(buf.AsMemory(0, read), ct);
                     done += read;
-                    if (total > 0)
+                    long mb = done / 1_048_576;
+                    if (mb != lastMb) // throttle UI reports to once per MB
                     {
-                        int pct = (int)(done * 88L / total.Value);
-                        long mb = done / 1_048_576;
+                        lastMb = mb;
+                        int pct = total > 0 ? (int)(done * 88L / total.Value) : 0;
                         progress.Report((2 + pct, $"Downloading FFmpeg… {mb} MB"));
                     }
                 }
