@@ -105,6 +105,10 @@ public sealed partial class SettingsWindow
         FmtPng.Content     = Strings.Get("OptPngLossless");
         FmtJpg.Content     = Strings.Get("OptJpgSmaller");
         FmtWebp.Content    = Strings.Get("OptWebpPreview");
+        VidFmtMp4.Content  = Strings.Get("OptVidMp4");
+        VidFmtAvi.Content  = Strings.Get("OptVidAvi");
+        VidFmtMkv.Content  = Strings.Get("OptVidMkv");
+        VidFmtGif.Content  = Strings.Get("OptVidGif");
         AfterNothing.Content   = Strings.Get("OptDoNothing");
         AfterOpenFile.Content  = Strings.Get("OptOpenFile");
         AfterOpenFolder.Content= Strings.Get("OptOpenFolder");
@@ -125,6 +129,9 @@ public sealed partial class SettingsWindow
         LblCodec.Text      = Strings.Get("LblCodec");
         LblResolution.Text = Strings.Get("LblResolution");
         ResBtnOriginal.Content = Strings.Get("OptResNative");
+        LblVideoFps.Text = Strings.Get("LblVideoFps");
+        HelperVideoFps.Text = Strings.Get("HelperVideoFps");
+        FpsBtnNative.Content = Strings.Get("OptResNative");
         LblBitrate.Text    = Strings.Get("LblBitrate");
         LblRegionNote.Text = Strings.Get("LblRegionNote");
         LblMicEnabled.Text  = Strings.Get("LblMicEnabled");

@@ -243,7 +243,7 @@
                                             <TextBlock x:Name="LblLanguage" Text="Language"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperLanguage"
-                                                       Text="Auto-detect uses the system locale."
+                                                       Text="Auto-detect follows the system language."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ComboBox x:Name="LangBox" Grid.Column="1" Width="240" HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -265,7 +265,7 @@
                                             <TextBlock x:Name="LblTheme" Text="Theme"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperTheme"
-                                                       Text="Live-switches without restart."
+                                                       Text="Applies instantly, no restart needed."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <Border Grid.Column="1"
@@ -347,7 +347,7 @@
                                                        Text="Remember last Save As folder"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperRemember"
-                                                       Text="Future captures default to wherever you saved last."
+                                                       Text="New captures go to the folder you saved in last. Default: on."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ToggleButton x:Name="RememberFolderSwitch" Grid.Column="1"
@@ -404,7 +404,7 @@
                                             <TextBlock x:Name="LblScreenshotCursor" Text="Include cursor"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperScreenshotCursor"
-                                                       Text="Draw mouse pointer on screenshots."
+                                                       Text="Show the mouse pointer in screenshots. Default: off."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ToggleButton x:Name="ScreenshotCursorSwitch" Grid.Column="1"
@@ -441,10 +441,10 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock x:Name="LblAfterSave" Text="After save"
+                                            <TextBlock x:Name="LblAfterSave" Text="After-save behavior"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperAfterSave"
-                                                       Text="Runs after every saved screenshot or recording."
+                                                       Text="What Clipsy does right after a screenshot or recording is saved."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ComboBox x:Name="AfterSaveBox" Grid.Column="1" Width="240" HorizontalAlignment="Right"
@@ -536,7 +536,7 @@
                                         <TextBlock x:Name="LblCodec" Text="Codec"
                                                    Style="{StaticResource ClipsyBodyStrong}" />
                                         <TextBlock x:Name="HelperCodec"
-                                                   Text="Default H.264 hardware encode at 30 fps."
+                                                   Text="How the video is compressed. Affects file size, encoding speed and compatibility."
                                                    Style="{StaticResource ClipsyHelper}" />
                                     </StackPanel>
                                     <StackPanel Spacing="6">
@@ -631,7 +631,7 @@
                                             <TextBlock x:Name="LblMicEnabled" Text="Record microphone"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperMic"
-                                                       Text="Captures your voice along with the screen recording."
+                                                       Text="Record the microphone along with the screen. Default: off."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ToggleButton x:Name="MicEnabledSwitch" Grid.Column="1"
@@ -651,7 +651,7 @@
                                                 <TextBlock x:Name="LblMicDevice" Text="Input device"
                                                            Style="{StaticResource ClipsyBodyStrong}" />
                                                 <TextBlock x:Name="HelperMicDevice"
-                                                           Text="Leave as default to use the system default recording device."
+                                                           Text="Leave on default to use the system microphone."
                                                            Style="{StaticResource ClipsyHelper}" />
                                             </StackPanel>
                                             <ComboBox x:Name="MicDeviceBox" Grid.Column="1" Width="240"
@@ -673,7 +673,7 @@
                                             <TextBlock x:Name="LblResolution" Text="Resolution"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="LblRegionNote"
-                                                       Text="Applies to full-screen only. Region recordings use their selection size."
+                                                       Text="Maximum video height: larger recordings are scaled down to it, smaller ones keep their size. Default: 1080p"
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <Border Grid.Column="1"
@@ -709,10 +709,46 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblVideoFps" Text="Frame rate"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperVideoFps"
+                                                       Text="How many frames per second are recorded. Native follows the display refresh rate. Default: 60"
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1"
+                                                Background="{ThemeResource ClipsyBgInputBrush}"
+                                                BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
+                                                BorderThickness="1" CornerRadius="6" Padding="3"
+                                                VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="2">
+                                                <ToggleButton x:Name="FpsBtn15" Content="15"
+                                                              Style="{StaticResource ClipsySegmentBtn}"
+                                                              Tag="15" Click="OnFpsSegmentClick" />
+                                                <ToggleButton x:Name="FpsBtn30" Content="30"
+                                                              Style="{StaticResource ClipsySegmentBtn}"
+                                                              Tag="30" Click="OnFpsSegmentClick" />
+                                                <ToggleButton x:Name="FpsBtn60" Content="60"
+                                                              Style="{StaticResource ClipsySegmentBtn}"
+                                                              Tag="60" Click="OnFpsSegmentClick" />
+                                                <ToggleButton x:Name="FpsBtnNative" Content="Native"
+                                                              Style="{StaticResource ClipsySegmentBtn}"
+                                                              Tag="0" Click="OnFpsSegmentClick" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
                                             <TextBlock x:Name="LblVideoFormat" Text="Video format"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperVideoFormat"
-                                                       Text="Output format for saved recordings."
+                                                       Text="Format used for automatic saves. Save As lets you pick a different one."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ComboBox x:Name="VideoFormatBox" Grid.Column="1" Width="240" HorizontalAlignment="Right"
@@ -736,7 +772,7 @@
                                             <TextBlock x:Name="LblVideoCursor" Text="Include cursor"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperVideoCursor"
-                                                       Text="Show mouse pointer in recorded video."
+                                                       Text="Show the mouse pointer in recordings. Default: on."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ToggleButton x:Name="VideoCursorSwitch" Grid.Column="1"
@@ -752,7 +788,7 @@
                                             <TextBlock x:Name="LblBitrate" Text="Bitrate"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperBitrate"
-                                                       Text="Higher bitrate = better quality and larger files. Max scales with resolution."
+                                                       Text="Amount of data per second of video: more means sharper picture and bigger file. The cap depends on resolution. Default: 8 Mbps"
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <Grid ColumnSpacing="10">
@@ -804,7 +840,7 @@
                                             <TextBlock x:Name="LblGifColors" Text="Color count"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperGifColors"
-                                                       Text="Fewer colors = smaller file but more banding."
+                                                       Text="Palette size of the GIF: fewer colors mean a smaller file. Default: 256"
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <Grid ColumnSpacing="10">
@@ -829,7 +865,7 @@
                                             <TextBlock x:Name="LblGifFps" Text="Frame rate"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperGifFps"
-                                                       Text="12 fps is a good default for screen content."
+                                                       Text="How many frames per second the GIF contains. Default: 12"
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <Grid ColumnSpacing="10">
@@ -857,7 +893,7 @@
                                         <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
                                             <TextBlock x:Name="LblGifDither" Text="Dithering" Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperGifDither"
-                                                       Text="Smooths color transitions at the cost of file size."
+                                                       Text="Blends palette colors to hide banding; the file gets a bit larger. Default: on."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ToggleButton x:Name="GifDitherSwitch" Grid.Column="1"
@@ -891,7 +927,7 @@
                                             <TextBlock x:Name="LblOcrEngine" Text="OCR engine"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperOcr"
-                                                       Text="Tesseract is bundled. Windows OCR is faster but lower-quality."
+                                                       Text="Engine that recognizes text in captures."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
                                         <ComboBox x:Name="OcrEngineBox" Grid.Column="1" Width="240" HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -906,10 +942,10 @@
                                         <StackPanel Spacing="10">
                                             <Border Style="{StaticResource ClipsyHairline}" />
                                             <StackPanel Spacing="4">
-                                                <TextBlock x:Name="LblTessLang" Text="Tesseract Languages"
+                                                <TextBlock x:Name="LblTessLang" Text="Tesseract language packs"
                                                            Style="{StaticResource ClipsyBodyStrong}" />
                                                 <TextBlock x:Name="HelperTessLang"
-                                                           Text="Download language files for offline text recognition (~4–22 MB each)."
+                                                           Text="Languages Tesseract can recognize offline (~4–22 MB each)."
                                                            Style="{StaticResource ClipsyHelper}" />
                                             </StackPanel>
                                             <StackPanel x:Name="TessLangList" Spacing="2" />
