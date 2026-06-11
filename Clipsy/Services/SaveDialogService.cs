@@ -93,25 +93,53 @@ public static class SaveDialogService
                 lpstrDefExt = defaultExt.TrimStart('.'),
             };
 
-            if (!GetSaveFileNameW(ref ofn))
-            {
-                int err = CommDlgExtendedError();
-                if (err != 0)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[Clipsy] GetSaveFileName error 0x{err:X}");
-                }
-                return null;
-            }
+            // The capture overlay / recording HUD that owns this dialog is
+            // WS_EX_TOPMOST, so a normal dialog window opens BEHIND it and the
+            // overlay (plus any annotations) covers Explorer. Drop topmost while
+            // the dialog is up, then restore it.
+            bool wasTopmost = hwnd != IntPtr.Zero &&
+                (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+            if (wasTopmost)
+                SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
-            var path = Marshal.PtrToStringUni(fileBuf);
-            if (string.IsNullOrEmpty(path)) return null;
-            return new SavePickResult(path!, ofn.nFilterIndex);
+            try
+            {
+                if (!GetSaveFileNameW(ref ofn))
+                {
+                    int err = CommDlgExtendedError();
+                    if (err != 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Clipsy] GetSaveFileName error 0x{err:X}");
+                    }
+                    return null;
+                }
+
+                var path = Marshal.PtrToStringUni(fileBuf);
+                if (string.IsNullOrEmpty(path)) return null;
+                return new SavePickResult(path!, ofn.nFilterIndex);
+            }
+            finally
+            {
+                if (wasTopmost)
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
         }
         finally
         {
             Marshal.FreeHGlobal(fileBuf);
         }
     }
+
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private static readonly IntPtr HWND_NOTOPMOST = new(-2);
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_TOPMOST = 0x00000008;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOACTIVATE = 0x0010;
+
+    [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 
     private static string BuildFilterString(IList<SaveFilter> filters)
     {
