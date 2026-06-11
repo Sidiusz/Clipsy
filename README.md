@@ -2,9 +2,7 @@
 
 Screenshot and screen recording tool for Windows. Lives in the tray, pops up an overlay when you hit a hotkey, and gets out of your way.
 
-![Uploading clipsy_main.png…]()
-![Uploading clipsy_themes.png…]()
-
+<img width="1074" height="917" alt="image" src="https://github.com/user-attachments/assets/0fa0da84-7bcf-4067-9d8b-86a12910e965" />
 
 ## What it does
 
@@ -35,3 +33,5 @@ This publishes the app, syncs the version everywhere, builds the installer and a
 ## License
 
 See [LICENSE](LICENSE) — personal and internal use only.
+
+<img width="926" height="633" alt="image" src="https://github.com/user-attachments/assets/9c13cc4f-4337-4726-85fa-1fa54367c28c" />
