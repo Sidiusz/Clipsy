@@ -22,6 +22,9 @@ public static class ToastService
         public string? Action2Tooltip  { get; init; }
         public Action? Action2Callback { get; init; }
         public bool    Action2IsPrimary { get; init; }
+        // When true the toast never auto-dismisses — it stays until the user
+        // clicks an action or Close. Used for update prompts.
+        public bool    Persistent      { get; init; }
     }
 
     // Mutated on UI thread only.
