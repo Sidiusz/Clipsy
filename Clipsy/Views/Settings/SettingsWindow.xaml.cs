@@ -979,7 +979,18 @@ public sealed partial class SettingsWindow : Window
             if (result.Status == UpdateCheckStatus.Found && result.Info != null &&
                 UpdateService.IsNewer(result.Info.Version, UpdateService.CurrentVersion()))
             {
-                ShowNotificationText(string.Format(Strings.Get("NotifyUpdateAvailable"), result.Info.Version), "info");
+                // Show the actionable update toast (Skip / Download / Close) — a
+                // passive "available" banner left the user with nowhere to go.
+                var info = result.Info;
+                ShowNotificationText(string.Format(Strings.Get("NotifyUpdateAvailable"), info.Version), "info");
+                NotificationService.UpdateAvailable(
+                    info,
+                    Strings.Get("UpdateAvailable"),
+                    skipVersion: () =>
+                    {
+                        SettingsService.Instance.Settings.SkippedVersion = info.Version;
+                        SettingsService.Instance.Save();
+                    });
             }
             else
             {
