@@ -39,6 +39,9 @@ public sealed partial class SettingsWindow
         LblTessLang.Text     = Strings.Get("LblTessLang");
         var (tessMin, tessMax) = TessdataService.ApproxSizeRangeMb();
         HelperTessLang.Text  = string.Format(Strings.Get("HelperTessLang"), tessMin, tessMax, Strings.Get("UnitMB"));
+        // Tess rows carry localized Install/Delete button text; rebuild so a
+        // language switch re-renders them instead of keeping the old language.
+        BuildTessLangRows();
         LblTranslateService.Text = Strings.Get("LblTranslateService");
         HelperTranslation.Text   = Strings.Get("HelperTranslation");
         LblTranslateFrom.Text    = Strings.Get("LblTranslateFrom");
