@@ -65,8 +65,27 @@ public sealed partial class TrayMenuWindow : Window
 
     private void OnSettingsChanged()
     {
-        try { ApplyLocalization(); }
+        try
+        {
+            ApplyLocalization();
+            // The theme may have changed. SetHover pins each row's resting
+            // text/icon brushes imperatively, overriding the XAML ThemeResource,
+            // so they keep the old theme's colors until the user hovers. Re-apply
+            // resting colors once the new theme has propagated to ActualTheme.
+            DispatcherQueue.TryEnqueue(RefreshRowColors);
+        }
         catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.OnSettingsChanged", ex); }
+    }
+
+    private void RefreshRowColors()
+    {
+        try
+        {
+            foreach (var row in _parts.Keys)
+                SetHover(row, false);
+            SetUpdateStatus(_updateStatus);
+        }
+        catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.RefreshRowColors", ex); }
     }
 
     // ────────────────────────────────────────────────────────

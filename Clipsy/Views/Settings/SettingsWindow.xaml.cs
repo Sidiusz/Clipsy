@@ -60,13 +60,26 @@ public sealed partial class SettingsWindow : Window
     // a fade swap. Not tied to the active tab — purely ambient.
     private static readonly string[] _tipKeys =
     {
-        "TipPrtScCapture",
-        "TipRotateDragRegion",
-        "TipRotateErase",
-        "TipRotateOcr",
-        "TipRotateGif",
-        "TipRotateHotkeys",
-        "TipRotateLock",
+        "TipSelectScreenDouble",
+        "TipSelectAll",
+        "TipOcrEngine",
+        "TipOcrLang",
+        "TipTranslate",
+        "TipEyedropper",
+        "TipResizeHandles",
+        "TipCopySaveKeys",
+        "TipClearDrawings",
+        "TipEscCancel",
+        "TipHotkeyRebind",
+        "TipRecordRegion",
+        "TipMicToggle",
+        "TipSilentSave",
+        "TipGifExport",
+        "TipGifSize",
+        "TipFfmpeg",
+        "TipJpgQuality",
+        "TipAutostart",
+        "TipAfterSave",
     };
     private static readonly Random _tipRng = new();
     private readonly List<int> _tipOrder = new();
@@ -137,13 +150,37 @@ public sealed partial class SettingsWindow : Window
         }
         catch { }
 
-        Closed += (_, _) => { _tipTimer?.Stop(); if (_open == this) _open = null; };
+        Closed += (_, _) =>
+        {
+            _tipTimer?.Stop();
+            SettingsService.Instance.SettingsChanged -= OnGlobalSettingsChanged;
+            if (_open == this) _open = null;
+        };
+
+        // Keep the warmed-but-hidden spare in sync with language/theme changes
+        // made from the currently-open window. Without this the spare still
+        // holds the strings/colors from warm time, so reopening settings flashes
+        // the old language for a frame before Reveal re-localizes it.
+        SettingsService.Instance.SettingsChanged += OnGlobalSettingsChanged;
 
         // Re-apply nav CheckStates once the tree is live: the initial pass in
         // OnNavChecked runs during InitializeComponent when most radios are
         // still null, and the theme is applied after parse.
         if (Content is FrameworkElement rootFe)
             rootFe.Loaded += (_, _) => SnapNavVisuals();
+    }
+
+    // Re-localize + re-tint a hidden/open window when settings change elsewhere.
+    // Guarded on _setupDone so the spare isn't touched before its tree is built.
+    private void OnGlobalSettingsChanged()
+    {
+        if (!_setupDone) return;
+        try
+        {
+            ApplyLocalization();
+            RefreshNavIcons();
+        }
+        catch (Exception ex) { Diagnostics.Log("SettingsWindow.OnGlobalSettingsChanged", ex); }
     }
 
     // One-time heavy init: title bar theming, content Load, nav. Runs during
@@ -208,6 +245,12 @@ public sealed partial class SettingsWindow : Window
             // Refresh values in case settings changed since warm-up.
             _draft = SettingsService.Instance.Settings.Clone();
             Load();
+            // The prewarmed spare ran ApplyLocalization once at warm time. If the
+            // language was changed+saved from a previous open, the spare's static
+            // labels are stale — re-localize so reopened settings match the saved
+            // language. Also re-tint nav icons for the current theme.
+            ApplyLocalization();
+            RefreshNavIcons();
             // Promote from tool-window (used to keep the off-screen warm render
             // out of the taskbar) to a normal app window, so the visible
             // settings window shows in the taskbar and Alt+Tab. The taskbar
@@ -868,6 +911,8 @@ public sealed partial class SettingsWindow : Window
             ThemeService.ApplyTo(Content as FrameworkElement);
             ApplyLocalization();
             UpdateDirtyVisuals();
+            // Theme may have changed: re-tint nav icons once ActualTheme settles.
+            DispatcherQueue.TryEnqueue(RefreshNavIcons);
             ShowNotification("NotifySaved", "success");
         }
         catch (Exception ex)
@@ -895,6 +940,7 @@ public sealed partial class SettingsWindow : Window
         Load();
         ThemeService.ApplyTo(Content as FrameworkElement);
         ApplyLocalization();
+        DispatcherQueue.TryEnqueue(RefreshNavIcons);
         ShowNotification("NotifyReset", "info");
     }
 
@@ -980,6 +1026,19 @@ public sealed partial class SettingsWindow : Window
             SnapToggles(shown);
             FadeInPane(shown);
         }
+
+        RefreshNavIcons();
+    }
+
+    // Re-tint the sidebar category icons for the current selection + theme.
+    // Icons are colored imperatively (accent for the active tab, dim for the
+    // rest), so after a theme switch their brushes go stale grey until the
+    // next nav click — callers must re-run this whenever the theme changes.
+    private void RefreshNavIcons()
+    {
+        string? key = null;
+        foreach (var rb in new[] { NavGeneral, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
+            if (rb?.IsChecked == true) { key = rb.Tag as string; break; }
 
         try
         {

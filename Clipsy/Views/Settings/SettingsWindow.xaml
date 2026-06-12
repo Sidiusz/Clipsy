@@ -240,8 +240,12 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock x:Name="LblLanguage" Text="Language"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                <FontIcon Glyph="&#xE774;" FontSize="16" VerticalAlignment="Center"
+                                                          Foreground="{ThemeResource ClipsyText2Brush}" />
+                                                <TextBlock x:Name="LblLanguage" Text="Language"
+                                                           Style="{StaticResource ClipsyBodyStrong}" />
+                                            </StackPanel>
                                             <TextBlock x:Name="HelperLanguage"
                                                        Text="Auto-detect follows the system language."
                                                        Style="{StaticResource ClipsyHelper}" />
