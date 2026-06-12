@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using Clipsy.Services;
 
 namespace Clipsy;
 
@@ -25,6 +26,11 @@ public static class Program
         using var mutex = new Mutex(initiallyOwned: true, MutexName, out createdNew);
         if (!createdNew)
             return 0;
+
+        // Install native crash capture before XAML init so any fail-fast /
+        // access violation from the WinUI input stack leaves a minidump +
+        // log breadcrumb instead of the process silently vanishing.
+        CrashHandler.Install();
 
         try
         {

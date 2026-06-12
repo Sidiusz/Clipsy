@@ -62,6 +62,17 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: string; ValueName: "Clipsy"; ValueData: """{app}\{#ClipsyExeName}"""; \
     Tasks: startuplogin; Flags: uninsdeletevalue
 
+; WER LocalDumps: capture a full minidump even on native __fastfail
+; (0xc0000409) crashes that bypass the in-app exception filter. Dumps land
+; next to debug.log so a silent vanish always leaves post-mortem evidence.
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\{#ClipsyExeName}"; \
+    ValueType: expandsz; ValueName: "DumpFolder"; ValueData: "%LOCALAPPDATA%\Clipsy\CrashDumps"; \
+    Flags: uninsdeletekey
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\{#ClipsyExeName}"; \
+    ValueType: dword; ValueName: "DumpType"; ValueData: "$00000002"
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\{#ClipsyExeName}"; \
+    ValueType: dword; ValueName: "DumpCount"; ValueData: "$00000005"
+
 [Run]
 Filename: "{app}\{#ClipsyExeName}"; Description: "{cm:LaunchProgram,{#ClipsyName}}"; \
     Flags: nowait postinstall skipifsilent
