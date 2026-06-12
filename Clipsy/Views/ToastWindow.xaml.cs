@@ -32,6 +32,7 @@ public sealed partial class ToastWindow : Window
     private readonly AppWindow _appWindow;
     private readonly Action? _action1;
     private readonly Action? _action2;
+    private readonly bool _persistent;
     private DispatcherTimer? _dismissTimer;
     private EventHandler<object>? _renderHandler;
     private bool _isHovered;
@@ -46,6 +47,7 @@ public sealed partial class ToastWindow : Window
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
         _action1 = opts.Action1Callback;
         _action2 = opts.Action2Callback;
+        _persistent = opts.Persistent;
 
         ConfigureWindow();
         ApplyOptions(opts);
@@ -242,6 +244,8 @@ public sealed partial class ToastWindow : Window
 
     private void StartDismissTimer()
     {
+        // Persistent toasts (update prompt) stay until the user acts on them.
+        if (_persistent) return;
         _dismissTimer?.Stop();
         _dismissTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
         _dismissTimer.Tick += (_, _) => Dismiss();

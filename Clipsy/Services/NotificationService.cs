@@ -23,7 +23,8 @@ public static class NotificationService
         string? action2Icon         = null,
         string? action2Tooltip      = null,
         Action? action2             = null,
-        bool    action2IsPrimary    = false)
+        bool    action2IsPrimary    = false,
+        bool    persistent          = false)
     {
         Posted?.Invoke(new Notification(level, title, body ?? string.Empty));
 
@@ -40,6 +41,7 @@ public static class NotificationService
             Action2Tooltip  = action2Tooltip,
             Action2Callback = action2,
             Action2IsPrimary = action2IsPrimary,
+            Persistent      = persistent,
         });
     }
 
@@ -139,7 +141,8 @@ public static class NotificationService
             action2Icon:     "\xE896",
             action2Tooltip:  Strings.Get("ToastDownload"),
             action2:         () => StartUpdate(info),
-            action2IsPrimary: true);
+            action2IsPrimary: true,
+            persistent:      true);
     }
 
     // Download the installer from the release asset and hand off to it; the

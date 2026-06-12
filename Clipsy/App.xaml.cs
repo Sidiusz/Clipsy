@@ -15,6 +15,7 @@ public partial class App : Application
     public HotkeyService? Hotkey { get; private set; }
 
     private Clipsy.Views.TrayMenuWindow? _trayMenu;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _updateTimer;
 
     public App()
     {
@@ -85,6 +86,7 @@ public partial class App : Application
         Clipsy.Views.Settings.SettingsWindow.Prewarm();
 
         _ = CheckUpdatesIfDueAsync();
+        StartUpdateTimer();
 
         // Warm up the capture pipeline so the first PrintScreen press doesn't
         // pay for JIT + WinUI 3 XAML island cold init + first GDI BitBlt at
@@ -108,6 +110,21 @@ public partial class App : Application
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Warmup failed: {ex.Message}");
         }
+    }
+
+    // Periodic background re-check so a long-running tray instance still finds
+    // updates without a restart. The tick is frequent; CheckUpdatesIfDueAsync
+    // itself gates on the user's chosen interval (ShouldCheckNow), so the
+    // network call + toast only fire when actually due.
+    private void StartUpdateTimer()
+    {
+        var dq = HostWindow?.DispatcherQueue;
+        if (dq == null) return;
+        _updateTimer = dq.CreateTimer();
+        _updateTimer.Interval = TimeSpan.FromMinutes(30);
+        _updateTimer.IsRepeating = true;
+        _updateTimer.Tick += (_, _) => _ = CheckUpdatesIfDueAsync();
+        _updateTimer.Start();
     }
 
     public async Task CheckUpdatesIfDueAsync(bool force = false)
