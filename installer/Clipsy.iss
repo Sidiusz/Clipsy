@@ -84,3 +84,5 @@ Type: filesandordirs; Name: "{localappdata}\Clipsy"
 
 
 
+
+
