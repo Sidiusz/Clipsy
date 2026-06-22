@@ -57,7 +57,6 @@ Clipsy/obj/
 # Session/workspace noise
 checkpoint.md
 .codegraph/
-.claude/
 DESIGN SCREENSHOTS/
 new design/
 *.full
@@ -67,7 +66,6 @@ Clipsy UI _ standalone.html
 # Scratch / quarantined files awaiting deletion
 _trash/
 # Local dev files - never tracked in the public repo
-CLAUDE.md
 PROJECT_MAP.md
 docs/
 tools/
