@@ -38,7 +38,7 @@ public sealed class FFmpegRecordingService : IDisposable
         Directory.CreateDirectory(tempDir);
         _tempPath = Path.Combine(tempDir, $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mkv");
 
-        bool micEnabled = s.MicrophoneEnabled;
+        bool micEnabled = s.MicrophoneEnabled && !s.MicrophoneMuted;
         string? micDevice = micEnabled && !string.IsNullOrEmpty(s.MicrophoneDevice) ? s.MicrophoneDevice : null;
         int fps = RecordingService.ResolveFramerate(s.VideoFramerate);
         var args = BuildArgs(x, y, w, h, codec, kbps, fps, _tempPath, withAudio: true, micEnabled: micEnabled, micFriendlyName: micDevice);

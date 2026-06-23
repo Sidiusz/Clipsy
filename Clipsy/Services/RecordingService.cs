@@ -77,7 +77,7 @@ public sealed class RecordingService : IDisposable
             AudioOptions = new AudioOptions
             {
                 IsAudioEnabled = true,
-                IsInputDeviceEnabled = s.MicrophoneEnabled,
+                IsInputDeviceEnabled = s.MicrophoneEnabled && !s.MicrophoneMuted,
                 AudioInputDevice = s.MicrophoneEnabled && !string.IsNullOrEmpty(s.MicrophoneDevice)
                     ? s.MicrophoneDevice : null,
                 IsOutputDeviceEnabled = true,
