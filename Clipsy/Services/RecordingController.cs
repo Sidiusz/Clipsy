@@ -110,6 +110,22 @@ public sealed class RecordingController
         _hud.Activate();
         _hud.Start();
 
+        // Exclude Clipsy recording UI from the captured output so the HUD and
+        // region border never appear in the video. Applies to BOTH backends:
+        // SetExcludeFromCapture stamps WDA_EXCLUDEFROMCAPTURE, which hides the
+        // window from ScreenRecorderLib (WGC) and FFmpeg gdigrab alike. The
+        // draw overlay is intentionally left visible (excluded == false below).
+        try
+        {
+            Recorder.SetExcludeFromCapture(_hud.Hwnd, true);
+            if (_border != null && _border.Hwnd != IntPtr.Zero)
+                Recorder.SetExcludeFromCapture(_border.Hwnd, true);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Clipsy] SetExcludeFromCapture failed: {ex.Message}");
+        }
+
         if (isFfmpegCodec)
         {
             // VP9 / AV1 — record natively via FFmpeg (gdigrab + wasapi loopback)
@@ -136,20 +152,8 @@ public sealed class RecordingController
             return;
         }
 
-        // H.264 / H.265 — record via ScreenRecorderLib
-        // Exclude Clipsy overlay windows from the recorded output so the HUD,
-        // region border, and any draw overlay don't appear in the video.
-        try
-        {
-            Recorder.SetExcludeFromCapture(_hud.Hwnd, true);
-            if (_border != null && _border.Hwnd != IntPtr.Zero)
-                Recorder.SetExcludeFromCapture(_border.Hwnd, true);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Clipsy] SetExcludeFromCapture failed: {ex.Message}");
-        }
-
+        // H.264 / H.265 — record via ScreenRecorderLib. Overlay exclusion was
+        // already applied above (shared by both backends).
         _service = new RecordingService();
         _service.RecordingComplete += OnRecordingComplete;
         _service.RecordingFailed += OnRecordingFailed;
