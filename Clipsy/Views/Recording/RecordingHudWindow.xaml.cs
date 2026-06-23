@@ -74,13 +74,38 @@ public sealed partial class RecordingHudWindow : Window
 
     private void ApplyLocalization()
     {
-        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(PauseBtn,    Strings.Get("TipPause"));
-        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(StopBtn,     Strings.Get("TipStop"));
-        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(StopSaveBtn, Strings.Get("TipSaveAs"));
-        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(CancelBtn,   Strings.Get("TipCancelRec"));
-        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(DrawBtn,     Strings.Get("TipDraw"));
-        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(LockBtn,     Strings.Get("TipLock"));
+        ToolTipService.SetToolTip(PauseBtn,    MakeTip(Strings.Get("TipPause")));
+        ToolTipService.SetToolTip(StopBtn,     MakeTip(Strings.Get("TipStop")));
+        ToolTipService.SetToolTip(StopSaveBtn, MakeTip(Strings.Get("TipSaveAs")));
+        ToolTipService.SetToolTip(CancelBtn,   MakeTip(Strings.Get("TipCancelRec")));
+        ToolTipService.SetToolTip(DrawBtn,     MakeTip(Strings.Get("TipDraw")));
+        ToolTipService.SetToolTip(LockBtn,     MakeTip(Strings.Get("TipLock")));
         UpdateMicTooltip();
+    }
+
+    // Tooltips render in their own windowed popups (separate HWNDs) that the
+    // HUD's SetExcludeFromCapture doesn't cover, so they leak into the
+    // recording. Build each tooltip as a real ToolTip and, when it opens,
+    // stamp WDA_EXCLUDEFROMCAPTURE on the popup window so it stays out of frame.
+    private ToolTip MakeTip(string text)
+    {
+        var tip = new ToolTip { Content = text };
+        tip.Opened += OnTooltipOpened;
+        return tip;
+    }
+
+    private void OnTooltipOpened(object sender, RoutedEventArgs e) => ExcludePopupsFromCapture();
+
+    private static void ExcludePopupsFromCapture()
+    {
+        EnumThreadWindows(GetCurrentThreadId(), (hWnd, _) =>
+        {
+            var sb = new System.Text.StringBuilder(256);
+            if (GetClassName(hWnd, sb, sb.Capacity) > 0 &&
+                sb.ToString().IndexOf("Popup", StringComparison.OrdinalIgnoreCase) >= 0)
+                SetWindowDisplayAffinity(hWnd, WDA_EXCLUDEFROMCAPTURE);
+            return true;
+        }, IntPtr.Zero);
     }
 
     public void InitMic(bool enabled, bool initiallyMuted = false)
@@ -106,11 +131,17 @@ public sealed partial class RecordingHudWindow : Window
         UpdateMicTooltip();
     }
 
+    private ToolTip? _micTip;
     private void UpdateMicTooltip()
     {
         bool muted = MicBtn.IsChecked != true;
-        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(MicBtn,
-            Strings.Get(muted ? "TipMicMuted" : "TipMicActive"));
+        string text = Strings.Get(muted ? "TipMicMuted" : "TipMicActive");
+        if (_micTip == null)
+        {
+            _micTip = MakeTip(text);
+            ToolTipService.SetToolTip(MicBtn, _micTip);
+        }
+        else _micTip.Content = text;
     }
 
     public IntPtr Hwnd => _hwnd;
@@ -395,4 +426,11 @@ public sealed partial class RecordingHudWindow : Window
     [DllImport("user32.dll", SetLastError = true)] static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll", SetLastError = true)] static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
     [DllImport("user32.dll", SetLastError = true)] static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, int dwFlags);
+
+    private const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
+    private delegate bool EnumThreadDelegate(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool EnumThreadWindows(uint dwThreadId, EnumThreadDelegate lpfn, IntPtr lParam);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
 }
