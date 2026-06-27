@@ -58,9 +58,8 @@ Name: "{group}\Uninstall {#ClipsyName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#ClipsyName}"; Filename: "{app}\{#ClipsyExeName}"; Tasks: desktopicon
 
 [Registry]
-; Clipsy runs elevated (requireAdministrator). A Run-key entry can't auto-elevate
-; at login (UAC blocks it), so autostart is a Scheduled Task with the highest run
-; level instead — created/removed in [Code] below.
+; Autostart is a highest-privilege scheduled task (see [Code]); a Run-key entry
+; can't auto-elevate the app at login.
 
 ; WER LocalDumps: capture a full minidump even on native __fastfail
 ; (0xc0000409) crashes that bypass the in-app exception filter. Dumps land
@@ -90,9 +89,7 @@ var
   ResultCode: Integer;
 begin
   ExePath := ExpandConstant('{app}\{#ClipsyExeName}');
-  // /TR needs the action path inner-quoted ("\"path\"") or schtasks truncates
-  // it at the first space. /RL HIGHEST runs elevated; /SC ONLOGON + /RU fires
-  // at this user's sign-in. The setup is elevated, so creation succeeds.
+  // Inner-quote the /TR path or schtasks truncates it at the first space.
   Params := '/Create /TN "' + AutostartTaskName + '" /TR "\"' + ExePath + '\"" ' +
             '/SC ONLOGON /RU "' + ExpandConstant('{username}') + '" /RL HIGHEST /F';
   Exec(ExpandConstant('{sys}\schtasks.exe'), Params, '', SW_HIDE,

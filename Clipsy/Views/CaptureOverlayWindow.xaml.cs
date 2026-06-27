@@ -394,9 +394,7 @@ public sealed partial class CaptureOverlayWindow : Window
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPostMoveTick;
             int cloak = 0;
             DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
-            // The overlay is shown with SWP_NOACTIVATE (avoids taskbar flash),
-            // so it never receives keyboard focus — Esc/Ctrl+A were dead until
-            // the first click. Take the foreground explicitly once visible.
+            // Shown with NOACTIVATE, so grab foreground/focus explicitly once visible.
             ForceForeground(_hwnd);
             RootGrid.Focus(FocusState.Programmatic);
             PlayIntroAnimations();
@@ -563,11 +561,8 @@ public sealed partial class CaptureOverlayWindow : Window
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
 
-    // SetForegroundWindow alone fails silently when the caller isn't already
-    // the foreground process (Windows foreground lock) — the overlay then
-    // never gets keyboard focus and Esc/Ctrl+A are dead. Briefly attach our
-    // input queue to the current foreground thread to bypass the lock, the
-    // documented way to reliably steal focus.
+    // AttachThreadInput bypasses the foreground lock that makes a bare
+    // SetForegroundWindow fail, so the overlay reliably gets keyboard focus.
     private static void ForceForeground(IntPtr hwnd)
     {
         try

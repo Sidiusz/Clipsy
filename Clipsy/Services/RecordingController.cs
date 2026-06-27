@@ -593,10 +593,7 @@ public sealed class RecordingController
         }
         if (destFmt == "gif")
         {
-            // Preferred path: FFmpeg (palettegen + paletteuse) when present.
-            // On any failure fall through to the dependency-free
-            // NativeGifEncoder so the export still succeeds. Only when both
-            // produce nothing do we surface an error.
+            // FFmpeg first; fall back to NativeGifEncoder, error only if both fail.
             bool ok = false;
             if (FFmpegService.Instance.IsAvailable)
             {
