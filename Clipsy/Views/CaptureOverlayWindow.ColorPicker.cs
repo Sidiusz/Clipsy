@@ -85,7 +85,6 @@ public sealed partial class CaptureOverlayWindow
         EyedropperMagnifier.Visibility = Visibility.Visible;
         RootGrid.Focus(FocusState.Programmatic);
 
-        // Position and render magnifier at current cursor immediately.
         try
         {
             GetCursorPos(out var pt);

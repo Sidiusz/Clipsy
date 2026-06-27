@@ -415,14 +415,11 @@ public sealed partial class CaptureOverlayWindow
         if (ShapeIconArrowLine != null) ShapeIconArrowLine.Stroke = shapesStroke;
         if (ShapeIconArrowHead != null) ShapeIconArrowHead.Stroke = shapesStroke;
 
-        // Show/hide shapes in flyout - selected shape is hidden, others visible
-        // Use _currentShapeTool to determine which shape is currently selected
         RectBtn.Visibility = _currentShapeTool == ToolKind.Rectangle ? Visibility.Collapsed : Visibility.Visible;
         EllipseBtn.Visibility = _currentShapeTool == ToolKind.Ellipse ? Visibility.Collapsed : Visibility.Visible;
         LineBtn.Visibility = _currentShapeTool == ToolKind.Line ? Visibility.Collapsed : Visibility.Visible;
         ArrowBtn.Visibility = _currentShapeTool == ToolKind.Arrow ? Visibility.Collapsed : Visibility.Visible;
 
-        // Update shapes icon based on current shape tool
         ShapeIconRect?.SetValue(UIElement.VisibilityProperty,
             _currentShapeTool is ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow ? Visibility.Collapsed : Visibility.Visible);
         ShapeIconEllipse?.SetValue(UIElement.VisibilityProperty,

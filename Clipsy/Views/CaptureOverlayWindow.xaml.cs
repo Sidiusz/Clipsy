@@ -69,7 +69,6 @@ public sealed partial class CaptureOverlayWindow : Window
     private bool _ocrPanelDragging;
     private Point _ocrPanelDragOffset;
 
-    // Current shape tool for shapes button
     private ToolKind _currentShapeTool = ToolKind.Rectangle;
     private readonly List<(Rect bounds, Microsoft.UI.Xaml.Shapes.Rectangle box, TextBlock glyph)> _ocrVisuals = new();
     private readonly List<OcrWord> _ocrWordsRaw = new();
@@ -166,7 +165,6 @@ public sealed partial class CaptureOverlayWindow : Window
             Uncloak();
         }
 
-        // Start in region select mode (no drawing tool active)
         SetTool(ToolKind.None);
     }
 
@@ -217,7 +215,6 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         try
         {
-            // Get primary monitor bounds using Win32 API
             const int SM_XVIRTUALSCREEN = 76;
             const int SM_YVIRTUALSCREEN = 77;
             const int SM_CXSCREEN = 0;
@@ -238,20 +235,17 @@ public sealed partial class CaptureOverlayWindow : Window
                 var primaryCenterX = (primaryWidth / 2) - virtualX;
                 var primaryTopY = 72 - virtualY;
 
-                // Center hint on primary monitor - measure actual width
                 Hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 var hintWidth = Hint.DesiredSize.Width;
                 Hint.Margin = new Thickness(primaryCenterX - (hintWidth / 2), primaryTopY, 0, 0);
             }
             else
             {
-                // Fallback to fixed positioning
                 Hint.Margin = new Thickness(50, 72, 0, 0);
             }
         }
         catch
         {
-            // Fallback to fixed positioning on any error
             Hint.Margin = new Thickness(50, 72, 0, 0);
         }
     }
@@ -334,7 +328,6 @@ public sealed partial class CaptureOverlayWindow : Window
         if (FrozenImage.Source == null) TryLoadFrozenImage();
         RootGrid.Focus(FocusState.Programmatic);
 
-        // Update dimming geometry after window is fully loaded
         UpdateDimGeometry(null);
 
     }
@@ -446,7 +439,6 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        // Update dimming geometry when window size changes
         UpdateDimGeometry(_hasSelection ? _selectionRect : null);
     }
 
@@ -481,7 +473,6 @@ public sealed partial class CaptureOverlayWindow : Window
             wb.Invalidate();
             FrozenImage.Source = wb;
 
-            // Set exact image dimensions in DIPs
             var b = _frame.VirtualBounds;
             var rawDpi = GetDpiForWindow(_hwnd);
             var dpiScale = rawDpi > 0 ? rawDpi / 96.0 : (Content?.XamlRoot?.RasterizationScale ?? 1.0);

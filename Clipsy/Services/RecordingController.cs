@@ -74,7 +74,6 @@ public sealed class RecordingController
     {
         _x = x; _y = y; _w = w; _h = h;
 
-        // Determine output format before starting
         var settings = SettingsService.Instance.Settings;
         var codec = settings.VideoCodec;
         bool isFfmpegCodec = codec == "VP9" || codec == "AV1";

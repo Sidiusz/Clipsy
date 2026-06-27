@@ -52,7 +52,6 @@ public sealed partial class SettingsWindow
         };
         Grid.SetColumn(nameBlock, 0);
 
-        // Size label
         var sizeBlock = new TextBlock
         {
             Text = lang.ApproxSize,
@@ -62,7 +61,6 @@ public sealed partial class SettingsWindow
         };
         Grid.SetColumn(sizeBlock, 1);
 
-        // Progress bar (hidden by default)
         var progress = new ProgressBar
         {
             Minimum = 0, Maximum = 100, Value = 0,
@@ -72,7 +70,6 @@ public sealed partial class SettingsWindow
         };
         Grid.SetColumn(progress, 2);
 
-        // Action button
         var btn = new Button
         {
             Content = installed ? Strings.Get("BtnDelete") : Strings.Get("BtnInstall"),
@@ -87,7 +84,6 @@ public sealed partial class SettingsWindow
         grid.Children.Add(progress);
         grid.Children.Add(btn);
 
-        // Button handler
         btn.Click += (_, _) =>
         {
             if (TessdataService.IsInstalled(lang.Code))
@@ -95,7 +91,6 @@ public sealed partial class SettingsWindow
                 TessdataService.Delete(lang.Code);
                 _tessSelectedCodes.Remove(lang.Code);
                 MarkChanged();
-                // Rebuild this row
                 var idx = TessLangList.Children.IndexOf(grid);
                 if (idx >= 0) TessLangList.Children[idx] = CreateTessLangRow(lang);
             }
@@ -129,7 +124,6 @@ public sealed partial class SettingsWindow
             var p = new Progress<int>(v => DispatcherQueue.TryEnqueue(() => progressBar.Value = v));
             await TessdataService.DownloadAsync(lang.Code, p, cts.Token);
 
-            // Success — auto-select the new language
             _tessSelectedCodes.Add(lang.Code);
             MarkChanged();
         }
@@ -142,7 +136,6 @@ public sealed partial class SettingsWindow
         finally
         {
             _tessDownloadCts.Remove(lang.Code);
-            // Rebuild the row to reflect new state
             DispatcherQueue.TryEnqueue(() =>
             {
                 var idx = TessLangList.Children.IndexOf(row);
@@ -161,13 +154,11 @@ public sealed partial class SettingsWindow
 
         bool ru = Strings.Lang == "ru";
 
-        // "From" dropdown: Auto-detect + all languages
         TranslateFromBox.Items.Add(new ComboBoxItem
         {
             Content = Strings.Get("LangAutoDetect"),
             Tag = "auto",
         });
-        // "To" dropdown: Interface language (default) + all languages
         TranslateToBox.Items.Add(new ComboBoxItem
         {
             Content = Strings.Get("LangUiDefault"),
@@ -181,7 +172,6 @@ public sealed partial class SettingsWindow
             TranslateToBox.Items.Add(new ComboBoxItem   { Content = name, Tag = lang.Code });
         }
 
-        // Restore previous selection
         SelectComboByTag(TranslateFromBox, string.IsNullOrEmpty(prevFrom) ? "auto" : prevFrom);
         SelectComboByTag(TranslateToBox,   string.IsNullOrEmpty(prevTo)   ? "ui"   : prevTo);
     }
