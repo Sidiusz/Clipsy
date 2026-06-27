@@ -569,25 +569,10 @@ public sealed partial class SettingsWindow : Window
         if (!string.IsNullOrEmpty(path)) VideoFolderBox.Text = path;
     }
 
-    private async System.Threading.Tasks.Task<string?> PickFolderAsync(string initialDir)
+    private System.Threading.Tasks.Task<string?> PickFolderAsync(string initialDir)
     {
-        // SHBrowseForFolderW on a Task.Run threadpool thread is non-STA,
-        // which made the dialog leak modal state to the parent window
-        // (clicks blocked, ding sound). FolderPicker is fully UI-thread,
-        // async, and respects the WinUI 3 dispatcher.
-        try
-        {
-            var picker = new Windows.Storage.Pickers.FolderPicker();
-            picker.FileTypeFilter.Add("*");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd);
-            var folder = await picker.PickSingleFolderAsync();
-            return folder?.Path;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log("SettingsWindow.PickFolderAsync", ex);
-            return null;
-        }
+        // Win32 picker (runs elevated, unlike the broker-hosted WinRT FolderPicker).
+        return SaveDialogService.PickFolderAsync(_hwnd);
     }
 
     private void OnThemeSegmentClick(object sender, RoutedEventArgs e)
