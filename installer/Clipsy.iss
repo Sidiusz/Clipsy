@@ -58,9 +58,9 @@ Name: "{group}\Uninstall {#ClipsyName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#ClipsyName}"; Filename: "{app}\{#ClipsyExeName}"; Tasks: desktopicon
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
-    ValueType: string; ValueName: "Clipsy"; ValueData: """{app}\{#ClipsyExeName}"""; \
-    Tasks: startuplogin; Flags: uninsdeletevalue
+; Clipsy runs elevated (requireAdministrator). A Run-key entry can't auto-elevate
+; at login (UAC blocks it), so autostart is a Scheduled Task with the highest run
+; level instead — created/removed in [Code] below.
 
 ; WER LocalDumps: capture a full minidump even on native __fastfail
 ; (0xc0000409) crashes that bypass the in-app exception filter. Dumps land
@@ -79,6 +79,46 @@ Filename: "{app}\{#ClipsyExeName}"; Description: "{cm:LaunchProgram,{#ClipsyName
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{localappdata}\Clipsy"
+
+[Code]
+const
+  AutostartTaskName = 'ClipsyAutostart';
+
+procedure CreateAutostartTask;
+var
+  ExePath, Params: string;
+  ResultCode: Integer;
+begin
+  ExePath := ExpandConstant('{app}\{#ClipsyExeName}');
+  // /TR needs the action path inner-quoted ("\"path\"") or schtasks truncates
+  // it at the first space. /RL HIGHEST runs elevated; /SC ONLOGON + /RU fires
+  // at this user's sign-in. The setup is elevated, so creation succeeds.
+  Params := '/Create /TN "' + AutostartTaskName + '" /TR "\"' + ExePath + '\"" ' +
+            '/SC ONLOGON /RU "' + ExpandConstant('{username}') + '" /RL HIGHEST /F';
+  Exec(ExpandConstant('{sys}\schtasks.exe'), Params, '', SW_HIDE,
+       ewWaitUntilTerminated, ResultCode);
+end;
+
+procedure DeleteAutostartTask;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\schtasks.exe'),
+       '/Delete /TN "' + AutostartTaskName + '" /F', '', SW_HIDE,
+       ewWaitUntilTerminated, ResultCode);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if (CurStep = ssPostInstall) and IsTaskSelected('startuplogin') then
+    CreateAutostartTask;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+    DeleteAutostartTask;
+end;
 
 
 

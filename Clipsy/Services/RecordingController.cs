@@ -593,21 +593,30 @@ public sealed class RecordingController
         }
         if (destFmt == "gif")
         {
-            // FFmpeg path (palettegen + paletteuse) when the binary is present;
-            // otherwise fall back to the dependency-free NativeGifEncoder so the
-            // export still succeeds without FFmpeg installed in the app.
-            bool ok;
+            // Preferred path: FFmpeg (palettegen + paletteuse) when present.
+            // On any failure fall through to the dependency-free
+            // NativeGifEncoder so the export still succeeds. Only when both
+            // produce nothing do we surface an error.
+            bool ok = false;
             if (FFmpegService.Instance.IsAvailable)
-                ok = await FFmpegService.Instance.ConvertToGifAsync(src, dest);
-            else
             {
-                Diagnostics.Log("ConvertOrCopyAsync gif via NativeGifEncoder (FFmpeg missing)");
+                ok = await FFmpegService.Instance.ConvertToGifAsync(src, dest);
+                if (!GifOutputOk(dest, ok))
+                {
+                    Diagnostics.Log("ConvertOrCopyAsync gif via FFmpeg failed → NativeGifEncoder fallback");
+                    ok = false;
+                }
+            }
+
+            if (!GifOutputOk(dest, ok))
+            {
+                Diagnostics.Log("ConvertOrCopyAsync gif via NativeGifEncoder");
                 ok = await NativeGifEncoder.ConvertMp4ToGifAsync(src, dest);
             }
 
-            if (!ok || !File.Exists(dest) || new FileInfo(dest).Length == 0)
+            if (!GifOutputOk(dest, ok))
             {
-                Diagnostics.Log("ConvertOrCopyAsync gif conversion failed");
+                Diagnostics.Log("ConvertOrCopyAsync gif conversion failed (ffmpeg + native)");
                 throw new InvalidOperationException("GIF conversion failed.");
             }
             return dest;
@@ -637,6 +646,9 @@ public sealed class RecordingController
         File.Copy(src, dest, overwrite: true);
         return dest;
     }
+
+    private static bool GifOutputOk(string dest, bool ok)
+        => ok && File.Exists(dest) && new FileInfo(dest).Length > 0;
 
     private void Cleanup(bool discardTemp)
     {

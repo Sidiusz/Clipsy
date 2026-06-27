@@ -186,7 +186,28 @@ public sealed class FFmpegService
             };
             using var p = Process.Start(psi);
             if (p == null) return false;
-            await p.WaitForExitAsync();
+
+            // Drain both pipes concurrently. ffmpeg is verbose on stderr
+            // (palettegen/paletteuse especially); if we wait without reading,
+            // ffmpeg blocks once the ~4 KB OS pipe buffer fills and never
+            // exits — deadlocking the whole save pipeline.
+            var drainOut = p.StandardOutput.ReadToEndAsync();
+            var drainErr = p.StandardError.ReadToEndAsync();
+
+            // Hard timeout so a wedged ffmpeg can never brick the app. Killed
+            // process is treated as failure by the caller.
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            try
+            {
+                await p.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try { p.Kill(entireProcessTree: true); } catch { }
+                Debug.WriteLine("[Clipsy] FFmpeg run: timed out, killed");
+                return false;
+            }
+            await Task.WhenAll(drainOut, drainErr);
             return p.ExitCode == 0;
         }
         catch (Exception ex) { Debug.WriteLine($"[Clipsy] FFmpeg run: {ex.Message}"); return false; }
