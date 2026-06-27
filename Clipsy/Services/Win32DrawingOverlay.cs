@@ -6,22 +6,12 @@ using System.Runtime.InteropServices;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Per-pixel-alpha Win32 layered overlay for free-hand annotation during
-/// recording. Uses UpdateLayeredWindow + a GDI+ paint into an ARGB DIB so:
-///   • strokes render with antialiasing and clean RGBA pixels in the MP4;
-///   • the background tints the region by 1/255 (visually invisible) so the
-///     layered window blocks clicks across the whole region — the user can't
-///     accidentally activate the app being recorded while drawing;
-///   • toggling click-through (active vs inactive) is a single style flip.
-/// </summary>
+/// <summary>Per-pixel-alpha layered overlay for annotation during recording
+/// (UpdateLayeredWindow + GDI+ ARGB DIB); 1/255 bg blocks clicks invisibly.</summary>
 public sealed class Win32DrawingOverlay
 {
-    // Shared, surface-agnostic pencil/eraser logic. Identical engine used by
-    // the capture overlay canvas, so recording annotation behaves exactly the
-    // same (thickness clamp, wheel step, partial/whole erase, single-click dot,
-    // round caps/joins). This overlay is only the GDI render surface + Win32
-    // input source; all state lives in the engine.
+    // Shared pencil/eraser engine (same as the capture overlay canvas); this
+    // overlay is only the GDI render surface + Win32 input source.
     private readonly Clipsy.Drawing.PencilEngine _engine = new();
 
     private IntPtr _hwnd;
@@ -47,9 +37,8 @@ public sealed class Win32DrawingOverlay
     public Win32DrawingOverlay()
     {
         _engine.SetThickness(3f);
-        // Engine raises Changed on every stroke/erase/thickness/cursor mutation;
-        // repaint the layered window in response so canvas and recording stay
-        // pixel-identical.
+        // Engine raises Changed on every mutation; repaint so canvas and
+        // recording stay pixel-identical.
         _engine.Changed += OnEngineChanged;
     }
 
@@ -92,11 +81,8 @@ public sealed class Win32DrawingOverlay
     public void MoveTo(int x, int y, int w, int h)
     {
         if (!_created) return;
-        // Reposition-only fast path: when the size is unchanged (pure region
-        // move, e.g. dragging while recording) the DIB pixels are identical and
-        // strokes are stored in window-local coords, so moving the layered
-        // window with SetWindowPos carries the content along. Skip the costly
-        // DIB realloc + full GDI+ repaint (≈14 MB at 1440p per tick).
+        // Reposition-only fast path: unchanged size means identical DIB pixels
+        // (strokes are window-local), so just SetWindowPos and skip the realloc.
         bool sizeChanged = (w != _w || h != _h);
         _x = x; _y = y; _w = w; _h = h;
         SetWindowPos(_hwnd, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
@@ -122,12 +108,8 @@ public sealed class Win32DrawingOverlay
         Render();
     }
 
-    // Cut a hole in the overlay's window region so a rect (screen coords, e.g.
-    // the recording HUD) stays clickable even when the overlay covers it. The
-    // overlay otherwise swallows every click across the whole region via its
-    // 1/255 alpha background, which traps the HUD when the region touches the
-    // screen bottom and the HUD tucks inside it. Pixels outside the region
-    // don't belong to the window, so clicks there fall through to the HUD.
+    // Cut a hole in the window region over a rect (e.g. the HUD) so it stays
+    // clickable even when the overlay's 1/255 bg would otherwise swallow clicks.
     private bool _hasHole;
     private int _holeX, _holeY, _holeW, _holeH;
 
@@ -224,9 +206,8 @@ public sealed class Win32DrawingOverlay
     {
         if (_g == null || _bitmap == null) return;
 
-        // Bg: alpha = 1 black so the layered window absorbs clicks across the
-        // whole region (per-pixel alpha hit-testing) while staying visually
-        // invisible. Strokes render on top with full opacity.
+        // Bg alpha=1 black absorbs clicks across the region (per-pixel hit-test)
+        // while staying invisible; strokes render on top at full opacity.
         if (_active)
             _g.Clear(System.Drawing.Color.FromArgb(1, 0, 0, 0));
         else
@@ -237,9 +218,7 @@ public sealed class Win32DrawingOverlay
         UpdateLayered();
     }
 
-    // Cache the GDI+ PointF[] per finished stroke. Render() runs on every mouse
-    // move (stroke growth AND cursor-ring follow), and DrawLines needs an array;
-    // without this each completed stroke re-allocated its array every frame.
+    // Cache the GDI+ PointF[] per finished stroke (Render runs every mouse move).
     // Keyed weakly so erased/undone strokes drop out without manual cleanup.
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Clipsy.Drawing.PencilEngine.Stroke, System.Drawing.PointF[]> _ptCache = new();
 

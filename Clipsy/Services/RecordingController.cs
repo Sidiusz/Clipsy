@@ -8,11 +8,8 @@ using ScreenRecorderLib;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Owns the recording session: shows the red region border + HUD, drives
-/// the RecordingService, and handles stop / stop-and-save flows. Singleton
-/// per app run since only one recording can be active at a time.
-/// </summary>
+/// <summary>Owns the recording session (region border + HUD, RecordingService,
+/// stop/stop-and-save). Singleton — only one recording at a time.</summary>
 public sealed class RecordingController
 {
     private static RecordingController? _current;
@@ -61,9 +58,8 @@ public sealed class RecordingController
         _ffmpegRec?.Stop();
     }
 
-    // Tear down the always-on-top region border + drawing overlay the moment
-    // recording stops. Otherwise they linger (topmost) over the Save As file
-    // dialog and any annotations cover Explorer until Cleanup runs much later.
+    // Tear down the topmost border + draw overlay the moment recording stops,
+    // else they linger over the Save As dialog until Cleanup runs much later.
     private void DestroyVisualOverlays()
     {
         try { _border?.Destroy(); } catch (Exception ex) { Diagnostics.Log("DestroyVisualOverlays border", ex); }
@@ -110,11 +106,8 @@ public sealed class RecordingController
         _hud.Activate();
         _hud.Start();
 
-        // Exclude Clipsy recording UI from the captured output so the HUD and
-        // region border never appear in the video. Applies to BOTH backends:
-        // SetExcludeFromCapture stamps WDA_EXCLUDEFROMCAPTURE, which hides the
-        // window from ScreenRecorderLib (WGC) and FFmpeg gdigrab alike. The
-        // draw overlay is intentionally left visible (excluded == false below).
+        // Exclude the HUD + region border from capture (WDA_EXCLUDEFROMCAPTURE,
+        // works for WGC and gdigrab); the draw overlay stays visible.
         try
         {
             Recorder.SetExcludeFromCapture(_hud.Hwnd, true);
@@ -323,19 +316,15 @@ public sealed class RecordingController
                 }
                 _drawWin.SetActive(true);
 
-                // The overlay swallows clicks across its whole rect via a 1/255
-                // alpha background. When the region touches the screen bottom the
-                // HUD tucks INSIDE the region, so the overlay covers it and traps
-                // every button. Cut a hole in the overlay's window region over the
-                // HUD so its toolbar stays clickable and strokes skip that area.
+                // Overlay swallows clicks via a 1/255 alpha bg; when the HUD tucks
+                // inside the region, cut a hole over it so its toolbar stays clickable.
                 if (_hud != null && GetWindowRect(_hud.Hwnd, out RECT hud))
                     _drawWin.SetExcludeRect(hud.left, hud.top, hud.right - hud.left, hud.bottom - hud.top);
             }
             else
             {
-                // Keep existing strokes visible. User asked for explicit clear,
-                // not auto-wipe on toggle. RMB-drag erases; full clear requires
-                // a dedicated UI hook (TODO).
+                // Keep existing strokes; clear is explicit, not auto on toggle
+                // (RMB-drag erases; full clear needs a dedicated UI hook — TODO).
                 _drawWin?.SetActive(false);
                 _drawWin?.ClearExcludeRect();
             }
@@ -403,9 +392,8 @@ public sealed class RecordingController
             var name = SaveDialogService.MakeTimestampName("Clipsy", fmt);
             var dest = Path.Combine(folder, name);
             Diagnostics.Log($"  dest='{dest}' native='{_nativeFmt}' target='{fmt}'");
-            // Container swap or GIF conversion when the user-chosen format
-            // differs from what the encoder wrote. May redirect to MP4 if the
-            // chosen container needs FFmpeg and it isn't installed.
+            // Container swap or GIF conversion when the chosen format differs from
+            // the encoder's; may redirect to MP4 if AVI/MKV needs missing FFmpeg.
             var actual = await ConvertOrCopyAsync(tempPath, dest, _nativeFmt, fmt);
             Diagnostics.Log("  ConvertOrCopyAsync OK");
             TryDelete(tempPath);
@@ -485,10 +473,8 @@ public sealed class RecordingController
         // TRANSPARENT click-through window — invalid modal owner for common dialogs.
         var hwnd = App.Current?.HostWindow?.Hwnd ?? _hudHwnd;
 
-        // List supported video formats. MP4 and GIF work without FFmpeg; AVI/MKV
-        // need it for a correct container remux, so only offer them when the
-        // binary is installed (otherwise the user could pick a format we can't
-        // honour). Preferred format floats to the top as the dialog default.
+        // MP4/GIF work without FFmpeg; AVI/MKV need it for remux, so offer them
+        // only when present. Preferred format floats to the top.
         bool ffmpeg = FFmpegService.Instance.IsAvailable;
         var filters = new System.Collections.Generic.List<SaveDialogService.SaveFilter>
         {
@@ -560,19 +546,10 @@ public sealed class RecordingController
         }
     }
 
-    /// <summary>
-    /// Move the temp recording to <paramref name="dest"/>, converting between
-    /// container formats if the user picked a different one in the dialog.
-    /// Returns the path actually written, which may differ from
-    /// <paramref name="dest"/>: AVI/MKV need FFmpeg for a correct remux, so when
-    /// FFmpeg is absent the native MP4 is kept instead of a fake-renamed copy.
-    /// GIF goes through ConvertToGifAsync (FFmpeg) or NativeGifEncoder (no FFmpeg).
-    /// </summary>
-    /// <summary>
-    /// Post the "saved" toast. If the file landed at a different path than the
-    /// caller requested (AVI/MKV redirected to MP4 because FFmpeg is missing),
-    /// surface the fallback notice instead of the plain success toast.
-    /// </summary>
+    /// <summary>Move the temp recording to dest, converting container/GIF if the
+    /// chosen format differs; returns the path actually written (may be MP4).</summary>
+    /// <summary>Post the "saved" toast, noting the MP4 fallback when AVI/MKV was
+    /// redirected because FFmpeg is missing.</summary>
     private static void NotifyVideoSaved(string actualPath, string requestedPath, string requestedFmt)
     {
         long sizeKb = new FileInfo(actualPath).Length / 1024L;
@@ -628,10 +605,8 @@ public sealed class RecordingController
             Diagnostics.Log($"ConvertOrCopyAsync ffmpeg remux failed src='{src}' dest='{dest}'");
         }
 
-        // No FFmpeg (or remux failed). For AVI/MKV a plain rename would dump
-        // MP4 bytes into a mismatched container, so keep the native MP4 and let
-        // the caller surface the "FFmpeg required" notice. src is always the
-        // native MP4 here (AVI/MKV are only reachable from the H.264/H.265 path).
+        // No FFmpeg: a plain rename would put MP4 bytes in an AVI/MKV container,
+        // so keep the native MP4 and let the caller surface the notice.
         if (destFmt is "avi" or "mkv")
         {
             var mp4Dest = Path.ChangeExtension(dest, ".mp4");

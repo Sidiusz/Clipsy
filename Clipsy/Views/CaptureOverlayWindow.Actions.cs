@@ -38,11 +38,8 @@ public sealed partial class CaptureOverlayWindow
 
     // ---------- Screenshot save / copy ----------
 
-    // Closing the window while the context MenuFlyout is still tearing down
-    // its popup crashes natively inside Microsoft.UI.Xaml (access violation).
-    // Hide the flyout explicitly and defer Close to a later dispatcher pass
-    // so the popup finishes dismissing first. HideForClose makes the window
-    // invisible immediately so the teardown's black frame is never seen.
+    // Closing while the context MenuFlyout is still tearing down crashes natively
+    // (AV). Hide the flyout, cloak the window, and defer Close past the popup.
     private void CloseDeferred()
     {
         try { OverlayMenu.Hide(); } catch { }

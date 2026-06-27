@@ -53,8 +53,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            // Prefer the new branded icon under Assets\Icons; fall back to the
-            // legacy Assets\clipsy.ico so older builds keep showing a tray icon
+            // Prefer Assets\Icons\clipsy.ico; fall back to legacy Assets\clipsy.ico
             // if the new folder is missing.
             var newPath    = Path.Combine(AppContext.BaseDirectory, "Assets", "Icons", "clipsy.ico");
             var legacyPath = Path.Combine(AppContext.BaseDirectory, "Assets", "clipsy.ico");

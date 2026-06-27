@@ -151,10 +151,8 @@ public static class SaveDialogService
                 lpstrDefExt = defaultExt.TrimStart('.'),
             };
 
-            // The capture overlay / recording HUD that owns this dialog is
-            // WS_EX_TOPMOST, so a normal dialog window opens BEHIND it and the
-            // overlay (plus any annotations) covers Explorer. Drop topmost while
-            // the dialog is up, then restore it.
+            // The owning overlay/HUD is WS_EX_TOPMOST and would cover the dialog,
+            // so drop topmost while it's up, then restore.
             bool wasTopmost = hwnd != IntPtr.Zero &&
                 (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
             if (wasTopmost)

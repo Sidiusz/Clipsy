@@ -145,10 +145,8 @@ public static class NotificationService
             persistent:      true);
     }
 
-    // Download the installer from the release asset and hand off to it; the
-    // app must exit so the installer can overwrite Clipsy.exe. Releases
-    // without an installer asset (or failed downloads) fall back to opening
-    // the release page in the browser.
+    // Download the installer asset and hand off (app must exit to be overwritten);
+    // missing asset or failed download falls back to the release page.
     private static async void StartUpdate(UpdateInfo info)
     {
         if (!string.IsNullOrEmpty(info.InstallerUrl))

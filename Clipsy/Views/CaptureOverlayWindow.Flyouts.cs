@@ -109,9 +109,8 @@ public sealed partial class CaptureOverlayWindow
     {
         if (ShapesFlyout == null || ShapesBtn == null) return;
 
-        // A Collapsed element measures to 0x0, which broke the alignment math
-        // (the flyout's top landed mid-button). Reveal at opacity 0 first;
-        // ShowFlyout fades it in right after.
+        // A Collapsed element measures 0x0 and broke alignment; reveal at opacity
+        // 0 first, then ShowFlyout fades it in.
         ShapesFlyout.Opacity = 0.0;
         ShapesFlyout.Visibility = Visibility.Visible;
         ShapesFlyout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -235,9 +234,8 @@ public sealed partial class CaptureOverlayWindow
         if (FontList == null || _systemFonts != null) return;
         try
         {
-            // GDI+ enumeration via System.Drawing.Common. Already referenced
-            // by the project (image processing path). Filter to families with
-            // a regular face so we don't surface broken icon/symbol entries.
+            // GDI+ font enumeration via System.Drawing.Common; filter to families
+            // with a regular face to skip broken icon/symbol entries.
             using var coll = new System.Drawing.Text.InstalledFontCollection();
             _systemFonts = coll.Families
                 .Select(f => f.Name)
@@ -383,9 +381,8 @@ public sealed partial class CaptureOverlayWindow
             "Text" => ToolKind.Text,
             _ => ToolKind.None,
         };
-        // Cache shape selection BEFORE SetTool so the ShapesBtn icon
-        // (which reads _currentShapeTool) renders the new pick, not the
-        // previous one. Off-by-one if we set it after.
+        // Cache shape selection before SetTool so the ShapesBtn icon renders the
+        // new pick (it reads _currentShapeTool), not the previous one.
         if (tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow)
         {
             _currentShapeTool = tool;

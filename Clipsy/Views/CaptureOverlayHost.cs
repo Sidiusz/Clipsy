@@ -3,10 +3,8 @@ using Clipsy.Services;
 
 namespace Clipsy.Views;
 
-/// <summary>
-/// Entry point for opening the capture overlay. Captures the screen first
-/// so the overlay opens against a static (frozen) snapshot.
-/// </summary>
+/// <summary>Opens the capture overlay, capturing the screen first so it opens
+/// against a static (frozen) snapshot.</summary>
 public static class CaptureOverlayHost
 {
     private static CaptureOverlayWindow? _current;
