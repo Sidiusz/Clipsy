@@ -187,15 +187,11 @@ public sealed class FFmpegService
             using var p = Process.Start(psi);
             if (p == null) return false;
 
-            // Drain both pipes concurrently. ffmpeg is verbose on stderr
-            // (palettegen/paletteuse especially); if we wait without reading,
-            // ffmpeg blocks once the ~4 KB OS pipe buffer fills and never
-            // exits — deadlocking the whole save pipeline.
+            // Drain both pipes or ffmpeg blocks when the OS pipe buffer fills.
             var drainOut = p.StandardOutput.ReadToEndAsync();
             var drainErr = p.StandardError.ReadToEndAsync();
 
-            // Hard timeout so a wedged ffmpeg can never brick the app. Killed
-            // process is treated as failure by the caller.
+            // Hard timeout guard so a wedged ffmpeg can never brick the app.
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             try
             {

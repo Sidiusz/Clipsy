@@ -173,13 +173,8 @@ public sealed class HotkeyService : IDisposable
 
         if (_captureVk != 0)
         {
-            // Always drive the capture key through the WH_KEYBOARD_LL hook
-            // rather than RegisterHotKey. The hook sees the key before any
-            // app-level hotkey handler, so apps that grab PrintScreen for
-            // themselves (other screenshot tools, games, Win11 Snipping) no
-            // longer swallow it before Clipsy. RegisterHotKey only delivers
-            // WM_HOTKEY when no other window owns the binding — too fragile
-            // for the primary trigger.
+            // LL hook sees PrintScreen before app-level hotkeys, so apps that
+            // grab it (other tools, games, Win11 Snipping) no longer swallow it.
             _captureViaLL = true;
             IsCaptureRegistered = true;
         }

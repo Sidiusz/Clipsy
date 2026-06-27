@@ -6,13 +6,8 @@ using Microsoft.Win32;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Manages sign-in autostart. Clipsy runs elevated (requireAdministrator),
-/// and a per-user Run-key entry cannot auto-elevate at login — UAC blocks it.
-/// The only mechanism Windows allows for a silent elevated logon launch is a
-/// Scheduled Task with the highest run level, so autostart is registered that
-/// way. Any legacy Run-key value is removed on toggle to migrate old installs.
-/// </summary>
+/// <summary>Sign-in autostart via a highest-privilege scheduled task: the app
+/// runs elevated, so a Run-key entry cannot auto-elevate at login.</summary>
 public static class AutostartService
 {
     private const string LegacyRunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -23,8 +18,7 @@ public static class AutostartService
     {
         try
         {
-            // Exit code 0 from /Query means the task exists.
-            return RunSchtasks($"/Query /TN \"{TaskName}\"") == 0;
+            return RunSchtasks($"/Query /TN \"{TaskName}\"") == 0; // 0 = task exists
         }
         catch (Exception ex)
         {
@@ -42,8 +36,7 @@ public static class AutostartService
             {
                 var path = GetExePath();
                 if (string.IsNullOrEmpty(path)) return;
-                // /RL HIGHEST: run elevated. /SC ONLOGON + /RU current user:
-                // fire when this user signs in, as this user. /F overwrites.
+                // /RL HIGHEST elevated, /SC ONLOGON for this user, /F overwrite.
                 var user = $"{Environment.UserDomainName}\\{Environment.UserName}";
                 var args = $"/Create /TN \"{TaskName}\" /TR \"\\\"{path}\\\"\" " +
                            $"/SC ONLOGON /RU \"{user}\" /RL HIGHEST /F";
