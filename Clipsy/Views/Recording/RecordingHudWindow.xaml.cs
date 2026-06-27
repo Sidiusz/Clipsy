@@ -83,10 +83,8 @@ public sealed partial class RecordingHudWindow : Window
         UpdateMicTooltip();
     }
 
-    // Tooltips render in their own windowed popups (separate HWNDs) that the
-    // HUD's SetExcludeFromCapture doesn't cover, so they leak into the
-    // recording. Build each tooltip as a real ToolTip and, when it opens,
-    // stamp WDA_EXCLUDEFROMCAPTURE on the popup window so it stays out of frame.
+    // Tooltips are separate popup HWNDs the HUD's exclude doesn't cover, so they
+    // leak into the recording; stamp WDA_EXCLUDEFROMCAPTURE on each when it opens.
     private ToolTip MakeTip(string text)
     {
         var tip = new ToolTip { Content = text };
@@ -120,9 +118,8 @@ public sealed partial class RecordingHudWindow : Window
     public void SetMicMuted(bool muted)
     {
         MicBtn.IsChecked = !muted;
-        // Never assign null to Foreground: in WinUI a local null is NOT
-        // "inherit", it's a null brush — the glyph simply vanished when the
-        // mic was active. ClearValue restores the template-driven color.
+        // Never assign null to Foreground (a null brush, not "inherit" — the glyph
+        // vanishes); ClearValue restores the template-driven color.
         if (muted)
             MicIcon.Foreground = ThemeService.GetBrush("ClipsyText3Brush", Content as FrameworkElement);
         else
@@ -166,15 +163,13 @@ public sealed partial class RecordingHudWindow : Window
         _hideTimer.Stop();
         _recPulse?.Stop();
         _recPulse = null;
-        // Hide the always-on-top HUD immediately. Otherwise the toolbar lingers
-        // over the Save As dialog / Explorer until Cleanup closes the window
-        // much later in the save flow.
+        // Hide the topmost HUD immediately, else the toolbar lingers over the
+        // Save As dialog until Cleanup closes the window much later.
         try { _appWindow.Hide(); } catch (Exception ex) { Diagnostics.Log("HUD.Shutdown Hide", ex); }
     }
 
-    // Slow opacity pulse on the REC dot — the universal "live" cue.
-    // Opacity is a composition-thread (independent) property, so it stays
-    // smooth even if the UI thread is busy.
+    // Slow opacity pulse on the REC dot; opacity is a composition-thread
+    // property, so it stays smooth even if the UI thread is busy.
     private void StartRecPulse()
     {
         if (_recPulse != null) return;
@@ -220,10 +215,8 @@ public sealed partial class RecordingHudWindow : Window
             }
             else
             {
-                // Full-screen capture (or region touching both edges): tuck the
-                // HUD just inside the bottom of the region so it stays visible
-                // even though it'll be recorded into the MP4's pixel space —
-                // SetExcludeFromCapture keeps it out of the actual frame.
+                // Full-screen region: tuck the HUD just inside the bottom so it
+                // stays visible; SetExcludeFromCapture keeps it out of the frame.
                 hudY = System.Math.Max(vb.Top + edgePad,
                                        regionY + regionH - hudH - edgePad);
             }
@@ -239,18 +232,15 @@ public sealed partial class RecordingHudWindow : Window
     private void SetWindowExStyle()
     {
         var ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
-        // WS_EX_LAYERED + LWA_ALPHA lets the whole window (including its WinUI
-        // backdrop, not just XAML children) fade uniformly. WS_EX_TRANSPARENT
-        // is intentionally NOT set: with WS_EX_LAYERED it actually takes
-        // effect and would make the HUD buttons unclickable.
+        // WS_EX_LAYERED + LWA_ALPHA fades the whole window (backdrop included);
+        // WS_EX_TRANSPARENT is left off or it would make the buttons unclickable.
         ex |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED;
         ex &= ~WS_EX_TRANSPARENT;
         SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
         SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
 
-        // Strip resizable frame + caption that WinUI window inherits. Without
-        // this, Win11 paints a 1-2px chrome border around the HUD even after
-        // SetBorderAndTitleBar(false, false).
+        // Strip the resizable frame + caption WinUI inherits, else Win11 paints a
+        // 1-2px chrome border even after SetBorderAndTitleBar(false, false).
         var style = (uint)GetWindowLong(_hwnd, GWL_STYLE);
         style &= ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
         style |= WS_POPUP;
@@ -293,9 +283,8 @@ public sealed partial class RecordingHudWindow : Window
     {
         if (!GetCursorPos(out POINT pt) || !GetWindowRect(_hwnd, out RECT wr))
             return;
-        // Reveal only when the cursor is near the HUD itself, not anywhere in
-        // the recorded region — the old centre-distance radius (1.3× the HUD
-        // width) covered most of the region below the HUD.
+        // Reveal only when the cursor is near the HUD itself, not anywhere in the
+        // recorded region (the old centre-radius covered most of it).
         const int pad = 32;
         bool near = pt.X >= wr.Left - pad && pt.X <= wr.Right + pad
                  && pt.Y >= wr.Top - pad && pt.Y <= wr.Bottom + pad;
@@ -308,10 +297,8 @@ public sealed partial class RecordingHudWindow : Window
     private void ApplyHudFar(bool far)
     {
         _hudFar = far;
-        // Fade the entire window (backdrop + content) via the layered-window
-        // alpha. XAML Opacity alone left the WinUI backdrop fully opaque
-        // behind the icons, so the panel looked solid while only the buttons
-        // dimmed.
+        // Fade the whole window via layered-window alpha; XAML Opacity left the
+        // backdrop opaque so only the buttons dimmed.
         byte alpha = (byte)(far ? 38 : 255); // 38/255 ≈ 15%
         SetLayeredWindowAttributes(_hwnd, 0, alpha, LWA_ALPHA);
     }

@@ -16,13 +16,8 @@ using WinRT.Interop;
 
 namespace Clipsy.Views;
 
-/// <summary>
-/// Fullscreen transparent WinUI overlay for screen-colour picking.
-/// Shared component — used by <see cref="CaptureOverlayWindow"/> (pass the
-/// existing frozen frame) and by <see cref="Recording.HudColorPickerWindow"/>
-/// (pass null; the window captures a fresh screenshot itself).
-/// Call the static <see cref="Open"/> factory from the UI thread.
-/// </summary>
+/// <summary>Fullscreen transparent overlay for screen-colour picking; pass a
+/// frozen frame or null (captures one). Open via the static factory on the UI thread.</summary>
 public sealed partial class EyedropperOverlayWindow : Window
 {
     // ── Injected ──────────────────────────────────────────────────────
@@ -51,16 +46,10 @@ public sealed partial class EyedropperOverlayWindow : Window
     private bool               _closed;
     private DispatcherQueue?   _dispatcherQueue;
 
-    // ──────────────────────────────────────────────────────────────────
-    // Factory
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Factory ───
 
-    /// <summary>
-    /// Open the eyedropper overlay. If <paramref name="frame"/> is null a
-    /// fresh screenshot is captured (recording context). Call from UI thread.
-    /// Left-click picks colour and fires <paramref name="onPicked"/>.
-    /// Right-click / deactivate fires <paramref name="onCanceled"/>.
-    /// </summary>
+    /// <summary>Open the eyedropper (null frame = capture one). Left-click picks
+    /// and fires onPicked; right-click/deactivate fires onCanceled. UI thread.</summary>
     public static void Open(
         ScreenFreezeService.FrozenFrame? frame,
         Action<Color> onPicked,
@@ -71,9 +60,7 @@ public sealed partial class EyedropperOverlayWindow : Window
         w.Activate();
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // Constructor
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Constructor ───
 
     private EyedropperOverlayWindow(ScreenFreezeService.FrozenFrame frame, Action<Color> onPicked, Action? onCanceled)
     {
@@ -95,9 +82,7 @@ public sealed partial class EyedropperOverlayWindow : Window
         Closed    += (_, _) => FreeBitmap();
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // Pointer handlers
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Pointer handlers ───
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
@@ -139,9 +124,7 @@ public sealed partial class EyedropperOverlayWindow : Window
         }
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // Magnifier — identical logic extracted from CaptureOverlayWindow
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Magnifier (logic shared with CaptureOverlayWindow) ───
 
     private void UpdateMagnifier(Point cursorDip)
     {
@@ -246,9 +229,7 @@ public sealed partial class EyedropperOverlayWindow : Window
 
     private double DpiScale => Content?.XamlRoot?.RasterizationScale ?? (GetDpiForWindow(_hwnd) / 96.0);
 
-    // ──────────────────────────────────────────────────────────────────
-    // Window setup
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Window setup ───
 
     private void ConfigureWindow()
     {
@@ -329,9 +310,7 @@ public sealed partial class EyedropperOverlayWindow : Window
         try { Close(); } catch { }
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // Win32
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Win32 ───
 
     private const int  GWL_STYLE       = -16;
     private const int  GWL_EXSTYLE     = -20;

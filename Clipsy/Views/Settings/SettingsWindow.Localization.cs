@@ -161,10 +161,8 @@ public sealed partial class SettingsWindow
         _loading = true;
         BuildHotkeyRows();
 
-        // WinUI ComboBox caches the SelectedItem's rendered content, so
-        // mutating ComboBoxItem.Content above updates dropdown items but
-        // leaves the collapsed display showing the old text. Kick each box
-        // by toggling SelectedIndex so the ContentPresenter re-renders.
+        // ComboBox caches the selected item's rendered content; toggle
+        // SelectedIndex so the collapsed display re-renders the new text.
         RefreshComboDisplay(LangBox);
         RefreshComboDisplay(ScreenshotFormatBox);
         RefreshComboDisplay(AfterSaveBox);

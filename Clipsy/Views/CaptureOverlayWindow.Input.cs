@@ -39,16 +39,13 @@ public sealed partial class CaptureOverlayWindow
 
         if (_inOcrMode)
         {
-            // OCR mode owns the overlay. Text selection happens inside the
-            // floating OcrTextBox; clicks elsewhere are ignored so they
-            // don't paint, move the selection, or open menus.
+            // OCR mode owns the overlay (selection is inside OcrTextBox); ignore
+            // clicks elsewhere so they don't paint, move, or open menus.
             return;
         }
 
-        // When a paint tool is active the selection is locked: clicks
-        // anywhere on the overlay paint (LMB) or erase (RMB). The user can
-        // draw outside the selection rectangle without accidentally
-        // starting a new selection.
+        // With a paint tool active the selection is locked: clicks anywhere paint
+        // (LMB) or erase (RMB), so drawing outside the rect won't start a new one.
         if (_drawing.Settings.Tool != ToolKind.None)
         {
             if (rmb)
@@ -72,12 +69,8 @@ public sealed partial class CaptureOverlayWindow
 
         if (!lmb) return;
 
-        // Double-click snaps the selection to the whole monitor under the
-        // cursor. Checked BEFORE the handle / inside-selection branches because
-        // the first click leaves a 100x100 fallback selection right under the
-        // cursor, so the second click would otherwise be treated as a move.
-        // Detected manually since XAML DoubleTapped fires only after click 1
-        // has already committed that fallback.
+        // Double-click snaps to the monitor under the cursor; detected manually
+        // and checked first (the first click drops a fallback selection).
         long nowTick = Environment.TickCount64;
         bool isDouble = nowTick - _lastClickTick <= GetDoubleClickTime()
             && System.Math.Abs(pos.X - _lastClickPos.X) < 8
@@ -150,9 +143,8 @@ public sealed partial class CaptureOverlayWindow
             _pencilPreview.Visibility = Visibility.Collapsed;
             _textPreview.Visibility = Visibility.Visible;
             _textPreview.FontSize = _drawing.Settings.TextSize;
-            // Mirror the current font choice and center the glyph on the
-            // cursor — matches StartTextEntry's anchor so the preview lands
-            // exactly where the committed text will sit.
+            // Mirror the font and center the glyph on the cursor, matching
+            // StartTextEntry's anchor so the preview lands where the text will.
             try { _textPreview.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(_drawing.Settings.TextFont); }
             catch { /* fallback to inherited font */ }
             var (pw, ph) = MeasureGlyph(_textPreview.Text, _textPreview.FontSize, _textPreview.FontFamily);
@@ -169,9 +161,8 @@ public sealed partial class CaptureOverlayWindow
         {
             case InteractionMode.SelectingNew:
                 _selectionRect = MakeRect(_dragStart, pos);
-                // Coalesce to one visual update per composition frame —
-                // high-polling mice (500-1000 Hz) otherwise trigger dozens of
-                // layout passes per frame, which tanks FPS on 1440p+ screens.
+                // Coalesce to one visual update per composition frame, else
+                // high-polling mice trigger dozens of layout passes per frame.
                 RequestSelectionVisualUpdate();
                 break;
             case InteractionMode.MovingSelection:
@@ -277,9 +268,8 @@ public sealed partial class CaptureOverlayWindow
         if (delta == 0) return;
         double step = delta > 0 ? 1.0 : -1.0;
 
-        // Wheel while typing in a text box resizes the active text element
-        // instead of the brush — same gesture, the obvious meaning depends on
-        // what the user is currently doing.
+        // Wheel while typing resizes the active text element instead of the
+        // brush — same gesture, meaning depends on what the user is doing.
         if (_activeTextBox != null)
         {
             _drawing.Settings.BrushSize = System.Math.Clamp(_drawing.Settings.BrushSize + step, 1.0, 64.0);
@@ -388,9 +378,8 @@ public sealed partial class CaptureOverlayWindow
         }
     }
 
-    // 1-5 on the top row mirror the right-toolbar tools (badges show the
-    // numbers). Pressing the active tool's key again deselects it, matching
-    // the click toggles.
+    // Number keys mirror the toolbar tools; pressing the active tool's key
+    // again deselects it, matching the click toggles.
     private bool HandleToolHotkey(VirtualKey key)
     {
         if (!_hasSelection || _inOcrMode || _eyedropperActive) return false;

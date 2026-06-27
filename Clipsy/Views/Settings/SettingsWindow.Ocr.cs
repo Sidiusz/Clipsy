@@ -40,9 +40,8 @@ public sealed partial class SettingsWindow
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90, GridUnitType.Pixel) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        // One row, one action. Install / Delete is the only control; an
-        // installed language is automatically used for OCR, so there is no
-        // separate "selected" checkbox.
+        // One row, one action (Install/Delete): an installed language is used
+        // automatically, so there's no separate "selected" checkbox.
         CheckBox? cb = null; // signature compatibility with DownloadTessLangAsync
         var nameBlock = new TextBlock
         {

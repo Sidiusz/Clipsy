@@ -546,8 +546,6 @@ public sealed class RecordingController
         }
     }
 
-    /// <summary>Move the temp recording to dest, converting container/GIF if the
-    /// chosen format differs; returns the path actually written (may be MP4).</summary>
     /// <summary>Post the "saved" toast, noting the MP4 fallback when AVI/MKV was
     /// redirected because FFmpeg is missing.</summary>
     private static void NotifyVideoSaved(string actualPath, string requestedPath, string requestedFmt)

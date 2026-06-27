@@ -68,10 +68,8 @@ public sealed partial class TrayMenuWindow : Window
         try
         {
             ApplyLocalization();
-            // The theme may have changed. SetHover pins each row's resting
-            // text/icon brushes imperatively, overriding the XAML ThemeResource,
-            // so they keep the old theme's colors until the user hovers. Re-apply
-            // resting colors once the new theme has propagated to ActualTheme.
+            // Rows pin resting brushes imperatively (overriding ThemeResource),
+            // so re-apply them once the new theme reaches ActualTheme.
             DispatcherQueue.TryEnqueue(RefreshRowColors);
         }
         catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.OnSettingsChanged", ex); }
@@ -88,9 +86,7 @@ public sealed partial class TrayMenuWindow : Window
         catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.RefreshRowColors", ex); }
     }
 
-    // ────────────────────────────────────────────────────────
-    // Public API
-    // ────────────────────────────────────────────────────────
+    // ─── Public API ───
 
     public void ShowAtCursor()
     {
@@ -131,17 +127,14 @@ public sealed partial class TrayMenuWindow : Window
         }
         Cloak(false); // reveal the already-composed frame — no black swapchain flash
         Activate();
-        // H.NotifyIcon's right-click handler runs inside a tray nested
-        // message pump; without an explicit foreground request the window
-        // shows but Windows never marks it active, so the Deactivated event
-        // never fires when the user clicks elsewhere and the menu sticks.
+        // The tray runs a nested message pump; without an explicit foreground
+        // request the window never goes active, so Deactivated never fires.
         SetForegroundWindow(_hwnd);
         PlayOpenAnimation();
     }
 
-    // Show the window once, off-screen and cloaked, so WinUI composes its
-    // first frame into the swapchain. From then on the surface stays warm and
-    // every open is just an uncloak — the black "first paint" never recurs.
+    // Show once off-screen and cloaked so WinUI composes the first frame; from
+    // then on every open is just an uncloak, no black first paint.
     private void WarmUp()
     {
         try
@@ -153,19 +146,16 @@ public sealed partial class TrayMenuWindow : Window
         catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.WarmUp", ex); }
     }
 
-    // DWM cloaking hides the window from the compositor WITHOUT destroying its
-    // swapchain content (unlike AppWindow.Hide). Cloaked windows are also not
-    // hit-testable, so this fully replaces Hide for dismissal.
+    // DWM cloak hides the window without destroying swapchain content (unlike
+    // Hide) and isn't hit-testable, so it fully replaces Hide for dismissal.
     private void Cloak(bool on)
     {
         int v = on ? 1 : 0;
         DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref v, sizeof(int));
     }
 
-    // Uniform whole-window fade via the layered-window alpha (0→255 over
-    // 120ms, ease-out). Fades the entire composited frame — backdrop and
-    // content together — so there's no content-scaling artifact and, because
-    // layered-transparent shows the desktop (not black), no flash.
+    // Whole-window fade via layered alpha (0→255, 120ms ease-out): fades the
+    // composited frame uniformly, and shows the desktop (not black), so no flash.
     private void PlayOpenAnimation()
     {
         StopFade();
@@ -236,9 +226,7 @@ public sealed partial class TrayMenuWindow : Window
         }
     }
 
-    // ────────────────────────────────────────────────────────
-    // Window setup
-    // ────────────────────────────────────────────────────────
+    // ─── Window setup ───
 
     // Update button now sits beside the header text (right column), not
     // below the version — header height stays constant regardless of status.
@@ -261,10 +249,8 @@ public sealed partial class TrayMenuWindow : Window
         style |= WS_POPUP;
         SetWindowLong(_hwnd, GWL_STYLE, unchecked((int)style));
 
-        // WS_EX_LAYERED makes DWM compose the window to an off-screen buffer
-        // and present it atomically. Without it, WinUI shows the bare HWND
-        // (black background erase) for a frame before the XAML content paints
-        // — the "black backdrop" flash. LWA_ALPHA 255 keeps it fully opaque.
+        // WS_EX_LAYERED composes off-screen and presents atomically, hiding the
+        // bare-HWND black erase before first paint; LWA_ALPHA 255 keeps it opaque.
         int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
         SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_LAYERED);
         SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
@@ -298,9 +284,7 @@ public sealed partial class TrayMenuWindow : Window
         HeaderVersion.Text       = $"v{UpdateService.CurrentVersion()}";
     }
 
-    // ────────────────────────────────────────────────────────
-    // Hide on deactivation
-    // ────────────────────────────────────────────────────────
+    // ─── Hide on deactivation ───
 
     private void OnActivated(object sender, WindowActivatedEventArgs e)
     {
@@ -320,9 +304,7 @@ public sealed partial class TrayMenuWindow : Window
         _hiding = false;
     }
 
-    // ────────────────────────────────────────────────────────
-    // Hover
-    // ────────────────────────────────────────────────────────
+    // ─── Hover ───
 
     private void OnItemPointerEntered(object sender, PointerRoutedEventArgs e)
     {
@@ -363,9 +345,7 @@ public sealed partial class TrayMenuWindow : Window
             fi.Foreground = on ? black : iconBrush;
     }
 
-    // ────────────────────────────────────────────────────────
-    // Click handlers
-    // ────────────────────────────────────────────────────────
+    // ─── Click handlers ───
 
     private void OnCaptureClick(object s, TappedRoutedEventArgs e)
         { HideMenu(); CaptureClicked?.Invoke(); }
@@ -385,9 +365,7 @@ public sealed partial class TrayMenuWindow : Window
     private void OnUpdateRowTapped(object s, TappedRoutedEventArgs e)
         { HideMenu(); UpdateStatusClicked?.Invoke(); }
 
-    // ────────────────────────────────────────────────────────
-    // Win32
-    // ────────────────────────────────────────────────────────
+    // ─── Win32 ───
 
     private double GetDpiScale()
     {

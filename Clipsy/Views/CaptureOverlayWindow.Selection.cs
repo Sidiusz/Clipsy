@@ -32,10 +32,8 @@ public sealed partial class CaptureOverlayWindow
         }
     }
 
-    /// <summary>
-    /// Anchor positions in selection-local coords, clamped so the handle stays
-    /// fully visible when the selection touches a screen edge.
-    /// </summary>
+    /// <summary>Anchor positions in selection-local coords, clamped so the handle
+    /// stays visible when the selection touches a screen edge.</summary>
     private (double X, double Y, HandlePos H)[] GetClampedAnchors()
     {
         double w = _selectionRect.Width, h = _selectionRect.Height;
@@ -144,9 +142,8 @@ public sealed partial class CaptureOverlayWindow
         }
 
         SelectionLayer.Visibility = Visibility.Visible;
-        // Position via render transform, not Margin — Margin invalidates the
-        // whole RootGrid layout on every pointer move, which is the main FPS
-        // killer on 1440p+ screens.
+        // Position via render transform, not Margin: Margin invalidates the whole
+        // RootGrid layout per pointer move (the main FPS killer on 1440p+).
         SelectionTranslate.X = _selectionRect.X;
         SelectionTranslate.Y = _selectionRect.Y;
 
@@ -167,9 +164,8 @@ public sealed partial class CaptureOverlayWindow
 
         _dimFull.Rect = new Rect(0, 0, w, h);
 
-        // EvenOdd: a valid hole punches through the dim; an empty rect collapses
-        // the second geometry so no hole shows (both rects identical → even fill = nothing).
-        // Zero-size rect means no hole: EvenOdd ignores 0-area geometry.
+        // EvenOdd: a valid hole punches through the dim; a zero-area rect shows
+        // no hole (EvenOdd ignores 0-area geometry).
         _dimHole.Rect = (hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0)
             ? hole.Value
             : new Rect(0, 0, 0, 0);
@@ -177,9 +173,8 @@ public sealed partial class CaptureOverlayWindow
 
     // ---------- Per-frame coalescing ----------
 
-    // Pointer events arrive far more often than the compositor renders
-    // (high-polling mice). Batch all selection-visual work to one pass per
-    // CompositionTarget.Rendering tick.
+    // Pointer events outpace the compositor (high-polling mice); batch selection
+    // visual work to one pass per CompositionTarget.Rendering tick.
     private bool _selectionVisualDirty;
     private bool _selectionRenderHooked;
 
@@ -268,9 +263,8 @@ public sealed partial class CaptureOverlayWindow
 
         if (Clipsy.Services.SettingsService.Instance.Settings.DynamicToolbarIslands)
         {
-            // Both islands dock to the corner where the selection drag ended,
-            // aligned edge-to-corner (not centered). When the anchored side
-            // has no room, flip to the opposite side; inside is the last resort.
+            // Islands dock to the drag-end corner; flip to the opposite side when
+            // there's no room, with inside as last resort.
             bx = _anchorRight ? selR - bw : selX;
             by = PlaceOutsideOrInside(
                 prefer:   _anchorBottom ? selB + 12 : selY - bh - 12,
@@ -307,9 +301,8 @@ public sealed partial class CaptureOverlayWindow
         rx = System.Math.Clamp(rx, 8, System.Math.Max(8, rootW - rw - 8));
         ry = System.Math.Clamp(ry, 8, System.Math.Max(8, rootH - rh - 8));
 
-        // Islands must never overlap each other: slide the horizontal bar
-        // sideways past the vertical island; if that can't fit, slide the
-        // vertical island up/down instead.
+        // Prevent island overlap: slide the horizontal bar past the vertical one,
+        // or slide the vertical island up/down if that won't fit.
         if (RectsIntersect(bx, by, bw, bh, rx, ry, rw, rh))
         {
             double leftCand = rx - bw - 8;
@@ -345,23 +338,19 @@ public sealed partial class CaptureOverlayWindow
         SetSelection(rect);
     }
 
-    // Snap the selection to the whole monitor under the cursor (double-click
-    // empty area). Inside an existing selection it does nothing — the user is
-    // interacting with that region, not picking a new monitor. Returns true
-    // when a monitor was selected.
+    // Snap the selection to the monitor under the cursor (double-click empty
+    // area); no-op inside an existing selection. Returns true on snap.
     private bool TrySelectMonitorAt(Point pos)
     {
         if (_inOcrMode || _eyedropperActive) return false;
         if (_drawing.Settings.Tool != ToolKind.None) return false;
-        // The first click of the double-click already dropped a 100x100 fallback
-        // selection under the cursor, so the second click lands "inside" it. Only
-        // a deliberate (dragged) selection blocks monitor-snap.
+        // The first click dropped a 100x100 fallback under the cursor, so only a
+        // deliberate (dragged) selection blocks monitor-snap.
         if (_hasSelection && !_selectionFromFallback && IsInsideSelection(pos)) return false;
 
         var b = _frame.VirtualBounds;
-        // Map physical virtual-desktop px -> RootGrid coords using the grid's
-        // own ratio, not GetDpiForWindow/RasterizationScale (those can disagree
-        // and leave the monitor rects misaligned so no click ever matches).
+        // Map physical px → RootGrid coords via the grid's own ratio, not
+        // GetDpiForWindow/RasterizationScale (they can disagree and misalign).
         double gw = RootGrid.ActualWidth, gh = RootGrid.ActualHeight;
         if (gw <= 0 || gh <= 0 || b.Width <= 0 || b.Height <= 0) return false;
         double sx = gw / b.Width;
