@@ -30,9 +30,8 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnColorPickerChanged(ColorPicker sender, ColorChangedEventArgs args)
     {
-        // Live preview only — defer writing to _drawing.Settings.Color until
-        // Confirm. Mutating the cached brush avoids GC churn that drove the
-        // visible drag lag.
+        // Live preview only (defer Settings.Color until Confirm); mutate the
+        // cached brush to avoid the GC churn that caused drag lag.
         var c = Color.FromArgb(0xFF, args.NewColor.R, args.NewColor.G, args.NewColor.B);
         EnsureSwatchBrush().Color = c;
     }
@@ -62,9 +61,7 @@ public sealed partial class CaptureOverlayWindow
         return _swatchBrush;
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // Eyedropper
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Eyedropper ───
 
     private bool _eyedropperActive;
     private System.Drawing.Bitmap? _eyedropperBitmap;
@@ -148,9 +145,8 @@ public sealed partial class CaptureOverlayWindow
         if (y < 0) y = 0;
         EyedropperMagnifier.Margin = new Thickness(x, y, 0, 0);
 
-        // Render magnified region into the WriteableBitmap.
-        // srcSize = how many source pixels fit in the 128px output at ~10× zoom,
-        // scaled by DpiScale so visual zoom stays consistent across DPI settings.
+        // Render magnified region: srcSize = source pixels fitting the 128px
+        // output at ~10× zoom, scaled by DpiScale for consistent zoom.
         if (_eyedropperPixels == null || _magBitmap == null || _eyedropperBitmap == null) return;
 
         const int magPx  = 128;

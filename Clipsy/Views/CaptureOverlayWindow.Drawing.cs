@@ -102,9 +102,8 @@ public sealed partial class CaptureOverlayWindow
                 RootGrid.CapturePointer(pointer);
                 break;
             case ToolKind.Text:
-                // Click-to-place: do not enter a drag mode and do not capture
-                // the pointer. PointerReleased resets _mode to Idle, and the
-                // TextBox keeps focus until LostFocus / Enter / Esc.
+                // Click-to-place: no drag mode, no pointer capture. The TextBox
+                // keeps focus until LostFocus / Enter / Esc.
                 StartTextEntry(pos);
                 break;
         }
@@ -169,9 +168,8 @@ public sealed partial class CaptureOverlayWindow
     private void FinishStroke()
     {
         if (_activeStroke == null || _activeStrokeVisual == null) return;
-        // Single click → zero-distance stroke. Polyline with one point (or two
-        // identical points) renders nothing even with Round caps. Add a 0.01-px
-        // sibling so the round end-cap paints a visible dot.
+        // Single click → zero-length stroke renders nothing; add a 0.01-px
+        // sibling point so the round cap paints a visible dot.
         if (_activeStroke.Points.Count == 1)
         {
             var only = _activeStroke.Points[0];
@@ -208,9 +206,8 @@ public sealed partial class CaptureOverlayWindow
         double h = System.Math.Abs(pos.Y - _activeRectAnchor.Y);
         Canvas.SetLeft(_activeRectVisual, x);
         Canvas.SetTop(_activeRectVisual, y);
-        // Below the stroke thickness an ellipse degenerates into a strip — WinUI
-        // still renders the stroke across the longer axis. Hide the visual until
-        // the user drags out a usable size to avoid the "circle = line" artifact.
+        // Below the stroke thickness an ellipse degenerates into a strip; hide
+        // it until dragged to a usable size to avoid the "circle = line" artifact.
         double minSide = System.Math.Max(2.0, _activeRectVisual.StrokeThickness);
         _activeRectVisual.Visibility = (w < minSide || h < minSide)
             ? Visibility.Collapsed
@@ -329,10 +326,8 @@ public sealed partial class CaptureOverlayWindow
 
     private void TryEraseAt(Point rootPos)
     {
-        // Partial-erase pencil strokes (drop the points inside the eraser
-        // disc, keep the surrounding sub-strokes). Rectangles and text are
-        // removed whole on touch since they are not point-sampled.
-        // Shift + RMB removes whole strokes too, matching the recording overlay.
+        // Partial-erase pencil strokes (drop points inside the disc); shapes/text
+        // removed whole on touch. Shift+RMB removes whole strokes too.
         double r = System.Math.Max(2.0, _drawing.Settings.PencilThickness * 0.5);
         bool shift = (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
             Windows.System.VirtualKey.Shift) & Windows.UI.Core.CoreVirtualKeyStates.Down)
@@ -399,9 +394,8 @@ public sealed partial class CaptureOverlayWindow
     {
         _drawing.Settings.Tool = tool;
 
-        // Swap the Style instead of mutating brushes inline. The Selected
-        // style ships its own template + visual states with amber stops so
-        // PointerOver doesn't drop us back to grey.
+        // Swap the Style (not inline brushes): the Selected style's own visual
+        // states keep amber on PointerOver instead of reverting to grey.
         var selectedStyle = (Microsoft.UI.Xaml.Style)Application.Current.Resources["ClipsyIconButtonSelected"];
         var normalStyle   = (Microsoft.UI.Xaml.Style)Application.Current.Resources["ClipsyIconButton"];
 

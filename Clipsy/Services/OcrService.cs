@@ -16,11 +16,8 @@ public interface IOcrEngine
     Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes);
 }
 
-/// <summary>
-/// Default OCR engine — Windows.Media.Ocr. Local, no network, supports
-/// languages installed via Windows feature-on-demand. Returns word
-/// bounding boxes in the input bitmap's pixel coordinate space.
-/// </summary>
+/// <summary>Default OCR engine (Windows.Media.Ocr): local, languages via FoD,
+/// returns word boxes in the bitmap's pixel space.</summary>
 public sealed class WinRtOcrEngine : IOcrEngine
 {
     public async Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes)
@@ -55,10 +52,8 @@ public sealed class WinRtOcrEngine : IOcrEngine
     }
 }
 
-/// <summary>
-/// Tesseract OCR engine — user-downloaded tessdata via TessdataService.
-/// Falls back silently if no language files are installed.
-/// </summary>
+/// <summary>Tesseract OCR engine (user-downloaded tessdata via TessdataService);
+/// falls back silently if no language files are installed.</summary>
 public sealed class TesseractOcrEngine : IOcrEngine
 {
     public Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes)
@@ -76,10 +71,8 @@ public sealed class TesseractOcrEngine : IOcrEngine
                 using var engine = new Tesseract.TesseractEngine(TessdataService.StorageDir, langStr, Tesseract.EngineMode.Default);
                 using var srcPix = Tesseract.Pix.LoadFromMemory(pngBytes);
 
-                // Screen captures at 1080p give Tesseract small glyphs and it
-                // clips word endings. Upscale so the longest side reaches ~2400px
-                // (Tesseract is happiest near 300dpi). Bounds come back in the
-                // scaled space, so divide them by the same factor afterwards.
+                // Upscale so the longest side reaches ~2400px (Tesseract likes
+                // ~300dpi); bounds come back scaled, so divide them back after.
                 float scaleUp = 1f;
                 int longest = Math.Max(srcPix.Width, srcPix.Height);
                 if (longest > 0 && longest < 2400)
@@ -91,10 +84,8 @@ public sealed class TesseractOcrEngine : IOcrEngine
                 {
                     using var page = engine.Process(pix);
 
-                    // Reading the wrong-script text (e.g. Chinese through an English
-                    // model) yields low-confidence gibberish. Drop the whole result
-                    // so the caller falls back to language-hint detection instead of
-                    // showing invented words.
+                    // Wrong-script text yields low-confidence gibberish; drop it so
+                    // the caller falls back to language-hint detection.
                     if (page.GetMeanConfidence() < 0.55f)
                         return words;
 
@@ -127,13 +118,8 @@ public sealed class TesseractOcrEngine : IOcrEngine
     }
 }
 
-/// <summary>
-/// Best-effort language hint for the case where the active OCR engine returned
-/// nothing. Runs the always-available Windows.Media.Ocr engine purely as a
-/// script detector, then classifies the recovered glyphs by Unicode range.
-/// Only returns a hint when a single script clearly dominates, so we never
-/// guess. Maps to a Tesseract catalog code the user can download.
-/// </summary>
+/// <summary>Best-effort language hint when OCR returned nothing: runs Windows OCR
+/// as a script detector and maps a dominant Unicode range to a Tesseract code.</summary>
 public static class OcrLanguageHint
 {
     public static async Task<TessdataLang?> DetectAsync(byte[] pngBytes)

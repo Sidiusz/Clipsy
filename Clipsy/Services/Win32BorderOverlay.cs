@@ -3,9 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Pure Win32 overlay for drawing recording region border without WinUI artifacts
-/// </summary>
+/// <summary>Pure Win32 overlay drawing the recording region border (no WinUI artifacts).</summary>
 public class Win32BorderOverlay
 {
     private IntPtr _hwnd;
@@ -106,9 +104,8 @@ public class Win32BorderOverlay
                 var ps = new PAINTSTRUCT();
                 var hdc = BeginPaint(hwnd, ref ps);
 
-                // Fill bg with the color key magenta atomically inside WM_PAINT
-                // (no separate WM_ERASEBKGND pass) — that's what kills the
-                // flicker during interactive resize.
+                // Fill the color-key bg inside WM_PAINT (no separate WM_ERASEBKGND)
+                // to kill flicker during interactive resize.
                 var bgRc = new RECT { Left = 0, Top = 0, Right = _w, Bottom = _h };
                 FillRect(hdc, ref bgRc, _magentaBrush);
 

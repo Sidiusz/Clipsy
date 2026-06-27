@@ -6,15 +6,8 @@ using System.Runtime.InteropServices;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Win32 layered overlay (per-pixel alpha) shown while the recording region
-/// is unlocked. Draws the same blue rectangle + 8 white-with-blue-stroke
-/// handles as the initial capture-overlay selection so the two flows look
-/// identical. Hit testing is done via the layered surface's alpha channel:
-/// a 1/255-alpha bg absorbs clicks across the interior (so the user can drag
-/// the region without clicking through to the underlying app), the handles
-/// are fully opaque, and edges outside the window are not affected.
-/// </summary>
+/// <summary>Layered overlay shown while the recording region is unlocked: same
+/// blue rect + 8 handles as capture selection; 1/255 bg absorbs interior clicks.</summary>
 public sealed class Win32ResizeOverlay
 {
     private const int HandleSize = 10;
@@ -83,10 +76,8 @@ public sealed class Win32ResizeOverlay
     public void MoveTo(int x, int y, int w, int h)
     {
         if (!_created) return;
-        // Reposition-only fast path: a pure move leaves the border + 8 handles
-        // pixel-identical, so just slide the layered window with SetWindowPos
-        // instead of reallocating the DIB and repainting every drag tick. Only
-        // an actual size change needs a fresh surface + redraw.
+        // Reposition-only fast path: a pure move is pixel-identical, so just
+        // SetWindowPos instead of reallocating + repainting; resize needs redraw.
         bool sizeChanged = (w != _w || h != _h);
         _x = x; _y = y; _w = w; _h = h;
         SetWindowPos(_hwnd, HWND_TOPMOST, WinX, WinY, WinW, WinH, SWP_SHOWWINDOW | SWP_NOACTIVATE);
@@ -152,9 +143,8 @@ public sealed class Win32ResizeOverlay
         // DIB is fully transparent outside the click-active interior.
         _g.Clear(System.Drawing.Color.Transparent);
 
-        // Interior: alpha=1 black tint absorbs clicks across the region without
-        // visibly tinting the screen. Drawn at margin offset because the window
-        // is larger than the region by HandleMargin on each side.
+        // Interior alpha=1 black absorbs clicks invisibly; drawn at margin offset
+        // since the window is larger than the region by HandleMargin per side.
         using (var interior = new SolidBrush(System.Drawing.Color.FromArgb(1, 0, 0, 0)))
             _g.FillRectangle(interior, HandleMargin, HandleMargin, _w, _h);
 

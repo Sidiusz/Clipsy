@@ -10,10 +10,8 @@ using WinColor = Windows.UI.Color;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Rasterizes a selection — frozen pixels cropped from the captured PNG plus
-/// the burned-in vector drawing layer — into a PNG byte buffer.
-/// </summary>
+/// <summary>Rasterizes a selection (cropped frozen pixels + burned-in vector
+/// drawing layer) into an encoded byte buffer.</summary>
 public static class ScreenshotRenderer
 {
     public enum OutputFormat { Png, Jpeg, Webp }
@@ -82,9 +80,7 @@ public static class ScreenshotRenderer
                     break;
                 }
             case OutputFormat.Webp:
-                // System.Drawing.Common does not encode WebP. Fall back to PNG so
-                // the user still gets a valid file. A real WebP encoder is a
-                // follow-up; for now we log and return PNG bytes.
+                // System.Drawing.Common can't encode WebP; fall back to PNG.
                 System.Diagnostics.Debug.WriteLine("[Clipsy] WebP requested but not supported; saving PNG.");
                 bmp.Save(ms, ImageFormat.Png);
                 break;
@@ -139,9 +135,8 @@ public static class ScreenshotRenderer
         return output;
     }
 
-    /// <param name="offsetDipX">Subtract this from each element's X before
-    /// applying the DPI scale. Element coordinates are stored in root-overlay
-    /// DIPs; the output bitmap is sized to the cropped selection.</param>
+    /// <param name="offsetDipX">Subtract from each element's X (root-overlay DIPs)
+    /// before the DPI scale, since the output is sized to the cropped selection.</param>
     private static void BurnDrawings(Graphics g, IReadOnlyList<DrawElement> elements,
         double scale, double offsetDipX, double offsetDipY)
     {
@@ -252,19 +247,16 @@ public static class ScreenshotRenderer
         return string.Empty;
     }
 
-    // PrivateFontCollection for bundled .ttf files (Onest). GDI does not see
-    // ms-appx:// URIs and won't render fonts that aren't system-installed,
-    // so register the file ourselves once and pull the family by name.
+    // PrivateFontCollection for bundled .ttf (Onest): GDI ignores ms-appx:// URIs,
+    // so register the file once and pull the family by name.
     private static readonly System.Drawing.Text.PrivateFontCollection _privateFonts = new();
     private static FontFamily? _onestFamily;
     private static bool _onestLoaded;
 
     private static FontFamily ResolveFontFamily(string source)
     {
-        // FontFamily.Source might look like:
-        //   "Arial"
-        //   "Segoe UI Variable, Segoe UI, sans-serif"
-        //   "ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, ..."
+        // FontFamily.Source may be a plain name, a CSS-style list, or an
+        // ms-appx:// URI with a #Family suffix.
         if (string.IsNullOrWhiteSpace(source)) return FontFamily.GenericSansSerif;
 
         // Walk the fallback chain left→right, return the first family GDI can resolve.
