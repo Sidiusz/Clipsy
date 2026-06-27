@@ -25,7 +25,16 @@ public static class Program
         // and left an abandoned mutex — createdNew handles that path.
         using var mutex = new Mutex(initiallyOwned: true, MutexName, out createdNew);
         if (!createdNew)
-            return 0;
+        {
+            // A live instance holds the mutex. If it answers the ping it's
+            // healthy → exit. If it's hung (no answer) it would otherwise brick
+            // every relaunch, so kill it and take over the mutex.
+            if (SingleInstanceService.TryPingExisting())
+                return 0;
+            SingleInstanceService.KillStaleInstances();
+            try { mutex.WaitOne(TimeSpan.FromSeconds(3)); }
+            catch (AbandonedMutexException) { /* previous owner died — now ours */ }
+        }
 
         // Install native crash capture before XAML init so any fail-fast /
         // access violation from the WinUI input stack leaves a minidump +

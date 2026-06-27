@@ -176,7 +176,6 @@ public sealed class HotkeyService : IDisposable
             // LL hook sees PrintScreen before app-level hotkeys, so apps that
             // grab it (other tools, games, Win11 Snipping) no longer swallow it.
             _captureViaLL = true;
-            IsCaptureRegistered = true;
         }
 
         if (_recordVk != 0 && _recordCallback != null)
@@ -200,6 +199,10 @@ public sealed class HotkeyService : IDisposable
         }
 
         SyncLowLevelHook();
+
+        // Capture is LL-only now; it's truly registered only if the hook installed.
+        if (_captureVk != 0)
+            IsCaptureRegistered = !_captureViaLL || _llHook != IntPtr.Zero;
     }
 
     private void SyncLowLevelHook()

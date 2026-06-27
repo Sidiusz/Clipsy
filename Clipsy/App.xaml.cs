@@ -77,6 +77,8 @@ public partial class App : Application
         _trayMenu.ExitClicked                 += OnExitRequested;
         ThemeService.Register(HostWindow.Content as Microsoft.UI.Xaml.FrameworkElement);
 
+        SingleInstanceService.StartServer();
+
         Hotkey = new HotkeyService(HostWindow.DispatcherQueue);
         RegisterHotkeys();
         SettingsService.Instance.SettingsChanged += OnSettingsChangedRewireHotkeys;

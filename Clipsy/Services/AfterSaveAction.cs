@@ -20,9 +20,12 @@ public static class AfterSaveAction
             switch (action)
             {
                 case "open-file":
+                    // Launch via explorer so the handler runs at the shell's
+                    // (non-elevated) integrity, not inheriting our admin token.
                     Process.Start(new ProcessStartInfo
                     {
-                        FileName = filePath,
+                        FileName = "explorer.exe",
+                        Arguments = $"\"{filePath}\"",
                         UseShellExecute = true,
                     });
                     break;
