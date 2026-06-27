@@ -397,7 +397,7 @@ public sealed partial class CaptureOverlayWindow : Window
             // The overlay is shown with SWP_NOACTIVATE (avoids taskbar flash),
             // so it never receives keyboard focus — Esc/Ctrl+A were dead until
             // the first click. Take the foreground explicitly once visible.
-            SetForegroundWindow(_hwnd);
+            ForceForeground(_hwnd);
             RootGrid.Focus(FocusState.Programmatic);
             PlayIntroAnimations();
         }
@@ -547,6 +547,42 @@ public sealed partial class CaptureOverlayWindow : Window
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    // SetForegroundWindow alone fails silently when the caller isn't already
+    // the foreground process (Windows foreground lock) — the overlay then
+    // never gets keyboard focus and Esc/Ctrl+A are dead. Briefly attach our
+    // input queue to the current foreground thread to bypass the lock, the
+    // documented way to reliably steal focus.
+    private static void ForceForeground(IntPtr hwnd)
+    {
+        try
+        {
+            IntPtr fg = GetForegroundWindow();
+            uint fgThread = GetWindowThreadProcessId(fg, out _);
+            uint thisThread = GetCurrentThreadId();
+            bool attached = fgThread != 0 && fgThread != thisThread
+                && AttachThreadInput(fgThread, thisThread, true);
+            SetForegroundWindow(hwnd);
+            BringWindowToTop(hwnd);
+            if (attached) AttachThreadInput(fgThread, thisThread, false);
+        }
+        catch { SetForegroundWindow(hwnd); }
+    }
 
     private const int GWL_STYLE = -16;
     private const int GWL_EXSTYLE = -20;

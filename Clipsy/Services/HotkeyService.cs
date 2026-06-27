@@ -173,20 +173,15 @@ public sealed class HotkeyService : IDisposable
 
         if (_captureVk != 0)
         {
-            if (RegisterHotKey(_hwnd, HOTKEY_CAPTURE, _captureMods, _captureVk))
-            {
-                IsCaptureRegistered = true;
-            }
-            else
-            {
-                LastRegisterError = Marshal.GetLastWin32Error();
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Clipsy] RegisterHotKey(capture) failed err=0x{LastRegisterError:X} — falling back to LL hook");
-                _captureViaLL = true;
-                // Treat LL-hook registration as success since the key will
-                // still fire; the UI does not need to warn the user.
-                IsCaptureRegistered = true;
-            }
+            // Always drive the capture key through the WH_KEYBOARD_LL hook
+            // rather than RegisterHotKey. The hook sees the key before any
+            // app-level hotkey handler, so apps that grab PrintScreen for
+            // themselves (other screenshot tools, games, Win11 Snipping) no
+            // longer swallow it before Clipsy. RegisterHotKey only delivers
+            // WM_HOTKEY when no other window owns the binding — too fragile
+            // for the primary trigger.
+            _captureViaLL = true;
+            IsCaptureRegistered = true;
         }
 
         if (_recordVk != 0 && _recordCallback != null)
