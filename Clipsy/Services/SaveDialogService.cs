@@ -54,6 +54,67 @@ public static class SaveDialogService
 
     [DllImport("ole32.dll")] private static extern int OleInitialize(IntPtr pvReserved);
     [DllImport("ole32.dll")] private static extern void OleUninitialize();
+    [DllImport("ole32.dll")] private static extern void CoTaskMemFree(IntPtr pv);
+
+    // Win32 folder picker. WinRT FolderPicker is broker-hosted and refuses
+    // elevated callers, so it can't be used while Clipsy runs as admin.
+    public static Task<string?> PickFolderAsync(IntPtr hwnd)
+    {
+        var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var th = new System.Threading.Thread(() =>
+        {
+            int oleHr = OleInitialize(IntPtr.Zero);
+            try { tcs.TrySetResult(PickFolderSync(hwnd)); }
+            catch (Exception ex) { Diagnostics.Log("SaveDialogService folder STA thread", ex); tcs.TrySetResult(null); }
+            finally { if (oleHr >= 0) OleUninitialize(); }
+        });
+        th.SetApartmentState(System.Threading.ApartmentState.STA);
+        th.IsBackground = true;
+        th.Name = "ClipsyFolderDialog";
+        th.Start();
+        return tcs.Task;
+    }
+
+    private static string? PickFolderSync(IntPtr hwnd)
+    {
+        var bi = new BROWSEINFO
+        {
+            hwndOwner = hwnd,
+            lpszTitle = "Select folder",
+            ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX,
+        };
+        IntPtr pidl = SHBrowseForFolderW(ref bi);
+        if (pidl == IntPtr.Zero) return null;
+        try
+        {
+            var sb = new StringBuilder(260);
+            return SHGetPathFromIDListW(pidl, sb) ? sb.ToString() : null;
+        }
+        finally { CoTaskMemFree(pidl); }
+    }
+
+    private const uint BIF_RETURNONLYFSDIRS = 0x0001;
+    private const uint BIF_EDITBOX          = 0x0010;
+    private const uint BIF_NEWDIALOGSTYLE   = 0x0040;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct BROWSEINFO
+    {
+        public IntPtr hwndOwner;
+        public IntPtr pidlRoot;
+        public IntPtr pszDisplayName;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? lpszTitle;
+        public uint ulFlags;
+        public IntPtr lpfn;
+        public IntPtr lParam;
+        public int iImage;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SHBrowseForFolderW(ref BROWSEINFO lpbi);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool SHGetPathFromIDListW(IntPtr pidl, StringBuilder pszPath);
 
     // Convenience for PNG-only callers (kept for any existing call sites).
     public static Task<SavePickResult?> PickPngSaveAsync(IntPtr hwnd, string initialDir, string suggestedName)
