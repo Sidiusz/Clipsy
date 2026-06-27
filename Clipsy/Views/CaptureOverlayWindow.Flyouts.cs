@@ -31,16 +31,13 @@ public sealed partial class CaptureOverlayWindow
             _hoverTimer = null;
         }
 
-        // Hide flyout if it's open
         if (ShapesFlyout != null)
         {
             ShapesFlyout.Visibility = Visibility.Collapsed;
         }
 
-        // Toggle: re-click active shape deselects
         SetTool(_drawing.Settings.Tool == _currentShapeTool ? ToolKind.None : _currentShapeTool);
 
-        // Reset flag after short delay
         var resetTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         resetTimer.Tick += (s, args) => { _shapesClickHandled = false; resetTimer.Stop(); };
         resetTimer.Start();
@@ -73,10 +70,8 @@ public sealed partial class CaptureOverlayWindow
     private void OnShapesPointerEntered(object sender, PointerRoutedEventArgs e)
     {
         if (ShapesFlyout == null || ShapesBtn == null || _shapesClickHandled) return;
-        // Close font flyout if open
         if (FontsFlyout != null) FadeOutFlyout(FontsFlyout);
 
-        // Cancel any existing timer
         if (_hoverTimer != null)
         {
             _hoverTimer.Stop();
@@ -84,7 +79,6 @@ public sealed partial class CaptureOverlayWindow
             _hoverTimer = null;
         }
 
-        // Start hover delay timer
         _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _hoverTimer.Tick += OnHoverTimerTick;
         _hoverTimer.Start();
@@ -116,18 +110,16 @@ public sealed partial class CaptureOverlayWindow
         ShapesFlyout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var flyoutSize = ShapesFlyout.DesiredSize;
 
-        // Get shapes button position
         var transform = ShapesBtn.TransformToVisual(RootGrid);
         var buttonPos = transform.TransformPoint(new Point(0, 0));
 
-        // Right of the button, top-aligned with it
         double x = buttonPos.X + ShapesBtn.ActualWidth + 8;
         double y = buttonPos.Y;
 
-        // Keep flyout within screen bounds
+        // Flip to the left side if it would overflow the right edge.
         if (x + flyoutSize.Width > RootGrid.ActualWidth - 8)
         {
-            x = buttonPos.X - flyoutSize.Width - 8; // Show on left side
+            x = buttonPos.X - flyoutSize.Width - 8;
         }
         y = System.Math.Clamp(y, 8, System.Math.Max(8, RootGrid.ActualHeight - flyoutSize.Height - 8));
 
@@ -137,7 +129,6 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnShapesPointerExited(object sender, PointerRoutedEventArgs e)
     {
-        // Cancel hover timer when cursor leaves button
         if (_hoverTimer != null)
         {
             _hoverTimer.Stop();
@@ -145,8 +136,7 @@ public sealed partial class CaptureOverlayWindow
             _hoverTimer = null;
         }
 
-        // Start timer to hide flyout after small delay
-        // This allows cursor to move to flyout without closing it
+        // Brief delay so the cursor can move onto the flyout without closing it.
         _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _hoverTimer.Tick += (s, args) => {
             if (ShapesFlyout != null) FadeOutFlyout(ShapesFlyout);
@@ -158,7 +148,6 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnShapesFlyoutPointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        // Cancel any hide timer when cursor enters flyout
         if (_hoverTimer != null)
         {
             _hoverTimer.Stop();

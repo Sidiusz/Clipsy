@@ -35,7 +35,6 @@ public sealed class ScreenFreezeService
         using var bmp = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bmp))
         {
-            // Set high quality settings for screen capture
             g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
             g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;

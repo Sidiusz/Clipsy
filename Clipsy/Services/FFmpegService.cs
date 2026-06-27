@@ -101,7 +101,6 @@ public sealed class FFmpegService
             ZipFile.ExtractToDirectory(zipPath, extractDir);
             File.Delete(zipPath);
 
-            // Locate ffmpeg.exe anywhere inside the extracted tree
             var exe = FindFile(extractDir, "ffmpeg.exe");
             if (exe == null)
             {
