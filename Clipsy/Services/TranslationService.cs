@@ -9,11 +9,8 @@ namespace Clipsy.Services;
 
 public sealed record TranslationLang(string Code, string En, string Ru);
 
-/// <summary>
-/// Translation via MyMemory (free, 500-char limit per request) or
-/// Google Translate (free unofficial endpoint, ~4 000-char limit).
-/// Long text is split into sentence-boundary chunks and rejoined.
-/// </summary>
+/// <summary>Translation via MyMemory (500-char) or Google (unofficial, ~4000-char);
+/// long text is split on sentence boundaries and rejoined.</summary>
 public static class TranslationService
 {
     private const int ChunkLimitMyMemory = 480;
@@ -49,10 +46,8 @@ public static class TranslationService
             bool google = string.Equals(service, "Google", StringComparison.OrdinalIgnoreCase);
             int limit = google ? ChunkLimitGoogle : ChunkLimitMyMemory;
 
-            // Translate paragraph-by-paragraph so the original line structure
-            // (which carries meaning — bullet lists, code, multi-line headings)
-            // is preserved. Sentence-level chunking only kicks in for a single
-            // paragraph that on its own exceeds the per-request limit.
+            // Translate paragraph-by-paragraph to preserve line structure;
+            // sentence-level chunking only kicks in for an over-limit paragraph.
             var paragraphs = text.Split('\n');
             var translated = new string[paragraphs.Length];
 

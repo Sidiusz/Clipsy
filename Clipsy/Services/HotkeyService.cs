@@ -5,13 +5,8 @@ using Microsoft.UI.Dispatching;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Global hotkey registration backed by a dedicated message-only window
-/// running its own GetMessage pump on a background STA thread. We do not
-/// subclass the WinUI 3 hwnd because WM_HOTKEY routing through the
-/// XAML island's WndProc is unreliable and risks breaking dispatch.
-/// Supports two simultaneous hotkeys: capture (primary) and record-stop (optional).
-/// </summary>
+/// <summary>Global hotkeys via a message-only window on a background STA pump
+/// (subclassing the WinUI hwnd's WndProc for WM_HOTKEY is unreliable).</summary>
 public sealed class HotkeyService : IDisposable
 {
     private const int WM_HOTKEY       = 0x0312;
@@ -45,12 +40,8 @@ public sealed class HotkeyService : IDisposable
     private uint _micVk;
     private uint _micMods;
 
-    // Low-level keyboard hook fallback. RegisterHotKey collides with
-    // Win11's Snipping Tool when the user has "Use PrintScreen to open
-    // Snipping" enabled, and with arbitrary third-party apps that already
-    // own a binding. WH_KEYBOARD_LL intercepts the key before any other
-    // hotkey handler and works in all those cases — same approach as
-    // Lightshot / ShareX.
+    // Low-level keyboard hook: intercepts the key before any other hotkey
+    // handler, so apps that own the binding can't swallow it (ShareX-style).
     private IntPtr _llHook;
     private LowLevelKeyboardProc? _llProc;
     private GCHandle _llProcHandle;

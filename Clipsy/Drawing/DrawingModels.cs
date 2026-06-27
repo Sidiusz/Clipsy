@@ -26,19 +26,12 @@ public sealed class DrawingSettings
     public ToolKind Tool { get; set; } = ToolKind.None;
     public Color Color { get; set; } = Microsoft.UI.Colors.Red;
 
-    /// <summary>
-    /// FontFamily string used by the Text tool. Defaults to the bundled
-    /// Onest variable font; falls back to Inter / Segoe UI if the .ttf is
-    /// missing for any reason. The capture overlay exposes a flyout next
-    /// to the Text button so the user can switch between bundled and
-    /// system fonts at any time.
-    /// </summary>
+    /// <summary>FontFamily for the Text tool. Defaults to the bundled Onest font,
+    /// falling back to Inter / Segoe UI; switchable via the overlay flyout.</summary>
     public string TextFont { get; set; } = "ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, Segoe UI, sans-serif";
 
-    /// <summary>
-    /// Single size parameter that drives all drawing tools.
-    /// Pencil/shape thickness, text size, and preview size derive from it.
-    /// </summary>
+    /// <summary>Single size parameter driving all tools (pencil/shape thickness,
+    /// text size, preview size derive from it).</summary>
     public double BrushSize
     {
         get => _brushSize;
@@ -75,10 +68,8 @@ public sealed class DrawingSettings
         set => BrushSize = value / 6.0;
     }
 
-    // Diameter equals the actual stroke pixel width (with a small floor so the
-    // cursor preview never disappears for 1-2 px brushes). The previous
-    // formula doubled the size and added a 4 px pad, so the preview ring
-    // looked roughly twice as wide as the strokes it would draw.
+    // Diameter equals the stroke pixel width (small floor so the preview never
+    // vanishes for 1-2 px brushes).
     public double PreviewDiameter => System.Math.Max(2.0, BrushSize);
 
     private static double ClampBrush(double value)

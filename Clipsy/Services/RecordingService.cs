@@ -8,17 +8,13 @@ using ScreenRecorderLib;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Thin wrapper around ScreenRecorderLib that records the chosen region
-/// to MP4. Region is supplied in virtual-screen pixel coordinates.
-/// </summary>
+/// <summary>ScreenRecorderLib wrapper recording the chosen region (virtual-screen
+/// pixel coords) to MP4.</summary>
 public sealed class RecordingService : IDisposable
 {
     private Recorder? _recorder;
-    // One source per physical monitor the region overlaps. A single
-    // DisplayRecordingSource only ever captures one monitor, so a region that
-    // spans monitors (e.g. Ctrl+A select-all on a multi-monitor desktop) needs
-    // one source per monitor, each positioned into the combined output canvas.
+    // One DisplayRecordingSource per monitor the region overlaps (a single
+    // source captures only one monitor), each placed into the output canvas.
     private readonly List<DisplayRecordingSource> _sources = new();
     private readonly List<Rectangle> _sourceMonitors = new(); // monitor bounds, parallel to _sources
     private string _tempPath = string.Empty;
@@ -98,11 +94,8 @@ public sealed class RecordingService : IDisposable
         _recorder.Record(_tempPath);
     }
 
-    // Build one DisplayRecordingSource per monitor the region overlaps. Each
-    // source crops its monitor to the overlapping slice (monitor-local coords)
-    // and is positioned at the slice's offset inside the region, so the combined
-    // output reproduces the real desktop layout. Monitors that only partially
-    // cover the region leave black space — same behaviour as the screenshot path.
+    // One source per overlapped monitor: each crops its monitor to the slice and
+    // is positioned at the slice offset, reproducing the desktop layout.
     private void BuildSources(int rx, int ry, int rw, int rh, bool cursor)
     {
         _sources.Clear();
@@ -155,10 +148,8 @@ public sealed class RecordingService : IDisposable
         return list;
     }
 
-    /// <summary>
-    /// Maps the VideoFramerate setting to an actual fps value. 0 means
-    /// "native": follow the primary display's current refresh rate.
-    /// </summary>
+    /// <summary>Maps the VideoFramerate setting to fps; 0 = native (primary
+    /// display's refresh rate).</summary>
     public static int ResolveFramerate(int setting)
     {
         if (setting > 0) return Math.Clamp(setting, 10, 240);
@@ -189,9 +180,8 @@ public sealed class RecordingService : IDisposable
     {
         _paused = false;
         _recorder?.Resume();
-        // While paused, ScreenRecorderLib silently ignores
-        // GetDynamicOptionsBuilder().Apply() — the new SourceRect is stored
-        // on _source but never reaches the encoder. Replay it on resume.
+        // Paused ScreenRecorderLib ignores Apply(); the new SourceRect never
+        // reaches the encoder, so replay it on resume.
         if (_pendingRegionWhilePaused)
         {
             _pendingRegionWhilePaused = false;
@@ -220,9 +210,8 @@ public sealed class RecordingService : IDisposable
     {
         if (_recorder == null || _sources.Count == 0) return;
 
-        // Recompute each source's crop + canvas position for the new region.
-        // The monitor set is fixed at Start; a resize that grows onto a new
-        // monitor won't add it (codec frame size is locked anyway).
+        // Recompute each source's crop + position for the new region. Monitor
+        // set is fixed at Start, so growing onto a new monitor won't add it.
         var region = new Rectangle(x, y, width, height);
         for (int i = 0; i < _sources.Count; i++)
         {

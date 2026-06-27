@@ -8,11 +8,8 @@ using System.Threading.Tasks;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// FFmpeg download, management, and conversion service.
-/// All VP9 / AV1 recording paths use FFmpegRecordingService;
-/// this class owns the binary lifecycle and GIF conversion.
-/// </summary>
+/// <summary>FFmpeg binary lifecycle (download/manage) and GIF conversion.
+/// VP9/AV1 recording lives in FFmpegRecordingService.</summary>
 public sealed class FFmpegService
 {
     private static readonly Lazy<FFmpegService> _instance = new(() => new FFmpegService());
@@ -21,9 +18,7 @@ public sealed class FFmpegService
     private readonly string _ffmpegDir;
     private readonly string _ffmpegExe;
 
-    // BtbN nightly build from GitHub Releases (Windows x64, ~150 MB zip).
-    // GitHub's CDN is far faster and more reliable than gyan.dev, which is
-    // kept only as a fallback when GitHub is unreachable.
+    // BtbN GitHub build (x64, ~150 MB); gyan.dev kept only as fallback.
     private const string FFMPEG_URL =
         "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip";
     private const string FFMPEG_URL_FALLBACK =
@@ -141,9 +136,7 @@ public sealed class FFmpegService
     }
 
     // ─── GIF conversion ───────────────────────────────────────────────────────
-    // Used when ffmpeg.exe is installed in the app. When it is missing the
-    // caller (RecordingController.ConvertOrCopyAsync) falls back to
-    // NativeGifEncoder instead.
+    // Used when ffmpeg.exe is present; otherwise the caller falls back to NativeGifEncoder.
 
     public async Task<bool> ConvertToGifAsync(string inputMp4, string outputGif)
     {

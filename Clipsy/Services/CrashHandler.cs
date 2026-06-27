@@ -4,24 +4,8 @@ using System.Runtime.InteropServices;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Captures the crashes the managed handlers can't see. WinUI 3 native
-/// fail-fasts (0xc0000409) and access violations terminate the process
-/// without ever raising a CLR exception, so App.UnhandledException /
-/// AppDomain.UnhandledException stay silent — the app just vanishes.
-///
-/// This installs a top-level native exception filter that, on such a crash,
-/// writes the faulting exception code + address to debug.log and drops a
-/// minidump (%LOCALAPPDATA%\Clipsy\crash_*.dmp) for post-mortem with
-/// dotnet-dump / WinDbg. It also logs a start breadcrumb and a clean
-/// ProcessExit marker, so a missing exit marker tells us the process was
-/// hard-killed rather than exiting cleanly.
-///
-/// Note: pure __fastfail (int 0x29) bypasses even this filter by design;
-/// those still only surface via WER. The fix for the 1.6 input fail-fast
-/// was the WindowsAppSDK 1.7 upgrade. This handler covers everything else
-/// (AVs, heap corruption surfaced as exceptions, stack overflow, etc.).
-/// </summary>
+/// <summary>Native exception filter for crashes the CLR can't see (0xc0000409,
+/// AVs): logs the fault + drops a minidump. Pure __fastfail surfaces only via WER.</summary>
 public static class CrashHandler
 {
     private static bool _installed;

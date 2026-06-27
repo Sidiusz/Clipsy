@@ -4,12 +4,8 @@ using Clipsy.Services;
 
 namespace Clipsy.Localization;
 
-/// <summary>
-/// Tiny EN/RU localization table. Lookup by key with English fallback. The
-/// dictionary is the single source of truth for any UI string that needs
-/// translating; XAML elements wired to it should be tagged with x:Name and
-/// have their Text/Content/ToolTip set from ApplyLocalization at runtime.
-/// </summary>
+/// <summary>Tiny EN/RU localization table; lookup by key with English fallback.
+/// Single source of truth for translatable UI strings (set via ApplyLocalization).</summary>
 public static class Strings
 {
     private static readonly Dictionary<string, Dictionary<string, string>> _all = new()

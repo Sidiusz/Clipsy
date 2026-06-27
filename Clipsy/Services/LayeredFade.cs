@@ -4,21 +4,16 @@ using Microsoft.UI.Xaml;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Whole-window alpha fade via WS_EX_LAYERED + SetLayeredWindowAttributes.
-/// Eliminates the black backdrop flash WinUI 3 shows during first compose.
-/// </summary>
+/// <summary>Whole-window alpha fade via WS_EX_LAYERED, masking the black
+/// backdrop flash WinUI 3 shows during first compose.</summary>
 public static class LayeredFade
 {
     private const int  GWL_EXSTYLE      = -20;
     private const int  WS_EX_LAYERED    = 0x00080000;
     private const uint LWA_ALPHA        = 0x00000002;
 
-    /// <summary>
-    /// Adds WS_EX_LAYERED to the window's ex-style and sets initial alpha=0
-    /// so the window stays invisible until FadeIn() is called.
-    /// Call before the window's first Activate() / Show().
-    /// </summary>
+    /// <summary>Add WS_EX_LAYERED with alpha=0 so the window is invisible until
+    /// FadeIn(). Call before the first Activate()/Show().</summary>
     public static void EnableHidden(IntPtr hwnd)
     {
         int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
@@ -26,9 +21,7 @@ public static class LayeredFade
         SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
     }
 
-    /// <summary>
-    /// Animate alpha 0 → 255 with cubic ease-out. Caller must invoke from UI thread.
-    /// </summary>
+    /// <summary>Animate alpha 0 → 255 (cubic ease-out). Call from the UI thread.</summary>
     public static void FadeIn(IntPtr hwnd, int durationMs = 160, Action? onComplete = null)
     {
         if (hwnd == IntPtr.Zero) { onComplete?.Invoke(); return; }
@@ -50,10 +43,8 @@ public static class LayeredFade
         timer.Start();
     }
 
-    /// <summary>
-    /// Snap alpha back to 0 for windows that are reused (tray menu opens
-    /// multiple times across the app's lifetime).
-    /// </summary>
+    /// <summary>Snap alpha back to 0 for reused windows (e.g. the tray menu
+    /// reopened across the app's lifetime).</summary>
     public static void ResetHidden(IntPtr hwnd)
         => SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
 

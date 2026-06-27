@@ -8,11 +8,8 @@ using Windows.Foundation;
 
 namespace Clipsy.Drawing;
 
-/// <summary>
-/// Maintains the list of vector elements drawn on top of the selected region
-/// plus an undo/redo history. Visuals are added/removed from the supplied host
-/// canvas; geometry is stored in canvas-local coordinates.
-/// </summary>
+/// <summary>Vector elements drawn over the selected region plus undo/redo.
+/// Visuals live on the host canvas; geometry in canvas-local coords.</summary>
 public sealed class DrawingController
 {
     private readonly Canvas _host;
@@ -79,10 +76,8 @@ public sealed class DrawingController
         return null;
     }
 
-    /// <summary>
-    /// Removes any element the cursor touches as a single unit. Strokes,
-    /// rectangles, ellipses, lines and text are all removed whole on hit.
-    /// </summary>
+    /// <summary>Removes any element the cursor touches, whole (strokes, shapes,
+    /// lines, text).</summary>
     public bool WholeStrokeErase(Point cursor, double radius)
     {
         bool changed = false;
@@ -98,13 +93,8 @@ public sealed class DrawingController
         return changed;
     }
 
-    /// <summary>
-    /// Eraser pass at the given root-space cursor. Pencil strokes are split:
-    /// every stroke point within <paramref name="radius"/> of the cursor is
-    /// dropped and the surviving runs become their own polylines. Rectangles
-    /// and text fall back to whole-element removal on touch since they are
-    /// not point-sampled.
-    /// </summary>
+    /// <summary>Eraser pass at the cursor: pencil strokes split (points within
+    /// radius dropped, survivors re-polylined); shapes/text removed whole on touch.</summary>
     public bool PartialErase(Point cursor, double radius)
     {
         bool changed = false;

@@ -5,10 +5,8 @@ using System.Threading.Tasks;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Records screen directly to VP9 or AV1 using FFmpeg's gdigrab + wasapi loopback.
-/// Same event/method surface as RecordingService so RecordingController can use both.
-/// </summary>
+/// <summary>Records directly to VP9/AV1 via FFmpeg gdigrab + wasapi loopback.
+/// Same surface as RecordingService so RecordingController can use either.</summary>
 public sealed class FFmpegRecordingService : IDisposable
 {
     private Process?  _process;

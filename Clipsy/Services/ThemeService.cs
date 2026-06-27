@@ -47,12 +47,8 @@ public static class ThemeService
         element.RequestedTheme = ResolveTheme(SettingsService.Instance.Settings.Theme);
     }
 
-    /// <summary>
-    /// Theme-aware brush lookup for code-behind. Application.Current.Resources[key]
-    /// resolves ThemeDictionaries against the APP theme, which can disagree with
-    /// the per-window RequestedTheme (and with windows pinned to Dark, like the
-    /// capture overlay). Pass the element whose actual theme should win.
-    /// </summary>
+    /// <summary>Theme-aware brush lookup for code-behind: pass the element whose
+    /// actual theme should win (app resources resolve against the app theme).</summary>
     public static Microsoft.UI.Xaml.Media.Brush GetBrush(string key, FrameworkElement? context = null)
     {
         var theme = context?.ActualTheme ?? ResolveTheme(SettingsService.Instance.Settings.Theme);
