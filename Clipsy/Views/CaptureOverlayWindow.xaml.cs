@@ -30,16 +30,8 @@ using Rect = Windows.Foundation.Rect;
 
 namespace Clipsy.Views;
 
-// CaptureOverlayWindow is split across partial files by concern:
-//   .xaml.cs        - ctor, window/overlay setup, shared fields, win32 interop
-//   .Input.cs       - pointer + keyboard routing
-//   .Selection.cs   - resize handles, selection geometry, toolbars
-//   .Drawing.cs     - pencil/shape/line tools, tool selection
-//   .Text.cs        - text-entry box + drag handle
-//   .Flyouts.cs     - shapes + fonts hover flyouts
-//   .ColorPicker.cs - color picker + eyedropper magnifier
-//   .Actions.cs     - record / save / copy / context menu
-//   .Ocr.cs         - OCR scan, results, translate
+// Partial class split by concern: .Input/.Selection/.Drawing/.Text/.Flyouts/
+// .ColorPicker/.Actions/.Ocr (+ this file: ctor, window setup, win32 interop).
 public sealed partial class CaptureOverlayWindow : Window
 {
     private enum InteractionMode { Idle, SelectingNew, MovingSelection, ResizingSelection, DrawingStroke, DrawingRect, Erasing, PlacingText, SelectingOcrText }
@@ -98,9 +90,8 @@ public sealed partial class CaptureOverlayWindow : Window
         _frame = frame;
         InitializeComponent();
 
-        // Initial picker colour set in code rather than XAML — assigning
-        // ColorPicker.Color through the markup parser throws XamlParseException
-        // (0x802B000A) at runtime on Windows App SDK 1.6.
+        // Set picker colour in code: XAML markup assignment throws
+        // XamlParseException (0x802B000A) on Windows App SDK 1.6.
         try { ColorPickerCtl.Color = Microsoft.UI.Colors.Red; } catch { }
 
         // Set window background to transparent to prevent white borders
@@ -115,12 +106,8 @@ public sealed partial class CaptureOverlayWindow : Window
 
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = GetAppWindowForCurrentWindow();
-        // Hide BEFORE the window is shown (ConfigureAsOverlay calls
-        // SetWindowPos with SWP_SHOWWINDOW), two mechanisms together:
-        // - DWM cloak keeps the compositor from presenting the window;
-        // - WS_EX_LAYERED + alpha 0 stops the bare-HWND black background
-        //   erase WinUI 3 paints before the first XAML frame (same fix as
-        //   TrayMenuWindow / Settings — cloak alone still flashed black).
+        // Hide before the window shows: DWM cloak + WS_EX_LAYERED alpha 0
+        // suppress the black first-frame erase before the first XAML paint.
         try
         {
             int cloak = 1;
@@ -131,9 +118,8 @@ public sealed partial class CaptureOverlayWindow : Window
         catch { }
         ConfigureAsOverlay();
         DisableDwmDecorations();
-        // Load the frozen frame synchronously into the Image source so the
-        // very first frame the compositor renders already shows the desktop
-        // snapshot instead of black-then-desktop.
+        // Load the frozen frame synchronously so the first composed frame
+        // already shows the snapshot, not black-then-desktop.
         TryLoadFrozenImage();
 
         _drawing = new DrawingController(DrawingCanvas);
@@ -168,9 +154,8 @@ public sealed partial class CaptureOverlayWindow : Window
         BuildScreenMenu();
         Activated += OnActivated;
         RootGrid.SizeChanged += OnRootGridSizeChanged;
-        // The frozen frame is decoded synchronously into a WriteableBitmap
-        // (TryLoadFrozenImage), so the second composition tick is guaranteed
-        // to contain it — uncloak then. No async-decode race, no delay.
+        // Frame is decoded synchronously, so the 2nd composition tick is
+        // guaranteed to contain it — uncloak then. No async-decode race.
         int composed = 0;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFirstFrames;
         void OnFirstFrames(object? s, object e)
@@ -198,10 +183,8 @@ public sealed partial class CaptureOverlayWindow : Window
         ToolTipService.SetToolTip(CancelBtn,     Strings.Get("TipCancel"));
 
         ToolTipService.SetToolTip(ColorBtn, Strings.Get("TipColor"));
-        // Flyout-hosted buttons may not be materialized at ctor time in
-        // WinUI 3; guard against null so a failed SetToolTip doesn't kill
-        // the overlay ctor (which would also swallow PrintScreen via the
-        // already-installed LL keyboard hook).
+        // Flyout-hosted buttons may be null at ctor time; guard so a failed
+        // SetToolTip doesn't kill the overlay ctor.
         if (EyedropperBtn   != null) ToolTipService.SetToolTip(EyedropperBtn,   Strings.Get("TipEyedropper"));
         if (ColorCancelBtn  != null) ToolTipService.SetToolTip(ColorCancelBtn,  Strings.Get("TipColorCancel"));
         if (ColorConfirmBtn != null) ToolTipService.SetToolTip(ColorConfirmBtn, Strings.Get("TipColorApply"));
@@ -293,11 +276,8 @@ public sealed partial class CaptureOverlayWindow : Window
 
         var b = _frame.VirtualBounds;
 
-        // First present happens OFF-SCREEN (the TrayMenuWindow.WarmUp trick):
-        // whatever black erase WinUI paints around Activate() lands at -32000
-        // where nobody sees it. Uncloak() moves the window into place once the
-        // frame is composed. AppWindow.MoveAndResize and SetWindowPos both
-        // take physical screen pixels — never divide sizes by dpiScale here.
+        // First present is off-screen (-32000) so the black erase is unseen;
+        // Uncloak() moves it into place. These APIs take physical pixels.
         _appWindow.MoveAndResize(new RectInt32(OffscreenX, OffscreenY, b.Width, b.Height));
         SetWindowPos(_hwnd, HWND_TOPMOST, OffscreenX, OffscreenY, b.Width, b.Height,
             SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -316,9 +296,8 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         try
         {
-            // Cloak the window until the first XAML composition lands. Without
-            // this DWM shows the window's default opaque surface for one frame
-            // (visible as a black flash) before the frozen-frame image paints.
+            // Cloak until the first XAML composition lands, else DWM shows the
+            // default opaque surface (black flash) for one frame.
             int cloak = 1;
             DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
 
@@ -367,11 +346,8 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         if (!_cloaked) return;
         _cloaked = false;
-        // Move the window from its off-screen warm-up spot into place — but do
-        // NOT reveal yet: moving makes DWM refresh the window's redirection
-        // surface, which paints black until the next XAML present. Revealing
-        // immediately after the move was the residual black flash. Stay
-        // cloaked for two more composition ticks at the final position.
+        // Move into place but stay cloaked: the move makes DWM repaint the
+        // redirection surface black until the next present. Reveal a few ticks later.
         var b = _frame.VirtualBounds;
         SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
         int ticksAfterMove = 0;
@@ -381,10 +357,8 @@ public sealed partial class CaptureOverlayWindow : Window
             ticksAfterMove++;
             if (ticksAfterMove == 2)
             {
-                // Strip WS_EX_LAYERED while still cloaked: a full-screen
-                // layered window goes through DWM's slow composition path and
-                // caps interaction FPS hard on high-refresh monitors. The flag
-                // was only needed to mask the first present.
+                // Strip WS_EX_LAYERED while cloaked: a full-screen layered window
+                // takes DWM's slow path and caps FPS on high-refresh monitors.
                 SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_TOOLWINDOW);
                 SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -401,9 +375,8 @@ public sealed partial class CaptureOverlayWindow : Window
         }
     }
 
-    // Make the window invisible instantly (DWM cloak). Called right before
-    // Close(): tearing the window down while visible paints the black
-    // redirection surface for a frame — the flash on cancel/save.
+    // Cloak instantly before Close(): tearing down while visible paints the
+    // black redirection surface for a frame (the flash on cancel/save).
     internal void HideForClose()
     {
         try
@@ -414,9 +387,8 @@ public sealed partial class CaptureOverlayWindow : Window
         catch { }
     }
 
-    // Soft entrance on reveal: the dim fades up over ~120 ms and the hint
-    // pill slides in from the top. Masks whatever single-frame seam remains
-    // between the desktop and the frozen snapshot.
+    // Soft entrance: dim fades up ~120 ms, hint pill slides in. Masks the
+    // single-frame seam between desktop and frozen snapshot.
     private void PlayIntroAnimations()
     {
         try
@@ -482,10 +454,8 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         try
         {
-            // Decode synchronously into a WriteableBitmap. BitmapImage decodes
-            // asynchronously even via SetSource, which forced a choice between
-            // a black flash (uncloak too early) and a visible open delay
-            // (waiting for ImageOpened). A ready pixel buffer gives neither.
+            // Decode synchronously into a WriteableBitmap; BitmapImage decodes
+            // async even via SetSource, forcing a black flash or an open delay.
             using var ms = new System.IO.MemoryStream(_frame.ImageBytes);
             using var src = new System.Drawing.Bitmap(ms);
             var wb = new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(src.Width, src.Height);

@@ -4,31 +4,24 @@ using Clipsy.Services;
 
 namespace Clipsy;
 
-/// <summary>
-/// Custom entry point. Replaces the XAML-generated Main (disabled via
-/// DISABLE_XAML_GENERATED_MAIN in the csproj) so we can enforce a single
-/// running instance per user session before XAML initializes.
-/// </summary>
+/// <summary>Custom entry point (replaces the XAML-generated Main) enforcing a
+/// single running instance per user session before XAML initializes.</summary>
 public static class Program
 {
-    // Per-user mutex name. Suffix with the user SID would be more correct,
-    // but per-user is good enough — Local\ scope already prevents collisions
-    // across different RDP / fast-user-switch sessions.
+    // Local\ scope is per-session, preventing collisions across RDP / fast-user-switch.
     private const string MutexName = "Local\\Clipsy.SingleInstance.v1";
 
     [STAThread]
     public static int Main(string[] args)
     {
         bool createdNew;
-        // Created-new is the only authoritative signal. WaitOne(0) on an
-        // existing mutex would also fail if a previous instance crashed
-        // and left an abandoned mutex — createdNew handles that path.
+        // Created-new is the authoritative signal; it also covers an abandoned
+        // mutex left by a crashed previous instance.
         using var mutex = new Mutex(initiallyOwned: true, MutexName, out createdNew);
         if (!createdNew)
         {
-            // A live instance holds the mutex. If it answers the ping it's
-            // healthy → exit. If it's hung (no answer) it would otherwise brick
-            // every relaunch, so kill it and take over the mutex.
+            // Live instance holds the mutex: hand off if it answers the ping,
+            // else it's hung — kill it and take over so relaunch isn't bricked.
             if (SingleInstanceService.TryPingExisting())
                 return 0;
             SingleInstanceService.KillStaleInstances();
@@ -36,9 +29,8 @@ public static class Program
             catch (AbandonedMutexException) { /* previous owner died — now ours */ }
         }
 
-        // Install native crash capture before XAML init so any fail-fast /
-        // access violation from the WinUI input stack leaves a minidump +
-        // log breadcrumb instead of the process silently vanishing.
+        // Install native crash capture before XAML init so a fail-fast / AV
+        // leaves a minidump + breadcrumb instead of vanishing silently.
         CrashHandler.Install();
 
         try

@@ -22,10 +22,8 @@ namespace Clipsy.Views.Settings;
 
 public sealed partial class SettingsWindow : Window
 {
-    // Pool-of-one: a warmed, hidden, ready-to-show instance (_spare) plus the
-    // currently visible one (_open). Showing a freshly-warmed window is flash-
-    // free (proven); reusing one window after hide is not — so each open consumes
-    // the spare and a new spare is warmed for next time.
+    // Pool-of-one: a warmed hidden spare plus the visible window. Showing a
+    // freshly-warmed window is flash-free; reusing one after hide is not.
     private static SettingsWindow? _spare;
     private static SettingsWindow? _open;
 
@@ -38,10 +36,8 @@ public sealed partial class SettingsWindow : Window
     private Button? _listeningButton;
     private string? _listeningKey;
     private bool _setupDone;
-    // Starts true so RangeBase / ComboBox handlers that fire during
-    // InitializeComponent (from XAML attribute setters like Value="8")
-    // don't run MarkChanged() before the XAML tree is populated. Load()
-    // flips this off once the initial draft has been applied.
+    // True until Load() applies the initial draft, so handlers firing during
+    // InitializeComponent don't MarkChanged() before the tree is populated.
     private bool _loading = true;
 
     // Tessdata language management
@@ -51,7 +47,7 @@ public sealed partial class SettingsWindow : Window
     // FFmpeg download
     private CancellationTokenSource? _ffmpegCts;
 
-    // Autostart lives in registry (not AppSettings) — track init state separately
+    // Autostart is a scheduled task (not AppSettings) — track init state separately.
     private bool _initialAutostart;
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _notifyTimer;
@@ -139,9 +135,7 @@ public sealed partial class SettingsWindow : Window
             Diagnostics.Log("SettingsWindow.SetTitleBar", ex);
         }
 
-        // Tool-window so the off-screen warm render never flashes a taskbar
-        // button. No layered/cloak tricks — the no-flash comes from only ever
-        // SHOWING a freshly-warmed window (see Warm/Reveal), never reusing one.
+        // Tool-window so the off-screen warm render never flashes a taskbar button.
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
         try
         {
@@ -157,15 +151,12 @@ public sealed partial class SettingsWindow : Window
             if (_open == this) _open = null;
         };
 
-        // Keep the warmed-but-hidden spare in sync with language/theme changes
-        // made from the currently-open window. Without this the spare still
-        // holds the strings/colors from warm time, so reopening settings flashes
-        // the old language for a frame before Reveal re-localizes it.
+        // Keep the warmed-but-hidden spare's strings/colors in sync with changes
+        // from the open window, else reopening flashes the stale language/theme.
         SettingsService.Instance.SettingsChanged += OnGlobalSettingsChanged;
 
-        // Re-apply nav CheckStates once the tree is live: the initial pass in
-        // OnNavChecked runs during InitializeComponent when most radios are
-        // still null, and the theme is applied after parse.
+        // Re-apply nav CheckStates once the tree is live (initial pass runs while
+        // most radios are still null and before the theme is applied).
         if (Content is FrameworkElement rootFe)
             rootFe.Loaded += (_, _) => SnapNavVisuals();
     }
@@ -223,9 +214,8 @@ public sealed partial class SettingsWindow : Window
         catch (Exception ex) { Diagnostics.Show("SettingsWindow.SetupOnce", ex); }
     }
 
-    // Render the window fully, off-screen, WITHOUT activating it (Show(false) =
-    // no focus steal). This composites the XAML once so the swapchain is warm;
-    // the later on-screen Reveal then appears instantly, no black first frame.
+    // Composite the XAML once off-screen without activating (Show(false)) so the
+    // swapchain is warm and the later Reveal appears instantly, no black frame.
     private void Warm()
     {
         SetupOnce();
@@ -245,17 +235,11 @@ public sealed partial class SettingsWindow : Window
             // Refresh values in case settings changed since warm-up.
             _draft = SettingsService.Instance.Settings.Clone();
             Load();
-            // The prewarmed spare ran ApplyLocalization once at warm time. If the
-            // language was changed+saved from a previous open, the spare's static
-            // labels are stale — re-localize so reopened settings match the saved
-            // language. Also re-tint nav icons for the current theme.
+            // Re-localize/re-tint: the spare's labels may be stale from warm time.
             ApplyLocalization();
             RefreshNavIcons();
-            // Promote from tool-window (used to keep the off-screen warm render
-            // out of the taskbar) to a normal app window, so the visible
-            // settings window shows in the taskbar and Alt+Tab. The taskbar
-            // button is only re-evaluated while the window is hidden, so toggle
-            // visibility around the style change.
+            // Promote tool-window → app window so it shows in taskbar/Alt+Tab.
+            // The taskbar button re-evaluates only while hidden, so toggle around it.
             try
             {
                 _appWindow?.Hide();
@@ -322,11 +306,8 @@ public sealed partial class SettingsWindow : Window
         return UpdateService.CurrentVersion();
     }
 
-    // Seed every toggle's on/off value while still inside the constructor —
-    // before the controls enter the live visual tree. A state applied pre-load
-    // snaps without the knob-slide transition; Load() later re-applies the same
-    // values (no change → no animation). The slide is thus kept only for real
-    // user clicks. _loading is true here, so the Checked handlers no-op.
+    // Seed toggles pre-load (before they enter the visual tree) so they snap
+    // without the knob-slide; Load() re-applies the same values, no animation.
     private void PresetToggles()
     {
         _initialAutostart = AutostartService.IsEnabled();
@@ -353,9 +334,8 @@ public sealed partial class SettingsWindow : Window
         SelectSegment(_draft.Theme, ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight);
         SelectComboByTag(OcrEngineBox, _draft.OcrEngine);
         _tessSelectedCodes.Clear();
-        // Selection follows installation: every installed language is used
-        // for OCR. Persisted TesseractLanguages is still merged in for
-        // forward-compat with older configs.
+        // Every installed language is used for OCR; persisted codes merged in
+        // for forward-compat with older configs.
         foreach (var c in _draft.TesseractLanguages.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             _tessSelectedCodes.Add(c);
         foreach (var lang in TessdataService.Catalog)
@@ -373,10 +353,8 @@ public sealed partial class SettingsWindow : Window
         VideoFolderBox.Text = string.IsNullOrEmpty(_draft.VideoFolder)
             ? SettingsService.Instance.DefaultVideoFolder
             : _draft.VideoFolder!;
-        // Mirror the displayed defaults back into the draft so the post-Load
-        // _initial snapshot matches what Collect() will later read out of the
-        // TextBoxes. Otherwise the first MarkChanged() after Load() compares
-        // "default path" vs "" and falsely marks ss-folder/vid-folder dirty.
+        // Mirror displayed defaults back into the draft so the _initial snapshot
+        // matches Collect(), else the folder rows falsely mark dirty after Load().
         _draft.ScreenshotFolder = ScreenshotFolderBox.Text;
         _draft.VideoFolder      = VideoFolderBox.Text;
         RememberFolderSwitch.IsChecked = _draft.RememberLastFolder;
@@ -1026,10 +1004,8 @@ public sealed partial class SettingsWindow : Window
         RefreshNavIcons();
     }
 
-    // Re-tint the sidebar category icons for the current selection + theme.
-    // Icons are colored imperatively (accent for the active tab, dim for the
-    // rest), so after a theme switch their brushes go stale grey until the
-    // next nav click — callers must re-run this whenever the theme changes.
+    // Re-tint sidebar icons (imperatively colored) for the current selection +
+    // theme; must run on every theme change or their brushes go stale grey.
     private void RefreshNavIcons()
     {
         string? key = null;
@@ -1051,12 +1027,8 @@ public sealed partial class SettingsWindow : Window
         catch { }
     }
 
-    // Force the nav radios' CheckStates. Two reasons: the initial Checked
-    // state is not always applied when IsChecked is set in markup, and the
-    // Style-level Foreground (ThemeResource) resolves against the APP theme,
-    // not the window theme — labels showed the dark-theme grey until the
-    // first click applied a VisualState setter. GoToState re-applies the
-    // correctly themed setter immediately.
+    // Force nav radios' CheckStates: markup IsChecked isn't always applied, and
+    // the style Foreground resolves against the app theme until a state re-applies.
     private void SnapNavVisuals()
     {
         foreach (var rb in new[] { NavGeneral, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
@@ -1066,13 +1038,8 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    // Snap every ClipsyMiniToggle in a freshly-revealed pane to its final
-    // visual state WITHOUT transitions. Toggle Checked/Normal storyboards are
-    // started during initial Load while the pane is Collapsed; a collapsed
-    // element defers its storyboards, so the knob-slide replays the first time
-    // the pane is shown (ON = slides 0->16, OFF = no-op). GoToState(...,false)
-    // re-applies the current state instantly, cancelling the pending animation.
-    // Real user clicks happen while the pane is visible, so they still animate.
+    // Snap toggles in a freshly-revealed pane to their final state with no
+    // transition — storyboards deferred while the pane was Collapsed else replay.
     private static void SnapToggles(DependencyObject root)
     {
         int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
@@ -1081,9 +1048,7 @@ public sealed partial class SettingsWindow : Window
             var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
             if (child is RadioButton rb)
             {
-                // RadioButton IS-A ToggleButton but keeps Checked/Unchecked in a
-                // separate CheckStates group; forcing "Checked" + "Normal" (the
-                // ToggleButton flip below) left every radio visually selected.
+                // RadioButton keeps Checked/Unchecked in its own CheckStates group.
                 bool on = rb.IsChecked == true;
                 VisualStateManager.GoToState(rb, on ? "Unchecked" : "Checked", false);
                 VisualStateManager.GoToState(rb, on ? "Checked" : "Unchecked", false);
@@ -1091,11 +1056,8 @@ public sealed partial class SettingsWindow : Window
             else if (child is ToggleButton tb)
             {
                 bool on = tb.IsChecked == true;
-                // Flip to the opposite state first, then the correct one — both
-                // without transitions. GoToState is a no-op when already in the
-                // target state, so it would not cancel the transition queued
-                // (and deferred) during Load while the pane was Collapsed. The
-                // flip forces an instant re-apply, snapping the knob with no slide.
+                // Flip to the opposite state then back, both transition-less, to
+                // force an instant re-apply (GoToState no-ops if already in state).
                 VisualStateManager.GoToState(tb, on ? "Normal" : "Checked", false);
                 VisualStateManager.GoToState(tb, on ? "Checked" : "Normal", false);
             }

@@ -62,9 +62,8 @@ public partial class App : Application
         HostWindow.CaptureRequested += OnCaptureRequested;
         HostWindow.MenuRequested    += OnMenuRequested;
 
-        // Activate the host so the WinUI 3 XAML island starts. The window
-        // is offscreen + tool-window so it's invisible, but it must be
-        // active or the TaskbarIcon's commands never wire.
+        // Activate the host to start the XAML island; offscreen tool-window so
+        // invisible, but must be active or the TaskbarIcon commands never wire.
         HostWindow.Activate();
 
         // Pre-create the tray menu after the XAML island is live.
@@ -90,10 +89,8 @@ public partial class App : Application
         _ = CheckUpdatesIfDueAsync();
         StartUpdateTimer();
 
-        // Warm up the capture pipeline so the first PrintScreen press doesn't
-        // pay for JIT + WinUI 3 XAML island cold init + first GDI BitBlt at
-        // the same time. Runs on a background thread; we never touch the
-        // returned types from there — just force-load the assemblies.
+        // Warm the capture pipeline off-thread so the first PrintScreen doesn't
+        // pay JIT + XAML cold init + first BitBlt at once.
         System.Threading.Tasks.Task.Run(WarmupCapturePath);
     }
 
@@ -114,10 +111,8 @@ public partial class App : Application
         }
     }
 
-    // Periodic background re-check so a long-running tray instance still finds
-    // updates without a restart. The tick is frequent; CheckUpdatesIfDueAsync
-    // itself gates on the user's chosen interval (ShouldCheckNow), so the
-    // network call + toast only fire when actually due.
+    // Periodic re-check so a long-running tray instance finds updates without a
+    // restart; CheckUpdatesIfDueAsync itself gates on the chosen interval.
     private void StartUpdateTimer()
     {
         var dq = HostWindow?.DispatcherQueue;
@@ -199,9 +194,8 @@ public partial class App : Application
 
     private void OnSettingsRequested()
     {
-        // Defer past tray's nested TrackPopupMenu message pump.
-        // Creating a WinUI Window directly inside that nested pump
-        // makes XBF init NRE inside LoadComponent.
+        // Defer past the tray's nested TrackPopupMenu pump: creating a Window
+        // inside it makes XBF init NRE in LoadComponent.
         var dq = HostWindow?.DispatcherQueue;
         if (dq != null)
             dq.TryEnqueue(() => Clipsy.Views.Settings.SettingsWindow.ShowOrActivate());
@@ -218,10 +212,8 @@ public partial class App : Application
         bool ok = Hotkey!.Register(OnCaptureRequested, capture, OnRecordStopRequested, record, OnMicToggleRequested, mic);
         if (!ok)
         {
-            // RegisterHotKey collided with another app. Most common on Win11
-            // is the system Snipping Tool owning PrintScreen — surface this
-            // so users know to either rebind or disable the OS shortcut,
-            // instead of silently failing.
+            // Capture hotkey didn't register (another app owns it) — warn so the
+            // user can rebind instead of failing silently.
             System.Diagnostics.Debug.WriteLine(
                 $"[Clipsy] Capture hotkey '{capture}' not registered. Win11 Snipping Tool may own PrintScreen.");
             NotificationService.Warning("WarnHotkeyConflict");
