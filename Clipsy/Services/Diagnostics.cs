@@ -4,11 +4,8 @@ using System.Runtime.InteropServices;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Cheap diagnostics: appends to %LOCALAPPDATA%\Clipsy\debug.log and pops a
-/// native Win32 MessageBox so the user gets a copy-pasteable error even when
-/// the tray balloon notification is muted.
-/// </summary>
+/// <summary>Cheap diagnostics: appends to %LOCALAPPDATA%\Clipsy\debug.log and
+/// pops a native MessageBox so errors show even with toasts muted.</summary>
 public static class Diagnostics
 {
     private static readonly object _lock = new();

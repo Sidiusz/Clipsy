@@ -10,16 +10,12 @@ using WinRT.Interop;
 
 namespace Clipsy.Views.Recording;
 
-/// <summary>
-/// Floating color-picker window opened by the recording HUD.
-/// Runs in its own HWND so it isn't clipped by the HUD's layered window.
-/// Excluded from screen capture via SetWindowDisplayAffinity.
-/// </summary>
+/// <summary>Floating color-picker for the recording HUD in its own HWND (so the
+/// HUD's layered window can't clip it); excluded from capture.</summary>
 public sealed partial class HudColorPickerWindow : Window
 {
-    // Width = StackPanel 240 + 2×12 padding. Height is measured dynamically via
-    // Root.SizeChanged — the window appears off-screen first, then repositions
-    // once WinUI has laid out the ColorPicker at its natural height.
+    // Width = 240 + 2×12 padding; height measured via Root.SizeChanged (appears
+    // off-screen first, then repositions once the ColorPicker is laid out).
     private const int LogicalW  = 268;
     private const int LogicalMaxH = 700; // generous off-screen height; trimmed by SizeChanged
     private const int AnchorGap = 6;
@@ -48,15 +44,10 @@ public sealed partial class HudColorPickerWindow : Window
         ColorPickerCtl.ColorCanceled  += () => { ColorCanceled?.Invoke(); HideWindow(); };
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // Public API
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Public API ───
 
-    /// <summary>
-    /// Show the picker floating near the given anchor rectangle (screen physical pixels).
-    /// The window first appears off-screen; OnRootSizeChanged repositions it once
-    /// WinUI has measured the ColorPicker's natural height.
-    /// </summary>
+    /// <summary>Show the picker near the anchor rect (screen px); appears off-screen
+    /// first, then OnRootSizeChanged repositions it once measured.</summary>
     public void ShowAt(Windows.UI.Color currentColor, int anchorX, int anchorY, int anchorW, int anchorH)
     {
         _colorOnOpen = currentColor;
@@ -100,9 +91,7 @@ public sealed partial class HudColorPickerWindow : Window
 
     public void HideWindow() => _appWindow.Hide();
 
-    // ──────────────────────────────────────────────────────────────────
-    // Event handlers
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Event handlers ───
 
     private void OnActivated(object sender, WindowActivatedEventArgs e)
     {
@@ -110,9 +99,7 @@ public sealed partial class HudColorPickerWindow : Window
             HideWindow();
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // Window setup
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Window setup ───
 
     private void ConfigureWindow()
     {
@@ -152,9 +139,7 @@ public sealed partial class HudColorPickerWindow : Window
         return dpi > 0 ? dpi / 96.0 : 1.0;
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // Win32
-    // ──────────────────────────────────────────────────────────────────
+    // ─── Win32 ───
 
     private const int    GWL_STYLE    = -16;
     private const int    GWL_EXSTYLE  = -20;

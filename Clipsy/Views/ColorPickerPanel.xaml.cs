@@ -6,10 +6,8 @@ using Windows.UI;
 
 namespace Clipsy.Views;
 
-/// <summary>
-/// Shared color-picker panel: spectrum, hex input, Cancel / Confirm, optional eyedropper.
-/// Used by CaptureOverlayWindow (canvas flyout) and HudColorPickerWindow (recording).
-/// </summary>
+/// <summary>Shared color-picker panel (spectrum, hex, Cancel/Confirm, optional
+/// eyedropper) used by the capture overlay and the recording HUD.</summary>
 public sealed partial class ColorPickerPanel : UserControl
 {
     /// Fired on every ColorPicker drag — live preview only, don't commit yet.

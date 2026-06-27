@@ -18,9 +18,8 @@ public sealed partial class CaptureOverlayWindow
     // CommitText agree on the visual offset between the box and the glyph.
     private static readonly Thickness TextEntryPadding = new(4, 2, 4, 2);
 
-    // Drag handle that sits above the active TextBox so the user can move
-    // the in-progress text around the screen before committing it. Tracked
-    // so CancelText / CommitText can find and remove it.
+    // Drag handle above the active TextBox to move in-progress text before
+    // commit; tracked so CancelText / CommitText can remove it.
     private Border? _activeDragHandle;
     private bool _draggingActiveText;
     private Point _dragStartPointer;
@@ -47,9 +46,8 @@ public sealed partial class CaptureOverlayWindow
             FontSize = _drawing.Settings.TextSize,
             Padding = TextEntryPadding,
         };
-        // Offset so the first glyph's optical center sits on the click point
-        // instead of the TextBox top-left corner. Adjusts again on the first
-        // keystroke once the actual typed character is known.
+        // Offset so the first glyph's center sits on the click point; re-adjusts
+        // on the first keystroke once the typed character is known.
         double tbLeft = pos.X - TextEntryPadding.Left - glyphW / 2;
         double tbTop  = pos.Y - TextEntryPadding.Top  - glyphH / 2;
         Canvas.SetLeft(tb, tbLeft);
@@ -77,9 +75,8 @@ public sealed partial class CaptureOverlayWindow
         tb.PointerReleased += (_, ev) => ev.Handled = true;
         DrawingCanvas.IsHitTestVisible = true;
 
-        // Drag handle: small pill above the textbox. Click-drag moves the
-        // textbox to a new screen position. Neutral dark grey + Fluent Move
-        // glyph so it doesn't read as a close/danger button.
+        // Drag handle: small pill above the textbox; click-drag moves it. Neutral
+        // grey + Move glyph so it doesn't read as a close/danger button.
         var handle = new Border
         {
             Background = new SolidColorBrush(Color.FromArgb(0xE0, 0x2E, 0x2E, 0x32)),
@@ -169,9 +166,8 @@ public sealed partial class CaptureOverlayWindow
         double newTop  = _activeTextAnchor.Y - TextEntryPadding.Top  - gh / 2;
         Canvas.SetLeft(_activeTextBox, newLeft);
         Canvas.SetTop(_activeTextBox,  newTop);
-        // Drag handle was anchored to the pre-recenter position, so it would
-        // visibly jump apart from the box on the first keystroke. Move it
-        // with the box.
+        // Move the handle with the box; it was anchored to the pre-recenter
+        // position and visibly jumped apart on the first keystroke.
         if (_activeDragHandle != null)
         {
             Canvas.SetLeft(_activeDragHandle, newLeft);
