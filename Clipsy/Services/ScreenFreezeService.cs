@@ -9,20 +9,16 @@ using Windows.Storage.Streams;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Captures a still image of the virtual screen (all monitors) and exposes
-/// per-monitor geometry. Output is a PNG byte buffer to keep the pipeline
-/// XAML-friendly (BitmapImage can decode from a stream).
-/// </summary>
+/// <summary>Captures a still of the virtual screen (all monitors) plus
+/// per-monitor geometry as a raw image buffer for the XAML pipeline.</summary>
 public sealed class ScreenFreezeService
 {
     public sealed record MonitorInfo(int Index, Rectangle Bounds, bool IsPrimary);
 
     public sealed class FrozenFrame
     {
-        // BMP-encoded frame. PNG encoding of a full 1440p/4K virtual screen
-        // takes seconds and delayed overlay open after PrintScreen; BMP is a
-        // raw memcpy both ways and decodes instantly. Buffer is transient.
+        // BMP-encoded: PNG of a full 4K virtual screen takes seconds; BMP is a
+        // raw memcpy and decodes instantly. Buffer is transient.
         public required byte[] ImageBytes { get; init; }
         public required Rectangle VirtualBounds { get; init; }
         public required IReadOnlyList<MonitorInfo> Monitors { get; init; }

@@ -7,11 +7,8 @@ using System.Threading.Tasks;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Save dialog backed by Win32 GetSaveFileNameW. We do not use
-/// FileSavePicker because that API can't point at an arbitrary folder,
-/// only at the PickerLocationId enum.
-/// </summary>
+/// <summary>Save dialog via Win32 GetSaveFileNameW (WinRT FileSavePicker can't
+/// target an arbitrary folder, and is broker-blocked when elevated).</summary>
 public static class SaveDialogService
 {
     public sealed record SaveFilter(string Label, string Pattern);

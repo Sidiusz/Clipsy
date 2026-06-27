@@ -23,11 +23,8 @@ public sealed record UpdateCheckResult(UpdateCheckStatus Status, UpdateInfo? Inf
 public static class UpdateService
 {
     private const string ApiLatestUrl  = "https://api.github.com/repos/Sidiusz/Clipsy/releases/latest";
-    // Public web redirect: github.com/.../releases/latest 302s to
-    // /releases/tag/<tag> when a release exists, or /releases when none does.
-    // Lives on github.com (not api.github.com), so it is unaffected by the
-    // unauthenticated API rate limit / 403s that block the API endpoint from
-    // some networks — and reachable wherever release downloads already work.
+    // github.com/.../releases/latest 302s to the tagged release; on github.com
+    // (not the API), so it dodges the unauthenticated API rate-limit/403s.
     private const string WebLatestUrl  = "https://github.com/Sidiusz/Clipsy/releases/latest";
     private const string ReleasesPage  = "https://github.com/Sidiusz/Clipsy/releases";
     private static readonly HttpClient _http;
@@ -162,11 +159,8 @@ public static class UpdateService
         }
     }
 
-    /// <summary>
-    /// Downloads the release installer to %TEMP% and launches it. Returns the
-    /// started installer process on success so the caller can exit the app
-    /// (the running exe must be released before the installer overwrites it).
-    /// </summary>
+    /// <summary>Downloads the installer to %TEMP% and launches it; returns the
+    /// process so the caller can exit (the exe must release before overwrite).</summary>
     public static async Task<bool> DownloadAndLaunchInstallerAsync(UpdateInfo info)
     {
         if (string.IsNullOrEmpty(info.InstallerUrl)) return false;

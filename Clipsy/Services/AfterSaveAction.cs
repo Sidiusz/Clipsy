@@ -6,12 +6,8 @@ namespace Clipsy.Services;
 
 public static class AfterSaveAction
 {
-    /// <summary>
-    /// Apply the user's "after save" preference to the just-written file.
-    /// "open-file"   - launches the file with the default associated app.
-    /// "open-folder" - opens Explorer and selects the file.
-    /// "nothing"     - no-op.
-    /// </summary>
+    /// <summary>Apply the "after save" preference: open-file, open-folder
+    /// (select in Explorer), or nothing.</summary>
     public static void Run(string filePath, string? action)
     {
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;

@@ -11,19 +11,8 @@ using Windows.Storage;
 
 namespace Clipsy.Services;
 
-/// <summary>
-/// Dependency-free animated GIF encoder used as the fallback when FFmpeg is
-/// not installed in the app. (When FFmpeg is available the export goes through
-/// <see cref="FFmpegService.ConvertToGifAsync"/> instead.)
-///
-/// Pipeline, honouring the GIF settings (GifFps / GifColors / GifDither):
-///   1. Extract frames from the source MP4 at GifFps via MediaComposition.
-///   2. Build one global palette (median-cut) of up to GifColors entries.
-///   3. Map each frame to palette indices, optionally with Floyd–Steinberg
-///      dithering.
-///   4. Write the GIF stream by hand (LZW image data, NETSCAPE loop, per-frame
-///      delay from GifFps).
-/// </summary>
+/// <summary>Dependency-free animated GIF encoder (fallback when FFmpeg is absent):
+/// MediaComposition frames → median-cut palette → optional dither → hand-written LZW.</summary>
 public static class NativeGifEncoder
 {
     // Cap on extracted frames to bound memory/time for long clips.

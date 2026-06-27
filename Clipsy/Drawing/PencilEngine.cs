@@ -4,14 +4,8 @@ using System.Drawing;
 
 namespace Clipsy.Drawing;
 
-/// <summary>
-/// Surface-agnostic pencil + eraser logic. Owns the stroke list, current
-/// brush settings, and the cursor position. Both the WinUI capture overlay
-/// and the Win32 layered recording overlay subscribe via <see cref="Changed"/>
-/// and re-paint from <see cref="Strokes"/> on each tick. The engine itself
-/// never touches a rendering API, so it can be reused unchanged on any
-/// surface (XAML Canvas, GDI DIB, future Direct2D, etc.).
-/// </summary>
+/// <summary>Surface-agnostic pencil + eraser logic (stroke list, brush, cursor).
+/// Subscribers repaint from <see cref="Strokes"/>; never touches a rendering API.</summary>
 public sealed class PencilEngine
 {
     private const int MinThickness = 1;
