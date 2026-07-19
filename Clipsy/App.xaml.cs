@@ -16,6 +16,7 @@ public partial class App : Application
 
     private Clipsy.Views.TrayMenuWindow? _trayMenu;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _updateTimer;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _idleTimer;
 
     public App()
     {
@@ -72,8 +73,9 @@ public partial class App : Application
         _trayMenu.OpenScreenshotsFolderClicked+= OnOpenFolderRequested;
         _trayMenu.OpenVideoFolderClicked      += OnOpenVideoFolderRequested;
         _trayMenu.SettingsClicked             += OnSettingsRequested;
-        _trayMenu.UpdateStatusClicked         += OnSettingsRequested;
+        _trayMenu.UpdateStatusClicked         += () => UpdateManager.PrimaryAction();
         _trayMenu.ExitClicked                 += OnExitRequested;
+        UpdateManager.Init(HostWindow.DispatcherQueue);
         ThemeService.Register(HostWindow.Content as Microsoft.UI.Xaml.FrameworkElement);
 
         SingleInstanceService.StartServer();
@@ -122,60 +124,16 @@ public partial class App : Application
         _updateTimer.IsRepeating = true;
         _updateTimer.Tick += (_, _) => _ = CheckUpdatesIfDueAsync();
         _updateTimer.Start();
+
+        // Separate fast tick: auto-download a pending update once the PC is idle.
+        _idleTimer = dq.CreateTimer();
+        _idleTimer.Interval = TimeSpan.FromSeconds(15);
+        _idleTimer.IsRepeating = true;
+        _idleTimer.Tick += (_, _) => UpdateManager.MaybeAutoDownload();
+        _idleTimer.Start();
     }
 
-    public async Task CheckUpdatesIfDueAsync(bool force = false)
-    {
-        try
-        {
-            var s = SettingsService.Instance.Settings;
-            if (!force)
-            {
-                if (s.UpdateInterval == "never") return;
-                if (!UpdateService.ShouldCheckNow(s.UpdateInterval, s.LastUpdateCheckUtc)) return;
-            }
-
-            _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Checking);
-
-            var result = await UpdateService.CheckLatestAsync();
-            s.LastUpdateCheckUtc = DateTime.UtcNow;
-            SettingsService.Instance.Save();
-
-            if (result.Status == UpdateCheckStatus.Failed)
-            {
-                if (force) NotificationService.Warning("UpdateCheckFailed");
-                _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Failed);
-                return;
-            }
-            var info = result.Info;
-            if (info == null || !UpdateService.IsNewer(info.Version, UpdateService.CurrentVersion()))
-            {
-                if (force) NotificationService.Info("UpdateUpToDate");
-                _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.UpToDate);
-                return;
-            }
-            if (!force && info.Version == s.SkippedVersion)
-            {
-                _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.UpToDate);
-                return;
-            }
-            var version = info.Version;
-            NotificationService.UpdateAvailable(
-                info,
-                Strings.Get("UpdateAvailable"),
-                skipVersion: () =>
-                {
-                    SettingsService.Instance.Settings.SkippedVersion = version;
-                    SettingsService.Instance.Save();
-                });
-            _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Available, info.Version);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Update check pipeline failed: {ex.Message}");
-            _trayMenu?.SetUpdateStatus(Clipsy.Views.TrayUpdateStatus.Failed);
-        }
-    }
+    public Task CheckUpdatesIfDueAsync(bool force = false) => UpdateManager.CheckAsync(force);
 
     private void OnMenuRequested()
     {

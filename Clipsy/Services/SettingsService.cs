@@ -17,6 +17,7 @@ public sealed class AppSettings
     public string? LastScreenshotFolder { get; set; }
     public string? LastVideoFolder { get; set; }
     public string UpdateInterval { get; set; } = "daily";   // hourly / daily / weekly / monthly / never
+    public bool AutoDownloadUpdates { get; set; } = true;   // download installer when PC is idle
     public string AfterSaveAction { get; set; } = "nothing"; // open-file / open-folder / nothing
 
     // Screenshot

@@ -161,7 +161,7 @@ public static class UpdateService
 
     /// <summary>Downloads the installer to %TEMP%; returns its path or null on
     /// failure. Kept separate from launch so callers can pre-fetch silently.</summary>
-    public static async Task<string?> DownloadInstallerAsync(UpdateInfo info)
+    public static async Task<string?> DownloadInstallerAsync(UpdateInfo info, IProgress<double>? progress = null)
     {
         if (string.IsNullOrEmpty(info.InstallerUrl)) return null;
         try
@@ -172,9 +172,19 @@ public static class UpdateService
             using (var response = await _http.GetAsync(info.InstallerUrl, HttpCompletionOption.ResponseHeadersRead))
             {
                 response.EnsureSuccessStatusCode();
+                long? total = response.Content.Headers.ContentLength;
                 await using var src = await response.Content.ReadAsStreamAsync();
                 await using var dst = File.Create(path);
-                await src.CopyToAsync(dst);
+                var buffer = new byte[81920];
+                long read = 0;
+                int n;
+                while ((n = await src.ReadAsync(buffer)) > 0)
+                {
+                    await dst.WriteAsync(buffer.AsMemory(0, n));
+                    read += n;
+                    if (total is > 0) progress?.Report((double)read / total.Value);
+                }
+                progress?.Report(1.0);
             }
 
             var fi = new FileInfo(path);

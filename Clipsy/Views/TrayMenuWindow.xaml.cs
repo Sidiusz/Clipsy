@@ -31,7 +31,6 @@ public sealed partial class TrayMenuWindow : Window
     private readonly AppWindow _appWindow;
     private bool _hiding;
     private bool _closed;
-    private TrayUpdateStatus _updateStatus = TrayUpdateStatus.Idle;
     private EventHandler<object>? _fadeHandler;
 
     private static readonly SolidColorBrush s_transparent = new(Colors.Transparent);
@@ -61,6 +60,9 @@ public sealed partial class TrayMenuWindow : Window
         // Re-localize when language flips so the next tray-menu open shows
         // the new strings without an app restart.
         SettingsService.Instance.SettingsChanged += OnSettingsChanged;
+
+        UpdateManager.StateChanged += RenderUpdate;
+        RenderUpdate();
     }
 
     private void OnSettingsChanged()
@@ -81,7 +83,7 @@ public sealed partial class TrayMenuWindow : Window
         {
             foreach (var row in _parts.Keys)
                 SetHover(row, false);
-            SetUpdateStatus(_updateStatus);
+            RenderUpdate();
         }
         catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.RefreshRowColors", ex); }
     }
@@ -180,50 +182,60 @@ public sealed partial class TrayMenuWindow : Window
         }
     }
 
-    public void SetUpdateStatus(TrayUpdateStatus status, string? newVersion = null)
+
+    // Renders the header update button from shared UpdateManager state:
+    // download → progress ring + percent → install.
+    private void RenderUpdate()
     {
-        _updateStatus = status;
-
-        var text3   = ThemeService.GetBrush("ClipsyText3Brush", Content as FrameworkElement);
-        var green   = ThemeService.GetBrush("ClipsySuccessBrush", Content as FrameworkElement);
-        var red     = ThemeService.GetBrush("ClipsyDangerBrush", Content as FrameworkElement);
-        var warning = ThemeService.GetBrush("ClipsyWarningBrush", Content as FrameworkElement);
-
-        switch (status)
+        try
         {
-            case TrayUpdateStatus.Checking:
-                UpdateRow.Visibility     = Visibility.Visible;
-                UpdateRow.IsHitTestVisible = false;
-                UpdateRowIcon.Glyph      = "";
-                UpdateRowIcon.Foreground = text3;
-                UpdateRowText.Text       = Strings.Get("TrayUpdateChecking");
-                UpdateRowText.Foreground = text3;
-                break;
+            var text3   = ThemeService.GetBrush("ClipsyText3Brush", Content as FrameworkElement);
+            var green   = ThemeService.GetBrush("ClipsySuccessBrush", Content as FrameworkElement);
+            var warning = ThemeService.GetBrush("ClipsyWarningBrush", Content as FrameworkElement);
 
-            case TrayUpdateStatus.Available:
-                UpdateRow.Visibility     = Visibility.Visible;
-                UpdateRow.IsHitTestVisible = true;
-                UpdateRowIcon.Glyph      = "";
-                UpdateRowIcon.Foreground = green;
-                UpdateRowText.Text       = newVersion != null
-                    ? $"v{newVersion} — {Strings.Get("TrayUpdateAvailable")}"
-                    : Strings.Get("TrayUpdateAvailable");
-                UpdateRowText.Foreground = green;
-                break;
+            void Icon(string glyph, Microsoft.UI.Xaml.Media.Brush brush, bool hit, string tip)
+            {
+                UpdateRow.Visibility       = Visibility.Visible;
+                UpdateRow.IsHitTestVisible = hit;
+                UpdateRowIcon.Visibility   = Visibility.Visible;
+                UpdateRowIcon.Glyph        = glyph;
+                UpdateRowIcon.Foreground   = brush;
+                UpdateRing.Visibility      = Visibility.Collapsed;
+                UpdatePct.Visibility       = Visibility.Collapsed;
+                ToolTipService.SetToolTip(UpdateRow, tip);
+            }
 
-            case TrayUpdateStatus.Failed:
-                UpdateRow.Visibility     = Visibility.Visible;
-                UpdateRow.IsHitTestVisible = true;
-                UpdateRowIcon.Glyph      = "";
-                UpdateRowIcon.Foreground   = warning;
-                UpdateRowText.Text         = string.Empty;
-
-                break;
-
-            default: // UpToDate / Idle
-                UpdateRow.Visibility = Visibility.Collapsed;
-                break;
+            switch (UpdateManager.Phase)
+            {
+                case UpdatePhase.Checking:
+                    Icon("", text3, false, Strings.Get("TrayUpdateChecking"));
+                    break;
+                case UpdatePhase.Available:
+                    Icon("", green, true, Strings.Get("TrayUpdateAvailable"));
+                    break;
+                case UpdatePhase.Downloading:
+                    UpdateRow.Visibility       = Visibility.Visible;
+                    UpdateRow.IsHitTestVisible = false;
+                    UpdateRowIcon.Visibility   = Visibility.Collapsed;
+                    UpdateRing.Visibility      = Visibility.Visible;
+                    UpdateRing.Value           = Math.Clamp(UpdateManager.Progress * 100.0, 0, 100);
+                    UpdatePct.Visibility       = Visibility.Visible;
+                    UpdatePct.Text             = ((int)(UpdateManager.Progress * 100)).ToString();
+                    UpdatePct.Foreground       = green;
+                    ToolTipService.SetToolTip(UpdateRow, Strings.Get("TrayUpdateDownloading"));
+                    break;
+                case UpdatePhase.Ready:
+                    Icon("", green, true, Strings.Get("TrayUpdateInstall"));
+                    break;
+                case UpdatePhase.Failed:
+                    Icon("", warning, true, Strings.Get("TrayUpdateFailed"));
+                    break;
+                default: // None / UpToDate
+                    UpdateRow.Visibility = Visibility.Collapsed;
+                    break;
+            }
         }
+        catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.RenderUpdate", ex); }
     }
 
     // ─── Window setup ───
@@ -363,7 +375,7 @@ public sealed partial class TrayMenuWindow : Window
         { HideMenu(); ExitClicked?.Invoke(); }
 
     private void OnUpdateRowTapped(object s, TappedRoutedEventArgs e)
-        { HideMenu(); UpdateStatusClicked?.Invoke(); }
+        { UpdateStatusClicked?.Invoke(); } // keep menu open to show download progress
 
     // ─── Win32 ───
 
