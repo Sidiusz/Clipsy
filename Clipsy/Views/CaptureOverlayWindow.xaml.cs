@@ -42,7 +42,7 @@ public sealed partial class CaptureOverlayWindow : Window
     private const double HandleSize = 10.0;
     private const double HandleHitInflate = 6.0;
 
-    private readonly ScreenFreezeService.FrozenFrame _frame;
+    private ScreenFreezeService.FrozenFrame _frame;
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
     private readonly DrawingController _drawing;
@@ -152,6 +152,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
         BuildScreenMenu();
         Activated += OnActivated;
+        Closed += OnOverlayClosed;
         RootGrid.SizeChanged += OnRootGridSizeChanged;
         // Frame is decoded synchronously, so the 2nd composition tick is
         // guaranteed to contain it — uncloak then. No async-decode race.
@@ -440,6 +441,39 @@ public sealed partial class CaptureOverlayWindow : Window
     private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
     {
         UpdateDimGeometry(_hasSelection ? _selectionRect : null);
+    }
+
+    // WinUI 3 retains the Window after Close, so its full-screen frozen bitmap,
+    // BMP buffer and composition surface would leak ~150 MB per capture. Null
+    // every heavy field so they become collectible even if the shell lingers.
+    private void OnOverlayClosed(object sender, WindowEventArgs e)
+    {
+        _scanTimer?.Stop();
+        _hoverTimer?.Stop();
+        if (_selectionRenderHooked)
+        {
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSelectionRenderTick;
+            _selectionRenderHooked = false;
+        }
+
+        _eyedropperBitmap?.Dispose();
+        _eyedropperBitmap = null;
+        _eyedropperPixels = null;
+
+        try
+        {
+            FrozenImage.Source = null;
+            MagBrush.ImageSource = null;
+            _magBitmap = null;
+            DrawingCanvas.Children.Clear();
+            CursorPreviewLayer.Children.Clear();
+            DimGeometry.Children.Clear();
+            RootGrid.Children.Clear();
+            this.Content = null;
+        }
+        catch { }
+
+        _frame = null!;
     }
 
     private void TryLoadFrozenImage()
