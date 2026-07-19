@@ -56,6 +56,9 @@ public sealed partial class CaptureOverlayWindow
         _activeTextBox = tb;
         _activeTextAnchor = pos;
         _activeTextAnchorApplied = false;
+        // DirectWrite loads a freshly-picked family async; the box can render the
+        // fallback first and never re-layout. Re-assign once loaded to force it.
+        tb.Loaded += (_, _) => { tb.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(_drawing.Settings.TextFont); };
         tb.LostFocus += (_, _) =>
         {
             // Don't commit while the user is dragging the handle — focus moves
