@@ -342,6 +342,8 @@ public static class Strings
         ["ToastDownload"]           = New("Download update",                               "Скачать обновление"),
         ["ToastSkipVersion"]        = New("Skip this version",                             "Пропустить эту версию"),
         ["ToastUpdateDownloading"]  = New("Downloading update…",                           "Скачивание обновления…"),
+        ["ToastUpdateReady"]        = New("Update ready to install",                       "Обновление готово к установке"),
+        ["ToastInstallNow"]         = New("Install now",                                   "Установить сейчас"),
         ["ToastUpdateDownloadFailed"] = New("Update download failed — opening release page", "Не удалось скачать обновление — открываю страницу релиза"),
         ["ToastGetFfmpeg"]          = New("Get FFmpeg in settings",                        "Скачать FFmpeg в настройках"),
         ["WarnSavedAsMp4"]          = New("{0} export needs FFmpeg — saved as MP4 instead ({1}). Install FFmpeg in settings.",
