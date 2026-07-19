@@ -374,6 +374,7 @@ public sealed partial class SettingsWindow : Window
         UpdateJpgQualityRowVisibility();
 
         SelectComboByTag(AfterSaveBox, _draft.AfterSaveAction);
+        SelectComboByTag(EyedropperModBox, _draft.EyedropperModifier);
         SelectComboByTag(UpdateIntervalBox, _draft.UpdateInterval);
 
         NotifyMasterSwitch.IsChecked     = _draft.NotificationsEnabled;
@@ -454,6 +455,7 @@ public sealed partial class SettingsWindow : Window
         _draft.CaptureVideoCursor = VideoCursorSwitch.IsChecked == true;
         _draft.JpgQuality = (int)JpgQualitySlider.Value;
         _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
+        _draft.EyedropperModifier = SelectedComboTag(EyedropperModBox);
         _draft.UpdateInterval = SelectedComboTag(UpdateIntervalBox);
 
         _draft.NotificationsEnabled   = NotifyMasterSwitch.IsChecked    == true;
@@ -637,6 +639,7 @@ public sealed partial class SettingsWindow : Window
         if (_draft.CaptureVideoCursor != _initial.CaptureVideoCursor) _dirty.Add("vid-cursor");
         if (_draft.JpgQuality != _initial.JpgQuality) _dirty.Add("jpg-q");
         if (_draft.AfterSaveAction != _initial.AfterSaveAction) _dirty.Add("after-save");
+        if (_draft.EyedropperModifier != _initial.EyedropperModifier) _dirty.Add("eyedropper-mod");
         if (_draft.UpdateInterval != _initial.UpdateInterval) _dirty.Add("update-int");
         if (_draft.NotificationsEnabled  != _initial.NotificationsEnabled  ||
             _draft.NotifyScreenshotSaved != _initial.NotifyScreenshotSaved ||

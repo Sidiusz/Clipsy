@@ -459,6 +459,28 @@
                                             <ComboBoxItem x:Name="AfterOpenFolder" Content="Open folder" Tag="open-folder" />
                                         </ComboBox>
                                     </Grid>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblEyedropperMod" Text="Eyedropper modifier"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperEyedropperMod"
+                                                       Text="Hold this key while a draw tool is active to pick a color."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="EyedropperModBox" Grid.Column="1" Width="240" HorizontalAlignment="Right"
+                                                  VerticalAlignment="Center"
+                                                  SelectionChanged="OnAnyControlChanged">
+                                            <ComboBoxItem x:Name="EyedropperModAlt" Content="Alt" Tag="Alt" />
+                                            <ComboBoxItem x:Name="EyedropperModCtrl" Content="Ctrl" Tag="Ctrl" />
+                                        </ComboBox>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 
