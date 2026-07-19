@@ -25,6 +25,8 @@ public static class ToastService
         // When true the toast never auto-dismisses — it stays until the user
         // clicks an action or Close. Used for update prompts.
         public bool    Persistent      { get; init; }
+        // Auto-dismiss delay in seconds for non-persistent toasts (default 4).
+        public int     DismissSeconds  { get; init; } = 4;
     }
 
     // Mutated on UI thread only.

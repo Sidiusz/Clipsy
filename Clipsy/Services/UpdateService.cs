@@ -159,11 +159,11 @@ public static class UpdateService
         }
     }
 
-    /// <summary>Downloads the installer to %TEMP% and launches it; returns the
-    /// process so the caller can exit (the exe must release before overwrite).</summary>
-    public static async Task<bool> DownloadAndLaunchInstallerAsync(UpdateInfo info)
+    /// <summary>Downloads the installer to %TEMP%; returns its path or null on
+    /// failure. Kept separate from launch so callers can pre-fetch silently.</summary>
+    public static async Task<string?> DownloadInstallerAsync(UpdateInfo info)
     {
-        if (string.IsNullOrEmpty(info.InstallerUrl)) return false;
+        if (string.IsNullOrEmpty(info.InstallerUrl)) return null;
         try
         {
             var fileName = $"ClipsySetup-{info.Version}.exe";
@@ -178,8 +178,22 @@ public static class UpdateService
             }
 
             var fi = new FileInfo(path);
-            if (!fi.Exists || fi.Length < 1024) return false;
+            return (fi.Exists && fi.Length >= 1024) ? path : null;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Update download failed: {ex.Message}");
+            Diagnostics.Log("UpdateService.DownloadInstaller", ex);
+            return null;
+        }
+    }
 
+    /// <summary>Launches a downloaded installer; the caller must exit so the exe
+    /// can overwrite the running app.</summary>
+    public static bool LaunchInstaller(string path)
+    {
+        try
+        {
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = path,
@@ -189,8 +203,7 @@ public static class UpdateService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Update download failed: {ex.Message}");
-            Diagnostics.Log("UpdateService.DownloadAndLaunchInstaller", ex);
+            Diagnostics.Log("UpdateService.LaunchInstaller", ex);
             return false;
         }
     }

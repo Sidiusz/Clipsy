@@ -24,7 +24,8 @@ public static class NotificationService
         string? action2Tooltip      = null,
         Action? action2             = null,
         bool    action2IsPrimary    = false,
-        bool    persistent          = false)
+        bool    persistent          = false,
+        int     dismissSeconds      = 4)
     {
         Posted?.Invoke(new Notification(level, title, body ?? string.Empty));
 
@@ -42,6 +43,7 @@ public static class NotificationService
             Action2Callback = action2,
             Action2IsPrimary = action2IsPrimary,
             Persistent      = persistent,
+            DismissSeconds  = dismissSeconds,
         });
     }
 
@@ -129,38 +131,35 @@ public static class NotificationService
     // ── Update available ─────────────────────────────────────────
 
     public static void UpdateAvailable(UpdateInfo info, string notes, Action skipVersion)
-    {
-        Post(
-            NotificationLevel.Info,
-            $"Clipsy {info.Version}",
-            notes,
-            ToastCategory.Update,
-            action1Icon:     "\xE769",
-            action1Tooltip:  Strings.Get("ToastSkipVersion"),
-            action1:         skipVersion,
-            action2Icon:     "\xE896",
-            action2Tooltip:  Strings.Get("ToastDownload"),
-            action2:         () => StartUpdate(info),
-            action2IsPrimary: true,
-            persistent:      true);
-    }
+        => _ = PrepareAndPromptAsync(info, notes, skipVersion);
 
-    // Download the installer asset and hand off (app must exit to be overwritten);
-    // missing asset or failed download falls back to the release page.
-    private static async void StartUpdate(UpdateInfo info)
+    // Silently pre-fetch the installer, then prompt to install (auto-dismiss 30 s).
+    // No installer asset or a failed download falls back to the release page.
+    private static async System.Threading.Tasks.Task PrepareAndPromptAsync(UpdateInfo info, string notes, Action skipVersion)
     {
-        if (!string.IsNullOrEmpty(info.InstallerUrl))
+        string? installerPath = await UpdateService.DownloadInstallerAsync(info);
+        if (installerPath != null)
         {
-            Post(NotificationLevel.Info, Strings.Get("ToastUpdateDownloading"), null, ToastCategory.Update);
-            bool ok = await UpdateService.DownloadAndLaunchInstallerAsync(info);
-            if (ok)
-            {
-                try { Microsoft.UI.Xaml.Application.Current.Exit(); } catch { }
-                return;
-            }
-            Post(NotificationLevel.Warning, Strings.Get("ToastUpdateDownloadFailed"), null, ToastCategory.Update);
+            Post(NotificationLevel.Info, $"Clipsy {info.Version}", Strings.Get("ToastUpdateReady"),
+                ToastCategory.Update,
+                action1Icon: "\xE769", action1Tooltip: Strings.Get("ToastSkipVersion"), action1: skipVersion,
+                action2Icon: "\xE896", action2Tooltip: Strings.Get("ToastInstallNow"),
+                action2: () =>
+                {
+                    if (UpdateService.LaunchInstaller(installerPath))
+                        try { Microsoft.UI.Xaml.Application.Current.Exit(); } catch { }
+                },
+                action2IsPrimary: true, dismissSeconds: 30);
         }
-        OpenUrl(info.Url);
+        else
+        {
+            Post(NotificationLevel.Info, $"Clipsy {info.Version}", notes,
+                ToastCategory.Update,
+                action1Icon: "\xE769", action1Tooltip: Strings.Get("ToastSkipVersion"), action1: skipVersion,
+                action2Icon: "\xE896", action2Tooltip: Strings.Get("ToastDownload"),
+                action2: () => OpenUrl(info.Url),
+                action2IsPrimary: true, dismissSeconds: 30);
+        }
     }
 
     // ── Private helpers ──────────────────────────────────────────
