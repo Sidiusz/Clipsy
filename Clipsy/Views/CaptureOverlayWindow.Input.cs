@@ -82,6 +82,12 @@ public sealed partial class CaptureOverlayWindow
         if (isDouble)
         {
             _lastClickTick = 0; // consume so a triple-click doesn't re-trigger
+            // Grab a committed text element to reposition it (no tool active).
+            if (TryGrabText(pos, e.Pointer))
+            {
+                e.Handled = true;
+                return;
+            }
             if (TrySelectMonitorAt(pos))
             {
                 e.Handled = true;
@@ -212,7 +218,39 @@ public sealed partial class CaptureOverlayWindow
             case InteractionMode.SelectingOcrText:
                 UpdateOcrDragSelection(pos);
                 break;
+            case InteractionMode.MovingText:
+                if (_movingText != null)
+                {
+                    double nx = pos.X - _movingTextGrab.X;
+                    double ny = pos.Y - _movingTextGrab.Y;
+                    _movingText.Position = new Point(nx, ny);
+                    Canvas.SetLeft(_movingText.Visual, nx);
+                    Canvas.SetTop(_movingText.Visual, ny);
+                }
+                break;
         }
+    }
+
+    // ---------- Move committed text ----------
+
+    private TextElement? _movingText;
+    private Point _movingTextGrab;
+
+    private bool TryGrabText(Point pos, Pointer pointer)
+    {
+        if (_drawing.Settings.Tool != ToolKind.None) return false;
+        for (int i = _drawing.Elements.Count - 1; i >= 0; i--)
+        {
+            if (_drawing.Elements[i] is TextElement te && te.HitTest(pos, 4))
+            {
+                _mode = InteractionMode.MovingText;
+                _movingText = te;
+                _movingTextGrab = new Point(pos.X - te.Position.X, pos.Y - te.Position.Y);
+                RootGrid.CapturePointer(pointer);
+                return true;
+            }
+        }
+        return false;
     }
 
     private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -268,6 +306,9 @@ public sealed partial class CaptureOverlayWindow
                 break;
             case InteractionMode.SelectingOcrText:
                 FinishOcrSelection(pos);
+                break;
+            case InteractionMode.MovingText:
+                _movingText = null;
                 break;
         }
 
