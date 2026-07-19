@@ -148,8 +148,12 @@ public sealed partial class SettingsWindow : Window
         {
             _tipTimer?.Stop();
             SettingsService.Instance.SettingsChanged -= OnGlobalSettingsChanged;
+            UpdateManager.StateChanged -= RenderUpdateStatus;
             if (_open == this) _open = null;
         };
+
+        UpdateManager.StateChanged += RenderUpdateStatus;
+        RenderUpdateStatus();
 
         // Keep the warmed-but-hidden spare's strings/colors in sync with changes
         // from the open window, else reopening flashes the stale language/theme.
@@ -325,6 +329,7 @@ public sealed partial class SettingsWindow : Window
         NotifyErrorsSwitch.IsChecked     = _draft.NotifyErrors;
         NotifyUpdateSwitch.IsChecked     = _draft.NotifyUpdateAvailable;
         NotifyHintsSwitch.IsChecked      = _draft.NotifyHints;
+        AutoDownloadSwitch.IsChecked     = _draft.AutoDownloadUpdates;
     }
 
     private void Load()
@@ -376,6 +381,7 @@ public sealed partial class SettingsWindow : Window
         SelectComboByTag(AfterSaveBox, _draft.AfterSaveAction);
         SelectComboByTag(EyedropperModBox, _draft.EyedropperModifier);
         SelectComboByTag(UpdateIntervalBox, _draft.UpdateInterval);
+        AutoDownloadSwitch.IsChecked = _draft.AutoDownloadUpdates;
 
         NotifyMasterSwitch.IsChecked     = _draft.NotificationsEnabled;
         NotifyScreenshotSwitch.IsChecked = _draft.NotifyScreenshotSaved;
@@ -457,6 +463,7 @@ public sealed partial class SettingsWindow : Window
         _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
         _draft.EyedropperModifier = SelectedComboTag(EyedropperModBox);
         _draft.UpdateInterval = SelectedComboTag(UpdateIntervalBox);
+        _draft.AutoDownloadUpdates = AutoDownloadSwitch.IsChecked == true;
 
         _draft.NotificationsEnabled   = NotifyMasterSwitch.IsChecked    == true;
         _draft.NotifyScreenshotSaved  = NotifyScreenshotSwitch.IsChecked == true;
@@ -641,6 +648,7 @@ public sealed partial class SettingsWindow : Window
         if (_draft.AfterSaveAction != _initial.AfterSaveAction) _dirty.Add("after-save");
         if (_draft.EyedropperModifier != _initial.EyedropperModifier) _dirty.Add("eyedropper-mod");
         if (_draft.UpdateInterval != _initial.UpdateInterval) _dirty.Add("update-int");
+        if (_draft.AutoDownloadUpdates != _initial.AutoDownloadUpdates) _dirty.Add("auto-dl");
         if (_draft.NotificationsEnabled  != _initial.NotificationsEnabled  ||
             _draft.NotifyScreenshotSaved != _initial.NotifyScreenshotSaved ||
             _draft.NotifyVideoSaved      != _initial.NotifyVideoSaved      ||
@@ -931,44 +939,51 @@ public sealed partial class SettingsWindow : Window
         return result == ContentDialogResult.Primary;
     }
 
-    private async void OnCheckUpdates(object sender, RoutedEventArgs e)
+    private void OnCheckUpdates(object sender, RoutedEventArgs e)
+        => _ = UpdateManager.CheckAsync(true);
+
+    private void OnUpdateActionClick(object sender, RoutedEventArgs e)
+        => UpdateManager.PrimaryAction();
+
+    // Mirrors the tray update button: shows phase, download percent, and a
+    // Download/Install action.
+    private void RenderUpdateStatus()
     {
         try
         {
-            ShowNotification("NotifyUpdateChecking", "info");
-            var result = await UpdateService.CheckLatestAsync();
-            if (result.Status == UpdateCheckStatus.Failed)
+            switch (UpdateManager.Phase)
             {
-                ShowNotification("NotifyUpdateFailed", "error");
-                return;
-            }
-            if (result.Status == UpdateCheckStatus.Found && result.Info != null &&
-                UpdateService.IsNewer(result.Info.Version, UpdateService.CurrentVersion()))
-            {
-                // Show the actionable update toast (Skip / Download / Close) — a
-                // passive "available" banner left the user with nowhere to go.
-                var info = result.Info;
-                ShowNotificationText(string.Format(Strings.Get("NotifyUpdateAvailable"), info.Version), "info");
-                NotificationService.UpdateAvailable(
-                    info,
-                    Strings.Get("UpdateAvailable"),
-                    skipVersion: () =>
-                    {
-                        SettingsService.Instance.Settings.SkippedVersion = info.Version;
-                        SettingsService.Instance.Save();
-                    });
-            }
-            else
-            {
-                // No releases, or the latest is not newer → up to date.
-                ShowNotification("NotifyUpdateUpToDate", "success");
+                case UpdatePhase.Available:
+                    UpdateStatusRow.Visibility = Visibility.Visible;
+                    UpdProgress.Visibility = Visibility.Collapsed;
+                    UpdStatusText.Text = Strings.Get("TrayUpdateAvailable");
+                    SetUpdActionText(Strings.Get("ToastDownload"));
+                    break;
+                case UpdatePhase.Downloading:
+                    UpdateStatusRow.Visibility = Visibility.Visible;
+                    UpdProgress.Visibility = Visibility.Visible;
+                    UpdProgress.Value = System.Math.Clamp(UpdateManager.Progress * 100.0, 0, 100);
+                    UpdStatusText.Text = $"{Strings.Get("TrayUpdateDownloading")} {(int)(UpdateManager.Progress * 100)}%";
+                    UpdActionBtn.Visibility = Visibility.Collapsed;
+                    break;
+                case UpdatePhase.Ready:
+                    UpdateStatusRow.Visibility = Visibility.Visible;
+                    UpdProgress.Visibility = Visibility.Collapsed;
+                    UpdStatusText.Text = Strings.Get("TrayUpdateInstall");
+                    SetUpdActionText(Strings.Get("ToastInstallNow"));
+                    break;
+                default: // None / Checking / UpToDate / Failed
+                    UpdateStatusRow.Visibility = Visibility.Collapsed;
+                    break;
             }
         }
-        catch (Exception ex)
-        {
-            Diagnostics.Log("SettingsWindow.OnCheckUpdates", ex);
-            ShowNotification("NotifyUpdateFailed", "error");
-        }
+        catch (Exception ex) { Diagnostics.Log("SettingsWindow.RenderUpdateStatus", ex); }
+    }
+
+    private void SetUpdActionText(string text)
+    {
+        UpdActionBtn.Visibility = Visibility.Visible;
+        UpdActionBtn.Content = text;
     }
 
     private void OnNavChecked(object sender, RoutedEventArgs e)

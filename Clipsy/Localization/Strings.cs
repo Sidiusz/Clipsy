@@ -22,7 +22,10 @@ public static class Strings
         ["TrayExit"]             = New("Exit",                        "Выход"),
         ["TrayReady"]            = New("ready",                       "готов"),
         ["TrayUpdateChecking"]   = New("Checking for updates…",       "Проверка обновлений…"),
-        ["TrayUpdateAvailable"]  = New("available",                   "доступно"),
+        ["TrayUpdateAvailable"]  = New("Update available — click to download", "Доступно обновление — нажмите, чтобы скачать"),
+        ["TrayUpdateDownloading"]= New("Downloading update…",         "Скачивание обновления…"),
+        ["TrayUpdateInstall"]    = New("Update ready — click to install", "Обновление готово — нажмите, чтобы установить"),
+        ["TrayUpdateFailed"]     = New("Update check failed — click to retry", "Ошибка обновления — нажмите для повтора"),
 
         // Capture overlay
         ["HintSelectArea"]      = New("Select area", "Выделите область"),

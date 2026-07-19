@@ -130,37 +130,9 @@ public static class NotificationService
 
     // ── Update available ─────────────────────────────────────────
 
-    public static void UpdateAvailable(UpdateInfo info, string notes, Action skipVersion)
-        => _ = PrepareAndPromptAsync(info, notes, skipVersion);
-
-    // Silently pre-fetch the installer, then prompt to install (auto-dismiss 30 s).
-    // No installer asset or a failed download falls back to the release page.
-    private static async System.Threading.Tasks.Task PrepareAndPromptAsync(UpdateInfo info, string notes, Action skipVersion)
-    {
-        string? installerPath = await UpdateService.DownloadInstallerAsync(info);
-        if (installerPath != null)
-        {
-            Post(NotificationLevel.Info, $"Clipsy {info.Version}", Strings.Get("ToastUpdateReady"),
-                ToastCategory.Update,
-                action1Icon: "\xE769", action1Tooltip: Strings.Get("ToastSkipVersion"), action1: skipVersion,
-                action2Icon: "\xE896", action2Tooltip: Strings.Get("ToastInstallNow"),
-                action2: () =>
-                {
-                    if (UpdateService.LaunchInstaller(installerPath))
-                        try { Microsoft.UI.Xaml.Application.Current.Exit(); } catch { }
-                },
-                action2IsPrimary: true, dismissSeconds: 30);
-        }
-        else
-        {
-            Post(NotificationLevel.Info, $"Clipsy {info.Version}", notes,
-                ToastCategory.Update,
-                action1Icon: "\xE769", action1Tooltip: Strings.Get("ToastSkipVersion"), action1: skipVersion,
-                action2Icon: "\xE896", action2Tooltip: Strings.Get("ToastDownload"),
-                action2: () => OpenUrl(info.Url),
-                action2IsPrimary: true, dismissSeconds: 30);
-        }
-    }
+    // Update flow lives in UpdateManager (tray + Settings); this only opens the
+    // release page when no installer asset is available to auto-download.
+    public static void OpenReleasePage(string url) => OpenUrl(url);
 
     // ── Private helpers ──────────────────────────────────────────
 

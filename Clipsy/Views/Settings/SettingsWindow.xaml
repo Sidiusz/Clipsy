@@ -541,6 +541,41 @@
                                             </Button>
                                         </StackPanel>
                                     </Grid>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblAutoDownload" Text="Auto-download updates"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperAutoDownload"
+                                                       Text="Download the installer automatically while the PC is idle."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="AutoDownloadSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAnyToggleChanged"
+                                                      VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Grid x:Name="UpdateStatusRow" ColumnSpacing="16" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="6" VerticalAlignment="Center">
+                                            <TextBlock x:Name="UpdStatusText" Style="{StaticResource ClipsyBodyStrong}" />
+                                            <ProgressBar x:Name="UpdProgress" Minimum="0" Maximum="100"
+                                                         Width="240" HorizontalAlignment="Left" Visibility="Collapsed" />
+                                        </StackPanel>
+                                        <Button x:Name="UpdActionBtn" Grid.Column="1"
+                                                Style="{StaticResource ClipsyButtonPrimary}"
+                                                Click="OnUpdateActionClick" VerticalAlignment="Center" />
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 

@@ -40,6 +40,12 @@
                       Margin="0,2,0,0">
                     <FontIcon x:Name="UpdateRowIcon" FontSize="18"
                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <ProgressRing x:Name="UpdateRing" Width="26" Height="26"
+                                  IsIndeterminate="False" Visibility="Collapsed"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="UpdatePct" Visibility="Collapsed" FontSize="9"
+                               FontFamily="{StaticResource ClipsyFontFamily}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <!-- Kept for code-behind compat; rendered off-screen. -->
                     <TextBlock x:Name="UpdateRowText" Visibility="Collapsed" />
                 </Grid>
