@@ -492,8 +492,6 @@ public sealed partial class CaptureOverlayWindow : Window
             _selectionRenderHooked = false;
         }
 
-        _eyedropperBitmap?.Dispose();
-        _eyedropperBitmap = null;
         _eyedropperPixels = null;
 
         try
