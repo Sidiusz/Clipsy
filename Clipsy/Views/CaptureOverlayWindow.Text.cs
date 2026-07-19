@@ -46,6 +46,10 @@ public sealed partial class CaptureOverlayWindow
             FontSize = _drawing.Settings.TextSize,
             Padding = TextEntryPadding,
         };
+        // Subtree-scoped implicit styles override the app-global ones that pin a
+        // default font on the TextBox's inner text host; set before it enters the
+        // tree so the template resolves them.
+        InstallScopedFont(tb, family);
         // Offset so the first glyph's center sits on the click point; re-adjusts
         // on the first keystroke once the typed character is known.
         double tbLeft = pos.X - TextEntryPadding.Left - glyphW / 2;
@@ -83,19 +87,19 @@ public sealed partial class CaptureOverlayWindow
             Background = new SolidColorBrush(Color.FromArgb(0xE0, 0x2E, 0x2E, 0x32)),
             BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x60, 0x60, 0x66)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(6, 2, 6, 2),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(10, 5, 10, 5),
             Child = new FontIcon
             {
                 Glyph = "", // Move (Segoe Fluent Icons)
                 FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
-                FontSize = 11,
+                FontSize = 16,
                 Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
             },
         };
         ToolTipService.SetToolTip(handle, "Drag to reposition");
         Canvas.SetLeft(handle, tbLeft);
-        Canvas.SetTop(handle, tbTop - 18); // sit just above the box
+        Canvas.SetTop(handle, tbTop - 30); // sit just above the box
         DrawingCanvas.Children.Add(handle);
         _activeDragHandle = handle;
 
@@ -113,10 +117,27 @@ public sealed partial class CaptureOverlayWindow
 
     private bool _liveFontApplied;
 
-    // This app's implicit ContentPresenter style pins a default font on the
-    // TextBox's inner text host (WinUI 3 doesn't inherit FontFamily into it),
-    // so setting TextBox.FontFamily alone leaves typed text on the default.
-    // Push the picked family onto every inner TextBlock/ContentPresenter.
+    // Install subtree-scoped implicit styles so the picked font wins over the
+    // app-global implicit styles that force a default font on the TextBox's
+    // inner text host (WinUI 3 does not inherit FontFamily into it).
+    private static void InstallScopedFont(TextBox tb, Microsoft.UI.Xaml.Media.FontFamily fam)
+    {
+        try
+        {
+            var rd = new ResourceDictionary();
+            void Add(System.Type t, Microsoft.UI.Xaml.DependencyProperty prop)
+            {
+                var st = new Style(t);
+                st.Setters.Add(new Setter(prop, fam));
+                rd.Add(t, st);
+            }
+            Add(typeof(TextBlock), TextBlock.FontFamilyProperty);
+            Add(typeof(ContentPresenter), ContentPresenter.FontFamilyProperty);
+            tb.Resources = rd;
+        }
+        catch { /* keep inherited */ }
+    }
+
     private void ReapplyLiveFont(TextBox tb)
     {
         try
@@ -210,7 +231,7 @@ public sealed partial class CaptureOverlayWindow
         if (_activeDragHandle != null)
         {
             Canvas.SetLeft(_activeDragHandle, newLeft);
-            Canvas.SetTop(_activeDragHandle, newTop - 18);
+            Canvas.SetTop(_activeDragHandle, newTop - 30);
         }
         _activeTextAnchorApplied = true;
     }

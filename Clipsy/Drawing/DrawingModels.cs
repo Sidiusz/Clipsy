@@ -224,7 +224,7 @@ public sealed class LineElement : DrawElement
 
 public sealed class TextElement : DrawElement
 {
-    public required Point Position { get; init; }
+    public required Point Position { get; set; }
     public required string Text { get; set; }
     public double FontSize { get; init; }
     public Size MeasuredSize { get; set; }
