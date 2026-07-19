@@ -64,10 +64,11 @@ public sealed partial class CaptureOverlayWindow
     // ─── Eyedropper ───
 
     private bool _eyedropperActive;
-    private System.Drawing.Bitmap? _eyedropperBitmap;
-    // Pre-copied pixel bytes for fast magnifier rendering (Format32bppArgb BGRA order)
+    // Pre-copied pixel bytes for fast magnifier rendering (Format32bppArgb BGRA
+    // order). The source GDI+ bitmap is dropped after this copy to save ~33 MB.
     private byte[]? _eyedropperPixels;
     private int     _eyedropperStride;
+    private int     _eyeW, _eyeH;
     private Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap? _magBitmap;
 
     private void OnEyedropperBtnClick(object sender, RoutedEventArgs e)
@@ -108,19 +109,21 @@ public sealed partial class CaptureOverlayWindow
         try
         {
             using var ms = new MemoryStream(_frame.ImageBytes);
-            _eyedropperBitmap = new System.Drawing.Bitmap(ms);
+            using var bmp = new System.Drawing.Bitmap(ms);
+            _eyeW = bmp.Width;
+            _eyeH = bmp.Height;
 
-            // Pre-copy all pixels once so UpdateMagnifier can read them without
-            // per-call LockBits overhead (Format32bppArgb = BGRA byte order).
-            var rect = new System.Drawing.Rectangle(0, 0, _eyedropperBitmap.Width, _eyedropperBitmap.Height);
-            var data = _eyedropperBitmap.LockBits(rect,
+            // Pre-copy all pixels once so sampling/magnifier read from the byte[]
+            // (Format32bppArgb = BGRA); the GDI+ bitmap is disposed right after.
+            var rect = new System.Drawing.Rectangle(0, 0, _eyeW, _eyeH);
+            var data = bmp.LockBits(rect,
                 System.Drawing.Imaging.ImageLockMode.ReadOnly,
                 System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             _eyedropperStride = data.Stride;
-            var byteCount = Math.Abs(data.Stride) * _eyedropperBitmap.Height;
+            var byteCount = Math.Abs(data.Stride) * _eyeH;
             _eyedropperPixels = new byte[byteCount];
             Marshal.Copy(data.Scan0, _eyedropperPixels, 0, byteCount);
-            _eyedropperBitmap.UnlockBits(data);
+            bmp.UnlockBits(data);
             // CopyFromScreen leaves alpha=0; force opaque so WriteableBitmap renders correctly.
             for (int i = 3; i < _eyedropperPixels.Length; i += 4) _eyedropperPixels[i] = 0xFF;
         }
@@ -146,7 +149,7 @@ public sealed partial class CaptureOverlayWindow
 
         // Render magnified region: srcSize = source pixels fitting the 128px
         // output at ~10× zoom, scaled by DpiScale for consistent zoom.
-        if (_eyedropperPixels == null || _magBitmap == null || _eyedropperBitmap == null) return;
+        if (_eyedropperPixels == null || _magBitmap == null) return;
 
         const int magPx  = 128;
         int srcSize = Math.Max(1, (int)Math.Round(magPx * DpiScale / 10.0));
@@ -154,8 +157,8 @@ public sealed partial class CaptureOverlayWindow
         var scale = DpiScale;
         int cx = (int)(cursorDip.X * scale);
         int cy = (int)(cursorDip.Y * scale);
-        int srcW   = _eyedropperBitmap.Width;
-        int srcH   = _eyedropperBitmap.Height;
+        int srcW   = _eyeW;
+        int srcH   = _eyeH;
         int stride = _eyedropperStride;
         int half   = srcSize / 2;
 
@@ -187,16 +190,12 @@ public sealed partial class CaptureOverlayWindow
 
     private Color SamplePixel(Point cursorDip)
     {
-        if (_eyedropperBitmap == null) return Microsoft.UI.Colors.Black;
+        if (_eyedropperPixels == null || _eyeW == 0) return Microsoft.UI.Colors.Black;
         var scale = DpiScale;
-        int px = (int)(cursorDip.X * scale);
-        int py = (int)(cursorDip.Y * scale);
-        if (px < 0) px = 0;
-        if (py < 0) py = 0;
-        if (px >= _eyedropperBitmap.Width)  px = _eyedropperBitmap.Width  - 1;
-        if (py >= _eyedropperBitmap.Height) py = _eyedropperBitmap.Height - 1;
-        var c = _eyedropperBitmap.GetPixel(px, py);
-        return Color.FromArgb(0xFF, c.R, c.G, c.B);
+        int px = Math.Clamp((int)(cursorDip.X * scale), 0, _eyeW - 1);
+        int py = Math.Clamp((int)(cursorDip.Y * scale), 0, _eyeH - 1);
+        int i = py * _eyedropperStride + px * 4; // BGRA
+        return Color.FromArgb(0xFF, _eyedropperPixels[i + 2], _eyedropperPixels[i + 1], _eyedropperPixels[i]);
     }
 
     private void ApplyPickedColor(Color c)
