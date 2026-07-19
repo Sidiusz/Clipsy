@@ -13,6 +13,10 @@ public static class AutostartService
     private const string LegacyRunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "Clipsy";
     private const string TaskName = "ClipsyAutostart";
+    // Installer reads this opt-out marker to decide whether to enable autostart
+    // by default; set only when the user turns autostart off in the app.
+    private const string SettingsKey = @"Software\Clipsy";
+    private const string OptOutValue = "AutostartOptOut";
 
     public static bool IsEnabled()
     {
@@ -42,15 +46,31 @@ public static class AutostartService
                            $"/SC ONLOGON /RU \"{user}\" /RL HIGHEST /F";
                 if (RunSchtasks(args) != 0)
                     Diagnostics.Log("AutostartService.SetEnabled: schtasks /Create non-zero exit");
+                SetOptOut(false);
             }
             else
             {
                 RunSchtasks($"/Delete /TN \"{TaskName}\" /F");
+                SetOptOut(true);
             }
         }
         catch (Exception ex)
         {
             Diagnostics.Log("AutostartService.SetEnabled", ex);
+        }
+    }
+
+    private static void SetOptOut(bool optedOut)
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(SettingsKey);
+            if (optedOut) key?.SetValue(OptOutValue, 1, RegistryValueKind.DWord);
+            else key?.DeleteValue(OptOutValue, throwOnMissingValue: false);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("AutostartService.SetOptOut", ex);
         }
     }
 

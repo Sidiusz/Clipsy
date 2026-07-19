@@ -3,7 +3,7 @@
 
 #define ClipsyName "Clipsy"
 #ifndef ClipsyVersion
-#define ClipsyVersion "1.0.0"
+#define ClipsyVersion "1.0.2"
 #endif
 #define ClipsyPublisher "Sidiusz"
 #define ClipsyURL "https://github.com/Sidiusz/Clipsy"
@@ -47,7 +47,6 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "startuplogin"; Description: "Run Clipsy at sign-in"; GroupDescription: "Startup:"; Flags: unchecked
 
 [Files]
 Source: "{#ClipsyPublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -105,9 +104,17 @@ begin
        ewWaitUntilTerminated, ResultCode);
 end;
 
+function AutostartOptedOut: Boolean;
+var
+  v: Cardinal;
+begin
+  // App sets this when the user disables autostart; absent = enable by default.
+  Result := RegQueryDWordValue(HKCU, 'Software\Clipsy', 'AutostartOptOut', v) and (v = 1);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if (CurStep = ssPostInstall) and IsTaskSelected('startuplogin') then
+  if (CurStep = ssPostInstall) and not AutostartOptedOut then
     CreateAutostartTask;
 end;
 
@@ -116,6 +123,7 @@ begin
   if CurUninstallStep = usUninstall then
     DeleteAutostartTask;
 end;
+
 
 
 
