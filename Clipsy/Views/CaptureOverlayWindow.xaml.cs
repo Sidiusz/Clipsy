@@ -165,6 +165,7 @@ public sealed partial class CaptureOverlayWindow : Window
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFirstFrames;
             Uncloak();
         }
+        StartRevealWatchdog();
 
         SetTool(ToolKind.None);
     }
@@ -334,6 +335,8 @@ public sealed partial class CaptureOverlayWindow : Window
     }
 
     private bool _cloaked = true;
+    private bool _revealed;
+    private bool _closed;
     private const int DWMWA_CLOAK = 13;
 
     private void Uncloak()
@@ -351,22 +354,54 @@ public sealed partial class CaptureOverlayWindow : Window
             ticksAfterMove++;
             if (ticksAfterMove == 2)
             {
-                // Strip WS_EX_LAYERED while cloaked: a full-screen layered window
-                // takes DWM's slow path and caps FPS on high-refresh monitors.
-                SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_TOOLWINDOW);
-                SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                StripLayered();
                 return;
             }
             if (ticksAfterMove < 3) return;
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPostMoveTick;
-            int cloak = 0;
-            DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
-            // Shown with NOACTIVATE, so grab foreground/focus explicitly once visible.
-            ForceForeground(_hwnd);
-            RootGrid.Focus(FocusState.Programmatic);
-            PlayIntroAnimations();
+            CompleteReveal();
         }
+    }
+
+    private void StripLayered()
+    {
+        // Strip WS_EX_LAYERED while cloaked: a full-screen layered window takes
+        // DWM's slow path and caps FPS on high-refresh monitors.
+        SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_TOOLWINDOW);
+        SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+
+    private void CompleteReveal()
+    {
+        if (_revealed) return;
+        _revealed = true;
+        StripLayered();
+        int cloak = 0;
+        DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
+        // Shown with NOACTIVATE, so grab foreground/focus explicitly once visible.
+        ForceForeground(_hwnd);
+        RootGrid.Focus(FocusState.Programmatic);
+        PlayIntroAnimations();
+    }
+
+    // Under heavy load the CompositionTarget.Rendering ticks that drive the
+    // cloak→reveal handshake can stall, leaving the overlay invisible forever
+    // (and _current pinned, blocking every later capture). Force the reveal.
+    private void StartRevealWatchdog()
+    {
+        var wd = DispatcherQueue.CreateTimer();
+        wd.Interval = TimeSpan.FromMilliseconds(450);
+        wd.IsRepeating = false;
+        wd.Tick += (_, _) =>
+        {
+            if (_revealed || _closed) return;
+            _cloaked = false;
+            var b = _frame.VirtualBounds;
+            SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
+            CompleteReveal();
+        };
+        wd.Start();
     }
 
     // Cloak instantly before Close(): tearing down while visible paints the
@@ -448,6 +483,7 @@ public sealed partial class CaptureOverlayWindow : Window
     // every heavy field so they become collectible even if the shell lingers.
     private void OnOverlayClosed(object sender, WindowEventArgs e)
     {
+        _closed = true;
         _scanTimer?.Stop();
         _hoverTimer?.Stop();
         if (_selectionRenderHooked)

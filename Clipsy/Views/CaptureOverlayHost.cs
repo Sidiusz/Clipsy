@@ -14,8 +14,10 @@ public static class CaptureOverlayHost
     {
         if (_current != null)
         {
-            try { _current.Activate(); } catch { /* ignore */ }
-            return;
+            // Re-activate the open overlay; if it's a dead handle, drop it and
+            // fall through to build a fresh one instead of no-op'ing forever.
+            try { _current.Activate(); return; }
+            catch { _current = null; }
         }
 
         try
