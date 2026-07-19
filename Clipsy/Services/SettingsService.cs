@@ -43,6 +43,9 @@ public sealed class AppSettings
     // Capture overlay: dock toolbars to the corner where the selection drag ended
     public bool DynamicToolbarIslands { get; set; } = false;
 
+    // Hold this modifier while a draw tool is active to temporarily eyedrop.
+    public string EyedropperModifier { get; set; } = "Alt"; // Alt / Ctrl
+
     // GIF
     public int GifColors { get; set; } = 256;
     public int GifFps { get; set; } = 12;

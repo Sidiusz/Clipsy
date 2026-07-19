@@ -1,4 +1,5 @@
 using Clipsy.Drawing;
+using Clipsy.Services;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -32,7 +33,8 @@ public sealed partial class CaptureOverlayWindow
         {
             if (lmb)
                 ApplyPickedColor(SamplePixel(pos));
-            ExitEyedropperMode();
+            if (_tempEyedropper) ExitTempEyedropper(pick: false);
+            else ExitEyedropperMode();
             e.Handled = true;
             return;
         }
@@ -125,6 +127,17 @@ public sealed partial class CaptureOverlayWindow
     private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         var pos = e.GetCurrentPoint(RootGrid).Position;
+        _lastPointerPos = pos;
+
+        // Hold the configured modifier over a draw tool to temporarily eyedrop;
+        // releasing it (or clicking) picks the colour and returns to drawing.
+        if (!_inOcrMode && _drawing.Settings.Tool != ToolKind.None && _activeTextBox == null)
+        {
+            bool mod = IsEyedropperModifierDown();
+            if (mod && !_tempEyedropper && !_eyedropperActive) EnterTempEyedropper();
+            else if (!mod && _tempEyedropper) { ExitTempEyedropper(pick: true); return; }
+        }
+
         if (_eyedropperActive)
         {
             UpdateMagnifier(pos);
@@ -340,6 +353,17 @@ public sealed partial class CaptureOverlayWindow
         bool ctrl = IsCtrlDown();
         if (_activeTextBox != null) return; // typing in textbox; handled by it
 
+        // Modifier held over a draw tool → enter temp eyedropper immediately,
+        // even without a mouse move.
+        if (!_inOcrMode && _drawing.Settings.Tool != ToolKind.None
+            && (e.Key == VirtualKey.Menu || e.Key == VirtualKey.Control)
+            && IsEyedropperModifierDown())
+        {
+            EnterTempEyedropper();
+            e.Handled = true;
+            return;
+        }
+
         switch (e.Key)
         {
             case VirtualKey.Escape:
@@ -426,5 +450,52 @@ public sealed partial class CaptureOverlayWindow
     {
         var state = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
         return (state & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
+    }
+
+    // ---------- Hold-to-eyedrop ----------
+
+    private bool _tempEyedropper;
+    private Point _lastPointerPos;
+
+    private static bool IsEyedropperModifierDown()
+    {
+        var key = SettingsService.Instance.Settings.EyedropperModifier == "Ctrl"
+            ? VirtualKey.Control : VirtualKey.Menu;
+        var state = InputKeyboardSource.GetKeyStateForCurrentThread(key);
+        return (state & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
+    }
+
+    private void OnKeyUp(object sender, KeyRoutedEventArgs e)
+    {
+        if (_tempEyedropper
+            && (e.Key == VirtualKey.Menu || e.Key == VirtualKey.Control)
+            && !IsEyedropperModifierDown())
+        {
+            ExitTempEyedropper(pick: true);
+            e.Handled = true;
+        }
+    }
+
+    private void EnterTempEyedropper()
+    {
+        if (_tempEyedropper || _eyedropperActive) return;
+        if (_drawing.Settings.Tool == ToolKind.None || _inOcrMode) return;
+        EnsureEyedropperBitmap();
+        if (_eyedropperPixels == null) return;
+        _tempEyedropper = true;
+        _magBitmap ??= new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(128, 128);
+        MagBrush.ImageSource = _magBitmap;
+        _eyedropperActive = true;
+        EyedropperMagnifier.Visibility = Visibility.Visible;
+        UpdateMagnifier(_lastPointerPos);
+    }
+
+    private void ExitTempEyedropper(bool pick)
+    {
+        if (!_tempEyedropper) return;
+        _tempEyedropper = false;
+        if (pick) ApplyPickedColor(SamplePixel(_lastPointerPos));
+        _eyedropperActive = false;
+        EyedropperMagnifier.Visibility = Visibility.Collapsed;
     }
 }

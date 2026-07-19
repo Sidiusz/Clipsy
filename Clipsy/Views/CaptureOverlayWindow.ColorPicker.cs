@@ -180,6 +180,9 @@ public sealed partial class CaptureOverlayWindow
         stream.Seek(0, SeekOrigin.Begin);
         stream.Write(dst, 0, dst.Length);
         _magBitmap.Invalidate();
+
+        var c = SamplePixel(cursorDip);
+        MagHex.Text = $"#{c.R:X2}{c.G:X2}{c.B:X2}";
     }
 
     private Color SamplePixel(Point cursorDip)

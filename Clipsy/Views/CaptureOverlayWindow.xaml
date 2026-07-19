@@ -17,6 +17,7 @@
           Background="Transparent"
           IsTabStop="True"
           KeyDown="OnKeyDown"
+          KeyUp="OnKeyUp"
           PointerPressed="OnRootPointerPressed"
           PointerMoved="OnRootPointerMoved"
           PointerReleased="OnRootPointerReleased"
@@ -589,6 +590,12 @@
                     HorizontalAlignment="Center" VerticalAlignment="Center" />
             <Border Width="12" Height="12" BorderBrush="White" BorderThickness="1.5"
                     HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <!-- HEX readout of the sampled centre pixel. -->
+            <Border Background="#CC000000" CornerRadius="4" Padding="6,1,6,1"
+                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8">
+                <TextBlock x:Name="MagHex" Text="#000000" Foreground="White" FontSize="12"
+                           FontFamily="{StaticResource ClipsyFontFamilyMono}" />
+            </Border>
         </Grid>
 
         <!-- Context menu (RMB) — selection / actions / cancel grouped with
