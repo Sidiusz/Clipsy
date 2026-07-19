@@ -567,36 +567,44 @@
         </Border>
 
         <!-- ============== Eyedropper magnifier ============== -->
-        <Grid x:Name="EyedropperMagnifier"
-              Width="128" Height="128"
-              Visibility="Collapsed"
-              IsHitTestVisible="False"
-              HorizontalAlignment="Left"
-              VerticalAlignment="Top">
-            <Ellipse Width="128" Height="128" Fill="Black" />
-            <!-- Magnified pixels painted through an ImageBrush so the Ellipse
-                 clips the square WriteableBitmap into a clean circle. -->
-            <Ellipse Width="128" Height="128">
-                <Ellipse.Fill>
-                    <ImageBrush x:Name="MagBrush" Stretch="Fill" />
-                </Ellipse.Fill>
-            </Ellipse>
-            <!-- Outer ring: dark backing + bright white border so the circle
-                 edge stays visible over any content. -->
-            <Ellipse Width="128" Height="128" Stroke="Black" StrokeThickness="4" Fill="Transparent" />
-            <Ellipse Width="128" Height="128" Stroke="White" StrokeThickness="2" Fill="Transparent" />
-            <!-- Centre crosshair marking the sampled pixel. -->
-            <Border Width="14" Height="14" BorderBrush="Black" BorderThickness="1"
-                    HorizontalAlignment="Center" VerticalAlignment="Center" />
-            <Border Width="12" Height="12" BorderBrush="White" BorderThickness="1.5"
-                    HorizontalAlignment="Center" VerticalAlignment="Center" />
-            <!-- HEX readout of the sampled centre pixel. -->
-            <Border Background="#CC000000" CornerRadius="4" Padding="6,1,6,1"
-                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8">
-                <TextBlock x:Name="MagHex" Text="#000000" Foreground="White" FontSize="12"
-                           FontFamily="{StaticResource ClipsyFontFamilyMono}" />
+        <StackPanel x:Name="EyedropperMagnifier"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Spacing="8">
+            <Grid Width="128" Height="128">
+                <Ellipse Width="128" Height="128" Fill="Black" />
+                <!-- Magnified pixels painted through an ImageBrush so the Ellipse
+                     clips the square WriteableBitmap into a clean circle. -->
+                <Ellipse Width="128" Height="128">
+                    <Ellipse.Fill>
+                        <ImageBrush x:Name="MagBrush" Stretch="Fill" />
+                    </Ellipse.Fill>
+                </Ellipse>
+                <!-- Outer ring: dark backing + bright white border so the circle
+                     edge stays visible over any content. -->
+                <Ellipse Width="128" Height="128" Stroke="Black" StrokeThickness="4" Fill="Transparent" />
+                <Ellipse Width="128" Height="128" Stroke="White" StrokeThickness="2" Fill="Transparent" />
+                <!-- Centre crosshair marking the sampled pixel. -->
+                <Border Width="14" Height="14" BorderBrush="Black" BorderThickness="1"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <Border Width="12" Height="12" BorderBrush="White" BorderThickness="1.5"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Grid>
+            <!-- HEX readout under the circle, in the app's pill style. -->
+            <Border HorizontalAlignment="Center"
+                    Background="{ThemeResource ClipsyBgInputBrush}"
+                    BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource ClipsyRadiusSm}"
+                    Padding="12,5,12,5">
+                <TextBlock x:Name="MagHex" Text="#000000"
+                           FontSize="17" FontWeight="SemiBold"
+                           Foreground="{ThemeResource ClipsyTextBrush}"
+                           FontFamily="{StaticResource ClipsyFontFamily}" />
             </Border>
-        </Grid>
+        </StackPanel>
 
         <!-- Context menu (RMB) — selection / actions / cancel grouped with
              separators. Icons left, accelerator hint right. -->

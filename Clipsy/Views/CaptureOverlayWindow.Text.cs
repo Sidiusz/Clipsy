@@ -56,9 +56,7 @@ public sealed partial class CaptureOverlayWindow
         _activeTextBox = tb;
         _activeTextAnchor = pos;
         _activeTextAnchorApplied = false;
-        // DirectWrite loads a freshly-picked family async; the box can render the
-        // fallback first and never re-layout. Re-assign once loaded to force it.
-        tb.Loaded += (_, _) => { tb.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(_drawing.Settings.TextFont); };
+        _liveFontApplied = false;
         tb.LostFocus += (_, _) =>
         {
             // Don't commit while the user is dragging the handle — focus moves
@@ -107,6 +105,41 @@ public sealed partial class CaptureOverlayWindow
         handle.PointerCaptureLost += (_, _) => _draggingActiveText = false;
 
         tb.Focus(FocusState.Programmatic);
+        // The internal TextBoxView that renders typed text is realized on focus,
+        // after Loaded — re-apply the font once it exists so it isn't left on the
+        // implicit default. Reinforced on the first keystroke.
+        DispatcherQueue.TryEnqueue(() => ReapplyLiveFont(tb));
+    }
+
+    private bool _liveFontApplied;
+
+    // This app's implicit ContentPresenter style pins a default font on the
+    // TextBox's inner text host (WinUI 3 doesn't inherit FontFamily into it),
+    // so setting TextBox.FontFamily alone leaves typed text on the default.
+    // Push the picked family onto every inner TextBlock/ContentPresenter.
+    private void ReapplyLiveFont(TextBox tb)
+    {
+        try
+        {
+            var fam = new Microsoft.UI.Xaml.Media.FontFamily(_drawing.Settings.TextFont);
+            tb.FontFamily = fam;
+            ApplyFontToDescendants(tb, fam);
+            _liveFontApplied = true;
+        }
+        catch { /* keep inherited */ }
+    }
+
+    private static void ApplyFontToDescendants(Microsoft.UI.Xaml.DependencyObject root, Microsoft.UI.Xaml.Media.FontFamily fam)
+    {
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is TextBlock tbk) tbk.FontFamily = fam;
+            else if (child is ContentPresenter cp) cp.FontFamily = fam;
+            else if (child is Control ctl) ctl.FontFamily = fam;
+            ApplyFontToDescendants(child, fam);
+        }
     }
 
     private void OnDragHandlePressed(object sender, PointerRoutedEventArgs e)
@@ -158,7 +191,10 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnActiveTextBoxTextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_activeTextBox == null || _activeTextAnchorApplied) return;
+        if (_activeTextBox == null) return;
+        // First keystroke realizes the text view; force the picked font onto it.
+        if (!_liveFontApplied) ReapplyLiveFont(_activeTextBox);
+        if (_activeTextAnchorApplied) return;
         var text = _activeTextBox.Text;
         if (string.IsNullOrEmpty(text)) return;
         // Re-measure with the actual first character so off-width glyphs
