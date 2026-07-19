@@ -147,7 +147,11 @@ public partial class App : Application
             RecordingController.Current?.StopFromHotkey();
             return;
         }
-        CaptureOverlayHost.ShowOverlay();
+        // Defer to the UI queue so overlay creation never runs inside the tray's
+        // nested TrackPopupMenu pump (XBF init NRE) or a busy hotkey callback.
+        var dq = HostWindow?.DispatcherQueue;
+        if (dq != null) dq.TryEnqueue(CaptureOverlayHost.ShowOverlay);
+        else CaptureOverlayHost.ShowOverlay();
     }
 
     private void OnSettingsRequested()
