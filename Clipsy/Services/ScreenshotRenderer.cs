@@ -106,8 +106,7 @@ public static class ScreenshotRenderer
         IReadOnlyList<DrawElement> elements,
         double dpiScale)
     {
-        using var srcMs = new MemoryStream(frame.ImageBytes);
-        using var src = new Bitmap(srcMs);
+        using var src = ScreenFreezeService.CreateBitmap(frame);
 
         int px = (int)System.Math.Floor(selectionDip.X * dpiScale);
         int py = (int)System.Math.Floor(selectionDip.Y * dpiScale);

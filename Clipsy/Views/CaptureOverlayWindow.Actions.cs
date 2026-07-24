@@ -26,8 +26,7 @@ public sealed partial class CaptureOverlayWindow
         int h = (int)System.Math.Round(_selectionRect.Height * scale);
         if (w < 8 || h < 8) return;
         var dq = App.Current.HostWindow!.DispatcherQueue;
-        HideForClose();
-        Close();
+        CaptureOverlayHost.Dismiss(this);
         await Task.Delay(150);
         dq.TryEnqueue(() => RecordingController.TryStart(x, y, w, h));
     }
@@ -44,7 +43,8 @@ public sealed partial class CaptureOverlayWindow
     {
         try { OverlayMenu.Hide(); } catch { }
         HideForClose();
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Close);
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => CaptureOverlayHost.Dismiss(this));
     }
 
     private async Task SaveSilentAsync()

@@ -162,13 +162,36 @@ public sealed partial class CaptureOverlayWindow
         if (w <= 0) w = _frame.VirtualBounds.Width;
         if (h <= 0) h = _frame.VirtualBounds.Height;
 
-        _dimFull.Rect = new Rect(0, 0, w, h);
+        if (!(hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0))
+        {
+            SetBand(DimTop, 0, 0, w, h);
+            SetBand(DimBottom, 0, 0, 0, 0);
+            SetBand(DimLeft, 0, 0, 0, 0);
+            SetBand(DimRight, 0, 0, 0, 0);
+            return;
+        }
 
-        // EvenOdd: a valid hole punches through the dim; a zero-area rect shows
-        // no hole (EvenOdd ignores 0-area geometry).
-        _dimHole.Rect = (hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0)
-            ? hole.Value
-            : new Rect(0, 0, 0, 0);
+        var r = hole.Value;
+        double left = System.Math.Clamp(r.X, 0, w);
+        double top = System.Math.Clamp(r.Y, 0, h);
+        double right = System.Math.Clamp(r.X + r.Width, 0, w);
+        double bottom = System.Math.Clamp(r.Y + r.Height, 0, h);
+
+        // Four disjoint bands tile the whole area minus the hole.
+        SetBand(DimTop, 0, 0, w, top);
+        SetBand(DimBottom, 0, bottom, w, h - bottom);
+        SetBand(DimLeft, 0, top, left, bottom - top);
+        SetBand(DimRight, right, top, w - right, bottom - top);
+    }
+
+    private static void SetBand(Microsoft.UI.Xaml.Shapes.Rectangle band, double x, double y, double w, double h)
+    {
+        if (w < 0) w = 0;
+        if (h < 0) h = 0;
+        Canvas.SetLeft(band, x);
+        Canvas.SetTop(band, y);
+        band.Width = w;
+        band.Height = h;
     }
 
     // ---------- Per-frame coalescing ----------
