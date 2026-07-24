@@ -10,9 +10,7 @@ using Windows.UI;
 
 namespace Clipsy.Drawing;
 
-/// <summary>Vector elements drawn over the selected region plus undo/redo.
-/// Committed elements render on a GPU Win2D canvas (redrawn only on change),
-/// so the XAML tree stays flat regardless of how much is drawn.</summary>
+// Committed elements render on a GPU Win2D canvas, redrawn only on change.
 public sealed class DrawingController
 {
     private readonly CanvasControl _canvas;
@@ -27,23 +25,18 @@ public sealed class DrawingController
         LineJoin = CanvasLineJoin.Round,
     };
 
-    // Committed content is baked into an offscreen target and rebuilt only on
-    // change, so an active-draw frame is one blit — flat FPS no matter how much
-    // is already drawn.
+    // Baked committed content; an active-draw frame is one blit.
     private CanvasRenderTarget? _cache;
     private bool _cacheDirty = true;
 
-    // In-progress pencil stroke: each new segment is painted straight into the
-    // cache (O(1) per move), never a per-frame geometry rebuild from all points.
+    // Active stroke painted segment-by-segment into the cache (O(1) per move).
     private bool _activeOpen;
     private bool _activeMissedPaint;
     private Color _activeColor;
     private double _activeThickness;
     private Point _activeLast;
 
-    // Move tool: the selected element is excluded from the baked cache and drawn
-    // on top with an outline, so it moves freely and restores to its layer on
-    // deselect (rebuild puts it back in list order).
+    // Move tool: selected element is excluded from the cache and drawn on top.
     private DrawElement? _selected;
     private static readonly CanvasStrokeStyle DashStroke = new() { DashStyle = CanvasDashStyle.Dash };
 
@@ -66,7 +59,7 @@ public sealed class DrawingController
         _activeLast = start;
         _activeOpen = true;
         _activeMissedPaint = false;
-        PaintActiveSegment(start, start); // start dot (round cap)
+        PaintActiveSegment(start, start);
     }
 
     public void SetActiveThickness(double thickness) => _activeThickness = thickness;
@@ -78,15 +71,13 @@ public sealed class DrawingController
         _activeLast = pt;
     }
 
-    // Commit: pixels are already in the cache from the incremental paint, so add
-    // the element without a full rebuild. Undo/erase later rebuild from the list.
+    // Pixels are already in the cache; add the element without a rebuild.
     public void EndActiveStroke(StrokeElement e)
     {
         _activeOpen = false;
         _elements.Add(e);
         _undo.Push(new HistoryOp(HistoryKind.Add, e));
         _redo.Clear();
-        // Cache wasn't ready for some segments — rebuild so the stroke shows.
         if (_activeMissedPaint) InvalidateCommitted();
     }
 
@@ -102,17 +93,16 @@ public sealed class DrawingController
 
     public DrawElement? Selected => _selected;
 
-    // Excludes/includes the element from the cache, so rebuild once here.
     public void SetSelected(DrawElement? e) { _selected = e; InvalidateCommitted(); }
 
     public void MoveSelected(double dx, double dy)
     {
         if (_selected == null) return;
         _selected.Offset(dx, dy);
-        _canvas.Invalidate(); // selected draws as an overlay; cache unchanged
+        _canvas.Invalidate();
     }
 
-    // Topmost-first elements whose hit area contains p (for click-cycle select).
+    // Topmost-first, for click-cycle selection.
     public List<DrawElement> HitTestAll(Point p, double radius)
     {
         var list = new List<DrawElement>();
@@ -188,8 +178,6 @@ public sealed class DrawingController
         return null;
     }
 
-    /// <summary>Removes any element the cursor touches, whole (strokes, shapes,
-    /// lines, text).</summary>
     public bool WholeStrokeErase(Point cursor, double radius)
     {
         bool changed = false;
@@ -204,8 +192,7 @@ public sealed class DrawingController
         return changed;
     }
 
-    /// <summary>Eraser pass at the cursor: pencil strokes split (points within
-    /// radius dropped, survivors re-polylined); shapes/text removed whole on touch.</summary>
+    // Pencil strokes split around the eraser; shapes/text removed whole on touch.
     public bool PartialErase(Point cursor, double radius)
     {
         bool changed = false;
@@ -233,8 +220,6 @@ public sealed class DrawingController
         }
         if (changed)
         {
-            // Eraser commits make the existing history meaningless for the
-            // affected stroke; clear redo and skip undo bookkeeping.
             _redo.Clear();
             InvalidateCommitted();
         }
@@ -291,7 +276,6 @@ public sealed class DrawingController
         var ds = args.DrawingSession;
         EnsureCache(sender);
         if (_cache != null) ds.DrawImage(_cache);
-        // Selected element is excluded from the cache; draw it on top + outline.
         if (_selected != null)
         {
             try { DrawOne(ds, _selected); } catch { }
@@ -328,12 +312,10 @@ public sealed class DrawingController
 
         using var cds = _cache.CreateDrawingSession();
         cds.Clear(Microsoft.UI.Colors.Transparent);
-        // One bad element (e.g. an unresolvable font) must not blank the cache.
-        // Skip the move-tool selection; it's drawn live on top in OnDraw.
         foreach (var el in _elements)
         {
             if (ReferenceEquals(el, _selected)) continue;
-            try { DrawOne(cds, el); } catch { }
+            try { DrawOne(cds, el); } catch { } // a bad font must not blank the cache
         }
     }
 
@@ -398,13 +380,11 @@ public sealed class DrawingController
         }
         catch when (family != "Segoe UI")
         {
-            // Font failed to resolve — never let text vanish; use a system font.
-            DrawTextWithFamily(ds, t, "Segoe UI");
+            DrawTextWithFamily(ds, t, "Segoe UI"); // never let text vanish
         }
     }
 
-    // Win2D wants a single family or "path#family" — not a CSS list, and (in an
-    // unpackaged app) not an ms-appx URI. Resolve the bundled Onest to its file.
+    // Win2D needs a family or "path#family"; unpackaged, it can't use ms-appx URIs.
     private static string Win2DFontFamily(string source)
     {
         if (!string.IsNullOrEmpty(source) && source.Contains("Onest", StringComparison.OrdinalIgnoreCase))
@@ -421,7 +401,6 @@ public sealed class DrawingController
         return first;
     }
 
-    // Open arrowhead matching the live preview geometry.
     private static (Point, Point) ArrowHead(Point a, Point b, double thickness)
     {
         double dx = b.X - a.X, dy = b.Y - a.Y;
