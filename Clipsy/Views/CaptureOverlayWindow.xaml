@@ -428,6 +428,21 @@
                                        Margin="3,2,0,0" IsHitTestVisible="False" />
                         </Grid>
                     </Button>
+                    <!-- Move tool mothballed: hidden + hotkey disabled, logic kept. -->
+                    <Button x:Name="MoveBtn" Height="38"
+                            Visibility="Collapsed"
+                            Style="{StaticResource ClipsyIconButton}"
+                            Click="OnMoveClick"
+                            ToolTipService.ToolTip="Move objects"
+                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                        <Grid>
+                            <FontIcon Glyph="&#xE7C2;" FontSize="16" Margin="0,6,0,0"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Text="5" FontSize="8" FontWeight="SemiBold" Opacity="0.65"
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Margin="3,2,0,0" IsHitTestVisible="False" />
+                        </Grid>
+                    </Button>
                     <Border Style="{StaticResource ClipsyToolbarSeparatorHorizontal}" />
                     <Button x:Name="OcrBtn" Height="38"
                             Style="{StaticResource ClipsyIconButton}"

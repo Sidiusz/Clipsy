@@ -356,6 +356,9 @@ public sealed partial class CaptureOverlayWindow
         sb.Begin();
     }
 
+    private void OnMoveClick(object sender, RoutedEventArgs e)
+        => SetTool(_drawing.Settings.Tool == ToolKind.Move ? ToolKind.None : ToolKind.Move);
+
     private void SetTool(ToolKind tool)
     {
         _drawing.Settings.Tool = tool;
@@ -367,8 +370,13 @@ public sealed partial class CaptureOverlayWindow
 
         PencilBtn.Style = tool == ToolKind.Pencil ? selectedStyle : normalStyle;
         TextBtn.Style   = tool == ToolKind.Text   ? selectedStyle : normalStyle;
+        if (MoveBtn != null) MoveBtn.Style = tool == ToolKind.Move ? selectedStyle : normalStyle;
         ShapesBtn.Style = tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow
             ? selectedStyle : normalStyle;
+
+        // Leaving the move tool drops the selection (outline off, element back on
+        // its layer via cache rebuild).
+        if (tool != ToolKind.Move) _drawing.SetSelected(null);
 
         // The Shapes icon glyphs are Stroke-based shapes (not FontIcon
         // glyphs that inherit Foreground), so swap their stroke explicitly.

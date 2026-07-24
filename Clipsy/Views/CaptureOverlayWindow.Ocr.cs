@@ -84,6 +84,7 @@ public sealed partial class CaptureOverlayWindow
         ShapesBtn.IsEnabled = enabled;
         ColorBtn.IsEnabled = enabled;
         OcrBtn.IsEnabled = enabled;
+        if (MoveBtn != null) MoveBtn.IsEnabled = enabled;
         PencilBtn.IsEnabled = enabled;
         EllipseBtn.IsEnabled = enabled;
         RectBtn.IsEnabled = enabled;

@@ -41,6 +41,12 @@ public sealed class DrawingController
     private double _activeThickness;
     private Point _activeLast;
 
+    // Move tool: the selected element is excluded from the baked cache and drawn
+    // on top with an outline, so it moves freely and restores to its layer on
+    // deselect (rebuild puts it back in list order).
+    private DrawElement? _selected;
+    private static readonly CanvasStrokeStyle DashStroke = new() { DashStyle = CanvasDashStyle.Dash };
+
     public DrawingSettings Settings { get; } = new();
     public IReadOnlyList<DrawElement> Elements => _elements;
 
@@ -90,6 +96,29 @@ public sealed class DrawingController
         if (!_activeOpen) return;
         _activeOpen = false;
         InvalidateCommitted();
+    }
+
+    // ---------- Move tool ----------
+
+    public DrawElement? Selected => _selected;
+
+    // Excludes/includes the element from the cache, so rebuild once here.
+    public void SetSelected(DrawElement? e) { _selected = e; InvalidateCommitted(); }
+
+    public void MoveSelected(double dx, double dy)
+    {
+        if (_selected == null) return;
+        _selected.Offset(dx, dy);
+        _canvas.Invalidate(); // selected draws as an overlay; cache unchanged
+    }
+
+    // Topmost-first elements whose hit area contains p (for click-cycle select).
+    public List<DrawElement> HitTestAll(Point p, double radius)
+    {
+        var list = new List<DrawElement>();
+        for (int i = _elements.Count - 1; i >= 0; i--)
+            if (_elements[i].HitTest(p, radius)) list.Add(_elements[i]);
+        return list;
     }
 
     private void PaintActiveSegment(Point a, Point b)
@@ -262,6 +291,22 @@ public sealed class DrawingController
         var ds = args.DrawingSession;
         EnsureCache(sender);
         if (_cache != null) ds.DrawImage(_cache);
+        // Selected element is excluded from the cache; draw it on top + outline.
+        if (_selected != null)
+        {
+            try { DrawOne(ds, _selected); } catch { }
+            DrawSelectionOutline(ds, _selected.BoundingBox);
+        }
+    }
+
+    private static void DrawSelectionOutline(CanvasDrawingSession ds, Rect b)
+    {
+        const float pad = 4f;
+        var accent = Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xC1, 0x07);
+        ds.DrawRectangle(
+            (float)(b.X - pad), (float)(b.Y - pad),
+            (float)(b.Width + pad * 2), (float)(b.Height + pad * 2),
+            accent, 1.5f, DashStroke);
     }
 
     private void EnsureCache(CanvasControl sender)
@@ -284,8 +329,10 @@ public sealed class DrawingController
         using var cds = _cache.CreateDrawingSession();
         cds.Clear(Microsoft.UI.Colors.Transparent);
         // One bad element (e.g. an unresolvable font) must not blank the cache.
+        // Skip the move-tool selection; it's drawn live on top in OnDraw.
         foreach (var el in _elements)
         {
+            if (ReferenceEquals(el, _selected)) continue;
             try { DrawOne(cds, el); } catch { }
         }
     }
@@ -333,23 +380,43 @@ public sealed class DrawingController
 
     private static void DrawText(CanvasDrawingSession ds, TextElement t)
     {
-        using var fmt = new CanvasTextFormat
-        {
-            FontFamily = Win2DFontFamily(t.FontFamily),
-            FontSize = (float)t.FontSize,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            WordWrapping = CanvasWordWrapping.NoWrap,
-        };
-        ds.DrawText(t.Text, V(t.Position), t.Color, fmt);
+        DrawTextWithFamily(ds, t, Win2DFontFamily(t.FontFamily));
     }
 
-    // Win2D wants a single family or "uri#family" — not a CSS-style comma list.
+    private static void DrawTextWithFamily(CanvasDrawingSession ds, TextElement t, string family)
+    {
+        try
+        {
+            using var fmt = new CanvasTextFormat
+            {
+                FontFamily = family,
+                FontSize = (float)t.FontSize,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                WordWrapping = CanvasWordWrapping.NoWrap,
+            };
+            ds.DrawText(t.Text, V(t.Position), t.Color, fmt);
+        }
+        catch when (family != "Segoe UI")
+        {
+            // Font failed to resolve — never let text vanish; use a system font.
+            DrawTextWithFamily(ds, t, "Segoe UI");
+        }
+    }
+
+    // Win2D wants a single family or "path#family" — not a CSS list, and (in an
+    // unpackaged app) not an ms-appx URI. Resolve the bundled Onest to its file.
     private static string Win2DFontFamily(string source)
     {
+        if (!string.IsNullOrEmpty(source) && source.Contains("Onest", StringComparison.OrdinalIgnoreCase))
+        {
+            var path = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Onest-VariableFont_wght.ttf");
+            if (System.IO.File.Exists(path)) return path + "#Onest";
+        }
         if (string.IsNullOrWhiteSpace(source)) return "Segoe UI";
         var first = source.Split(',')[0].Trim();
-        if (string.IsNullOrEmpty(first) ||
-            first.Equals("sans-serif", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(first)
+            || first.StartsWith("ms-appx", StringComparison.OrdinalIgnoreCase)
+            || first.Equals("sans-serif", StringComparison.OrdinalIgnoreCase))
             return "Segoe UI";
         return first;
     }
