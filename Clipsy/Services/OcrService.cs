@@ -86,12 +86,8 @@ public sealed class TesseractOcrEngine : IOcrEngine
                 Tesseract.Pix pix = scaled ? srcPix.Scale(scaleUp, scaleUp) : srcPix;
                 try
                 {
-                    // Run each language separately and keep the highest mean-
-                    // confidence result. A combined "eng+rus" pass transliterates
-                    // Cyrillic lookalikes to Latin (ракета -> paketa); single-
-                    // language passes score their own script far higher. Per-word
-                    // merging fails here — the rus model reports high confidence on
-                    // Latin too, so it can't discriminate mixed scripts.
+                    // Best mean-confidence single language: a combined eng+rus pass
+                    // transliterates Cyrillic lookalikes to Latin (ракета -> paketa).
                     List<OcrWord>? best = null;
                     float bestConf = -1f;
                     foreach (var lang in langs)
@@ -263,9 +259,7 @@ public static class OcrEngineFactory
 {
     public static IOcrEngine Resolve()
     {
-        // Prefer Tesseract whenever language files are installed: WinRT OCR uses a
-        // single Windows profile language and mis-reads other scripts. Only fall
-        // back to WinRT when no tessdata is present.
+        // Prefer Tesseract when installed; WinRT OCR uses one profile language.
         if (TessdataService.InstalledSelectedCodes().Count > 0)
             return new TesseractOcrEngine();
         return new WinRtOcrEngine();

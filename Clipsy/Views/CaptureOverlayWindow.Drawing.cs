@@ -150,9 +150,7 @@ public sealed partial class CaptureOverlayWindow
         return (p1, p2);
     }
 
-    // Drop points closer than ~1.4 px to the last one. High-poll mice + intermediate
-    // points otherwise pile thousands of sub-pixel points into one Polyline, and
-    // WinUI re-tessellates the whole thing every frame — the continuous-draw lag.
+    // Drop sub-pixel points (~1.4 px min spacing) to bound stroke size.
     private const double MinStrokePointDistSq = 2.0;
 
     private void ExtendStroke(Point pos)

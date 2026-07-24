@@ -46,9 +46,7 @@ public sealed partial class CaptureOverlayWindow
             FontSize = _drawing.Settings.TextSize,
             Padding = TextEntryPadding,
         };
-        // Subtree-scoped implicit styles override the app-global ones that pin a
-        // default font on the TextBox's inner text host; set before it enters the
-        // tree so the template resolves them.
+        // Scoped styles override the app-global font pinned on the inner text host.
         InstallScopedFont(tb, family);
         // Offset so the first glyph's center sits on the click point; re-adjusts
         // on the first keystroke once the typed character is known.
@@ -111,17 +109,13 @@ public sealed partial class CaptureOverlayWindow
         handle.PointerCaptureLost += (_, _) => _draggingActiveText = false;
 
         tb.Focus(FocusState.Programmatic);
-        // The internal TextBoxView that renders typed text is realized on focus,
-        // after Loaded — re-apply the font once it exists so it isn't left on the
-        // implicit default. Reinforced on the first keystroke.
+        // The inner text view is realized on focus; re-apply the font once it exists.
         DispatcherQueue.TryEnqueue(() => ReapplyLiveFont(tb));
     }
 
     private bool _liveFontApplied;
 
-    // Install subtree-scoped implicit styles so the picked font wins over the
-    // app-global implicit styles that force a default font on the TextBox's
-    // inner text host (WinUI 3 does not inherit FontFamily into it).
+    // WinUI 3 doesn't inherit FontFamily into the TextBox's inner text host.
     private static void InstallScopedFont(TextBox tb, Microsoft.UI.Xaml.Media.FontFamily fam)
     {
         try
