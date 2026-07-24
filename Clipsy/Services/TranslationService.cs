@@ -46,9 +46,7 @@ public static class TranslationService
             bool google = string.Equals(service, "Google", StringComparison.OrdinalIgnoreCase);
             int limit = google ? ChunkLimitGoogle : ChunkLimitMyMemory;
 
-            // Pack as many lines as fit into each request (newlines preserved) so
-            // the engine translates with full cross-line context. Translating each
-            // OCR line alone produced disjointed, meaningless output.
+            // Pack lines into each request for cross-line context, not line-by-line.
             var chunks = PackChunks(text, limit);
             var parts = new List<string>(chunks.Count);
             foreach (var c in chunks)

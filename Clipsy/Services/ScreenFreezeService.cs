@@ -14,9 +14,7 @@ public sealed class ScreenFreezeService
 
     public sealed class FrozenFrame
     {
-        // Raw top-down BGRA32, opaque, tightly packed (stride = Width*4). Kept
-        // decoded: BMP encode + re-decode churned ~100 MB on the LOH per capture
-        // and stalled the open on GC. This copies straight into WriteableBitmap.
+        // Raw opaque top-down BGRA32, tightly packed (stride = Width*4).
         public required byte[] PixelBytes { get; init; }
         public required int PixelWidth { get; init; }
         public required int PixelHeight { get; init; }
