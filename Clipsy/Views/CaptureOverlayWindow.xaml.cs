@@ -88,7 +88,6 @@ public sealed partial class CaptureOverlayWindow : Window
         // XamlParseException (0x802B000A) on Windows App SDK 1.6.
         try { ColorPickerCtl.Color = Microsoft.UI.Colors.Red; } catch { }
 
-        // Set window background to transparent to prevent white borders
         this.SystemBackdrop = null;
 
         ThemeService.Register(RootGrid);
@@ -149,8 +148,7 @@ public sealed partial class CaptureOverlayWindow : Window
         SetTool(ToolKind.None);
     }
 
-    // Re-cloaks and re-runs the proven cloak→reveal handshake. Called from the
-    // ctor and on every reuse, so the reveal path itself never changes.
+    // Re-cloaks and re-arms the cloak→reveal handshake; used by ctor and reuse.
     private int _composedCount;
     private void ArmReveal()
     {
@@ -170,8 +168,7 @@ public sealed partial class CaptureOverlayWindow : Window
         StartRevealWatchdog();
     }
 
-    // Frame is decoded synchronously, so the 2nd composition tick is guaranteed
-    // to contain it — uncloak then. No async-decode race.
+    // Frame decodes synchronously, so the 2nd tick is guaranteed to contain it.
     private void OnFirstFrames(object? s, object e)
     {
         _composedCount++;
@@ -181,8 +178,7 @@ public sealed partial class CaptureOverlayWindow : Window
     }
 
     // ---------- Window reuse ----------
-    // Building the WinUI window costs ~80 ms of XAML init per capture. Keep one
-    // instance alive and re-arm it instead of constructing a new one each time.
+    // One instance reused across captures — the XAML ctor costs ~80 ms.
 
     internal void PrepareForReuse(ScreenFreezeService.FrozenFrame frame)
     {
@@ -202,8 +198,7 @@ public sealed partial class CaptureOverlayWindow : Window
         ResetForReuse();
     }
 
-    // Returns every interaction surface to its just-opened state. Composed from
-    // the existing exit/cancel paths plus explicit flag/visual resets.
+    // Returns every interaction surface to its just-opened state.
     private void ResetForReuse()
     {
         if (_inOcrMode) ExitOcrMode();
@@ -393,17 +388,14 @@ public sealed partial class CaptureOverlayWindow : Window
             int cloak = 1;
             DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
 
-            // Disable window rounding
             int donotround = 1;
             DwmSetWindowAttribute(_hwnd, 33, ref donotround, sizeof(int));
 
-            // Disable non-client area rendering
             int ncDisabled = 1;
             DwmSetWindowAttribute(_hwnd, 2, ref ncDisabled, sizeof(int));
 
-            // Remove all window borders completely
             int borderless = 1;
-            DwmSetWindowAttribute(_hwnd, 20, ref borderless, sizeof(int)); // DWMWA_WINDOW_CORNER_PREFERENCE
+            DwmSetWindowAttribute(_hwnd, 20, ref borderless, sizeof(int));
 
             // Set window style to remove all borders. Keep WS_EX_LAYERED —
             // it is what suppresses the black first-frame erase.
@@ -484,9 +476,8 @@ public sealed partial class CaptureOverlayWindow : Window
         PlayIntroAnimations();
     }
 
-    // Under heavy load the CompositionTarget.Rendering ticks that drive the
-    // cloak→reveal handshake can stall, leaving the overlay invisible forever
-    // (and _current pinned, blocking every later capture). Force the reveal.
+    // Composition ticks can stall under load; force the reveal so the overlay
+    // never gets stuck invisible (which would pin _current and block captures).
     private void StartRevealWatchdog()
     {
         var wd = DispatcherQueue.CreateTimer();
@@ -577,9 +568,7 @@ public sealed partial class CaptureOverlayWindow : Window
         UpdateDimGeometry(_hasSelection ? _selectionRect : null);
     }
 
-    // WinUI 3 retains the Window after Close, so its full-screen frozen bitmap,
-    // BMP buffer and composition surface would leak ~150 MB per capture. Null
-    // every heavy field so they become collectible even if the shell lingers.
+    // WinUI 3 retains the Window after Close; null heavy fields so they collect.
     private void OnOverlayClosed(object sender, WindowEventArgs e)
     {
         _closed = true;
@@ -615,8 +604,7 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         try
         {
-            // Raw BGRA copies straight into the WriteableBitmap — no decode, no
-            // per-row loop. BitmapImage decodes async and would flash black.
+            // Raw BGRA straight into the WriteableBitmap; BitmapImage decodes async.
             var wb = new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(_frame.PixelWidth, _frame.PixelHeight);
             using (var dst = wb.PixelBuffer.AsStream())
                 dst.Write(_frame.PixelBytes, 0, _frame.PixelBytes.Length);
@@ -628,8 +616,6 @@ public sealed partial class CaptureOverlayWindow : Window
             var dpiScale = rawDpi > 0 ? rawDpi / 96.0 : (Content?.XamlRoot?.RasterizationScale ?? 1.0);
             FrozenImage.Width = b.Width / dpiScale;
             FrozenImage.Height = b.Height / dpiScale;
-
-            // FrozenImage opacity controlled by DimLayer only
         }
         catch (Exception ex)
         {

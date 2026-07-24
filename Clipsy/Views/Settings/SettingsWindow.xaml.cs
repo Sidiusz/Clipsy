@@ -906,8 +906,7 @@ public sealed partial class SettingsWindow : Window
     private async void OnReset(object sender, RoutedEventArgs e)
     {
         if (!await ConfirmReset()) return;
-        // Persist defaults right away — previously Reset only updated the UI
-        // draft, leaving SettingsService unchanged until the user also hit Save.
+        // Persist defaults immediately, not just the UI draft.
         _draft = new AppSettings();
         SettingsService.Instance.Replace(_draft);
         // Autostart isn't part of AppSettings; default = off.

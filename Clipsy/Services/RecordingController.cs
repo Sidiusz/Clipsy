@@ -144,8 +144,7 @@ public sealed class RecordingController
             return;
         }
 
-        // H.264 / H.265 — record via ScreenRecorderLib. Overlay exclusion was
-        // already applied above (shared by both backends).
+        // H.264 / H.265 via ScreenRecorderLib.
         _service = new RecordingService();
         _service.RecordingComplete += OnRecordingComplete;
         _service.RecordingFailed += OnRecordingFailed;
