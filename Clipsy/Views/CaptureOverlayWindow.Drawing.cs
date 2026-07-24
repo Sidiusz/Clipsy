@@ -26,22 +26,14 @@ public sealed partial class CaptureOverlayWindow
         {
             case ToolKind.Pencil:
                 _mode = InteractionMode.DrawingStroke;
-                _activeStrokeVisual = new Polyline
-                {
-                    Stroke = new SolidColorBrush(_drawing.Settings.Color),
-                    StrokeThickness = _drawing.Settings.PencilThickness,
-                    StrokeStartLineCap = PenLineCap.Round,
-                    StrokeEndLineCap = PenLineCap.Round,
-                    StrokeLineJoin = PenLineJoin.Round,
-                };
-                _activeStrokeVisual.Points.Add(pos);
                 _activeStroke = new StrokeElement
                 {
-                    Visual = _activeStrokeVisual,
                     Points = new List<Point> { pos },
                     Thickness = _drawing.Settings.PencilThickness,
+                    Color = _drawing.Settings.Color,
                 };
-                DrawingCanvas.Children.Add(_activeStrokeVisual);
+                // Rendered on the GPU canvas (not a growing XAML Polyline).
+                _drawing.SetActivePreview(_activeStroke);
                 RootGrid.CapturePointer(pointer);
                 break;
             case ToolKind.Rectangle:
@@ -165,7 +157,7 @@ public sealed partial class CaptureOverlayWindow
 
     private void ExtendStroke(Point pos)
     {
-        if (_activeStroke == null || _activeStrokeVisual == null) return;
+        if (_activeStroke == null) return;
         var pts = _activeStroke.Points;
         if (pts.Count > 0)
         {
@@ -173,26 +165,23 @@ public sealed partial class CaptureOverlayWindow
             double dx = pos.X - last.X, dy = pos.Y - last.Y;
             if (dx * dx + dy * dy < MinStrokePointDistSq) return;
         }
-        _activeStroke.Points.Add(pos);
-        _activeStrokeVisual.Points.Add(pos);
+        pts.Add(pos);
+        _drawing.Invalidate();
     }
 
     private void FinishStroke()
     {
-        if (_activeStroke == null || _activeStrokeVisual == null) return;
+        if (_activeStroke == null) return;
         // Single click → zero-length stroke renders nothing; add a 0.01-px
         // sibling point so the round cap paints a visible dot.
         if (_activeStroke.Points.Count == 1)
         {
             var only = _activeStroke.Points[0];
-            var twin = new Point(only.X + 0.01, only.Y + 0.01);
-            _activeStroke.Points.Add(twin);
-            _activeStrokeVisual.Points.Add(twin);
+            _activeStroke.Points.Add(new Point(only.X + 0.01, only.Y + 0.01));
         }
-        DrawingCanvas.Children.Remove(_activeStrokeVisual);
+        _drawing.SetActivePreview(null);
         _drawing.Add(_activeStroke);
         _activeStroke = null;
-        _activeStrokeVisual = null;
     }
 
     private void UpdateActiveShape(Point pos)
@@ -235,18 +224,17 @@ public sealed partial class CaptureOverlayWindow
             var a = _activeRectAnchor;
             var b = _activeArrowEnd;
             double thickness = _activeArrowVisual.StrokeThickness;
-            var stroke = _activeArrowVisual.Stroke;
+            var color = ShapeColor(_activeArrowVisual);
             DrawingCanvas.Children.Remove(_activeArrowVisual);
             _activeArrowVisual = null;
             if (System.Math.Abs(b.X - a.X) < 1 && System.Math.Abs(b.Y - a.Y) < 1) return;
-            var visual = BuildArrowVisual(a, b, stroke, thickness);
             _drawing.Add(new LineElement
             {
-                Visual = visual,
                 Start = a,
                 End = b,
                 Thickness = thickness,
                 EndArrow = true,
+                Color = color,
             });
             return;
         }
@@ -257,33 +245,18 @@ public sealed partial class CaptureOverlayWindow
             double y1 = _activeLineVisual.Y1;
             double x2 = _activeLineVisual.X2;
             double y2 = _activeLineVisual.Y2;
+            double thickness = _activeLineVisual.StrokeThickness;
+            var color = ShapeColor(_activeLineVisual);
             DrawingCanvas.Children.Remove(_activeLineVisual);
-            if (System.Math.Abs(x2 - x1) < 1 && System.Math.Abs(y2 - y1) < 1)
+            _activeLineVisual = null;
+            if (System.Math.Abs(x2 - x1) < 1 && System.Math.Abs(y2 - y1) < 1) return;
+            _drawing.Add(new LineElement
             {
-                _activeLineVisual = null;
-                return;
-            }
-            var visual = new Line
-            {
-                Stroke = _activeLineVisual.Stroke,
-                StrokeThickness = _activeLineVisual.StrokeThickness,
-                X1 = x1,
-                Y1 = y1,
-                X2 = x2,
-                Y2 = y2,
-                StrokeStartLineCap = _activeLineVisual.StrokeStartLineCap,
-                StrokeEndLineCap = _activeLineVisual.StrokeEndLineCap,
-                StrokeLineJoin = _activeLineVisual.StrokeLineJoin,
-            };
-            var element = new LineElement
-            {
-                Visual = visual,
                 Start = new Point(x1, y1),
                 End = new Point(x2, y2),
-                Thickness = _activeLineVisual.StrokeThickness,
-            };
-            _drawing.Add(element);
-            _activeLineVisual = null;
+                Thickness = thickness,
+                Color = color,
+            });
             return;
         }
 
@@ -292,49 +265,31 @@ public sealed partial class CaptureOverlayWindow
         double y = Canvas.GetTop(_activeRectVisual);
         double w = _activeRectVisual.Width;
         double h = _activeRectVisual.Height;
+        double rectThickness = _activeRectVisual.StrokeThickness;
+        var rectColor = ShapeColor(_activeRectVisual);
+        bool isEllipse = _activeRectVisual is Ellipse;
         DrawingCanvas.Children.Remove(_activeRectVisual);
-        if (w < 2 || h < 2) { _activeRectVisual = null; return; }
-
-        if (_activeRectVisual is Ellipse)
-        {
-            var visual = new Ellipse
-            {
-                Stroke = _activeRectVisual.Stroke,
-                StrokeThickness = _activeRectVisual.StrokeThickness,
-                Width = w,
-                Height = h,
-            };
-            Canvas.SetLeft(visual, x);
-            Canvas.SetTop(visual, y);
-            var element = new EllipseElement
-            {
-                Visual = visual,
-                Bounds = new Rect(x, y, w, h),
-                Thickness = _activeRectVisual.StrokeThickness,
-            };
-            _drawing.Add(element);
-        }
-        else
-        {
-            var visual = new Microsoft.UI.Xaml.Shapes.Rectangle
-            {
-                Stroke = _activeRectVisual.Stroke,
-                StrokeThickness = _activeRectVisual.StrokeThickness,
-                Width = w,
-                Height = h,
-            };
-            Canvas.SetLeft(visual, x);
-            Canvas.SetTop(visual, y);
-            var element = new RectangleElement
-            {
-                Visual = visual,
-                Bounds = new Rect(x, y, w, h),
-                Thickness = _activeRectVisual.StrokeThickness,
-            };
-            _drawing.Add(element);
-        }
         _activeRectVisual = null;
+        if (w < 2 || h < 2) return;
+
+        if (isEllipse)
+            _drawing.Add(new EllipseElement
+            {
+                Bounds = new Rect(x, y, w, h),
+                Thickness = rectThickness,
+                Color = rectColor,
+            });
+        else
+            _drawing.Add(new RectangleElement
+            {
+                Bounds = new Rect(x, y, w, h),
+                Thickness = rectThickness,
+                Color = rectColor,
+            });
     }
+
+    private static Windows.UI.Color ShapeColor(Shape? s)
+        => (s?.Stroke as SolidColorBrush)?.Color ?? Microsoft.UI.Colors.Red;
 
     private void TryEraseAt(Point rootPos)
     {

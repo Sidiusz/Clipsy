@@ -1,6 +1,4 @@
 using System.Collections.Generic;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Shapes;
 using Windows.Foundation;
 using Windows.UI;
 
@@ -78,7 +76,9 @@ public sealed class DrawingSettings
 
 public abstract class DrawElement
 {
-    public required UIElement Visual { get; init; }
+    // Committed elements are rendered on a Win2D CanvasControl (GPU), not as
+    // XAML nodes — so the visual tree stays flat no matter how much is drawn.
+    public Color Color { get; init; }
     public abstract bool HitTest(Point p, double radius);
     public abstract Rect BoundingBox { get; }
 }
@@ -86,7 +86,7 @@ public abstract class DrawElement
 public sealed class StrokeElement : DrawElement
 {
     public required List<Point> Points { get; init; }
-    public double Thickness { get; init; }
+    public double Thickness { get; set; }
 
     public override Rect BoundingBox
     {
@@ -227,6 +227,7 @@ public sealed class TextElement : DrawElement
     public required Point Position { get; set; }
     public required string Text { get; set; }
     public double FontSize { get; init; }
+    public string FontFamily { get; init; } = "Segoe UI";
     public Size MeasuredSize { get; set; }
 
     public override Rect BoundingBox => new(Position.X, Position.Y, MeasuredSize.Width, MeasuredSize.Height);

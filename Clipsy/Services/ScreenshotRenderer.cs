@@ -239,12 +239,7 @@ public static class ScreenshotRenderer
         font.Dispose();
     }
 
-    private static string ExtractTextFamily(TextElement t)
-    {
-        if (t.Visual is Microsoft.UI.Xaml.Controls.TextBlock tb && tb.FontFamily != null)
-            return tb.FontFamily.Source ?? string.Empty;
-        return string.Empty;
-    }
+    private static string ExtractTextFamily(TextElement t) => t.FontFamily ?? string.Empty;
 
     // PrivateFontCollection for bundled .ttf (Onest): GDI ignores ms-appx:// URIs,
     // so register the file once and pull the family by name.
@@ -309,25 +304,9 @@ public static class ScreenshotRenderer
         }
     }
 
-    private static Color ExtractStrokeColor(DrawElement el)
-    {
-        if (el.Visual is Microsoft.UI.Xaml.Shapes.Shape shape
-            && shape.Stroke is Microsoft.UI.Xaml.Media.SolidColorBrush sb)
-        {
-            return ToGdiColor(sb.Color);
-        }
-        return Color.Red;
-    }
+    private static Color ExtractStrokeColor(DrawElement el) => ToGdiColor(el.Color);
 
-    private static Color ExtractTextColor(TextElement t)
-    {
-        if (t.Visual is Microsoft.UI.Xaml.Controls.TextBlock tb
-            && tb.Foreground is Microsoft.UI.Xaml.Media.SolidColorBrush sb)
-        {
-            return ToGdiColor(sb.Color);
-        }
-        return Color.Red;
-    }
+    private static Color ExtractTextColor(TextElement t) => ToGdiColor(t.Color);
 
     private static Color ToGdiColor(WinColor c) => Color.FromArgb(c.A, c.R, c.G, c.B);
 }
