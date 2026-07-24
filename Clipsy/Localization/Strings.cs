@@ -56,6 +56,7 @@ public static class Strings
         ["TipText"]             = New("Text. Click to place", "Текст. Кликните, чтобы разместить"),
         ["TipShapes"]           = New("Shapes", "Фигуры"),
         ["TipOcr"]              = New("Find text", "Найти текст"),
+        ["TipMove"]             = New("Move objects. Click to select, click again to cycle overlaps, drag to move.", "Перемещение объектов. Клик — выбрать, повторный клик — следующий под курсором, тянуть — двигать."),
         ["TipBrushSize"]        = New("Brush size", "Размер кисти"),
 
         // OCR toolbar

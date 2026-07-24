@@ -74,6 +74,9 @@ public sealed partial class CaptureOverlayWindow
             else if (ke.Key == VirtualKey.Escape) { ke.Handled = true; CancelText(); }
         };
         tb.TextChanged += OnActiveTextBoxTextChanged;
+        // The built-in clear (X) button scales with font size and sits off-screen
+        // when text overflows; hide it once the template is realized.
+        tb.Loaded += (_, _) => HideTextBoxClearButton(tb);
         // Eat pointer events so RootGrid handlers don't re-trigger StartToolPress
         // when the user clicks inside the active text box.
         tb.PointerPressed += (_, ev) => ev.Handled = true;
@@ -246,6 +249,29 @@ public sealed partial class CaptureOverlayWindow
         };
         probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         return (probe.DesiredSize.Width, probe.DesiredSize.Height);
+    }
+
+    private static void HideTextBoxClearButton(Microsoft.UI.Xaml.DependencyObject root)
+    {
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is Button b && b.Name == "DeleteButton")
+            {
+                // Remove from the tree: a plain Collapse is overridden by the
+                // TextBox's own visual states when text is entered.
+                if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(b) is Panel p)
+                    p.Children.Remove(b);
+                else
+                {
+                    b.Visibility = Visibility.Collapsed;
+                    b.Width = 0;
+                }
+                return;
+            }
+            HideTextBoxClearButton(child);
+        }
     }
 
     private void CommitText()

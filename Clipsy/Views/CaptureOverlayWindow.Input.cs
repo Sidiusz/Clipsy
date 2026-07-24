@@ -46,6 +46,14 @@ public sealed partial class CaptureOverlayWindow
             return;
         }
 
+        // Move tool: click selects the topmost object under the cursor; clicking
+        // the same spot again cycles to the next object beneath it. Drag moves it.
+        if (_drawing.Settings.Tool == ToolKind.Move)
+        {
+            if (lmb) { StartMovePress(pos, e.Pointer); e.Handled = true; }
+            return;
+        }
+
         // With a paint tool active the selection is locked: clicks anywhere paint
         // (LMB) or erase (RMB), so drawing outside the rect won't start a new one.
         if (_drawing.Settings.Tool != ToolKind.None)
@@ -227,13 +235,58 @@ public sealed partial class CaptureOverlayWindow
                     _drawing.InvalidateCommitted();
                 }
                 break;
+            case InteractionMode.MovingElement:
+                _drawing.MoveSelected(pos.X - _moveLastPos.X, pos.Y - _moveLastPos.Y);
+                _moveLastPos = pos;
+                break;
         }
     }
 
-    // ---------- Move committed text ----------
+    // ---------- Move committed text (double-click) ----------
 
     private TextElement? _movingText;
     private Point _movingTextGrab;
+
+    // ---------- Move tool (any object) ----------
+
+    private System.Collections.Generic.List<DrawElement>? _moveStack;
+    private int _moveCycleIndex;
+    private Point _moveHitPoint;
+    private Point _moveLastPos;
+
+    private void StartMovePress(Point pos, Pointer pointer)
+    {
+        const double r = 6.0;
+        var hits = _drawing.HitTestAll(pos, r);
+        if (hits.Count == 0)
+        {
+            _drawing.SetSelected(null); // click empty space → deselect
+            _moveStack = null;
+            return;
+        }
+
+        // Same spot as last click → cycle to the next object beneath; new spot →
+        // select the topmost.
+        bool samePoint = _moveStack != null
+            && System.Math.Abs(pos.X - _moveHitPoint.X) < 6
+            && System.Math.Abs(pos.Y - _moveHitPoint.Y) < 6;
+        if (samePoint && _drawing.Selected != null)
+        {
+            _moveStack = hits;
+            _moveCycleIndex = (_moveCycleIndex + 1) % hits.Count;
+        }
+        else
+        {
+            _moveStack = hits;
+            _moveCycleIndex = 0;
+            _moveHitPoint = pos;
+        }
+
+        _drawing.SetSelected(hits[_moveCycleIndex]);
+        _mode = InteractionMode.MovingElement;
+        _moveLastPos = pos;
+        RootGrid.CapturePointer(pointer);
+    }
 
     private bool TryGrabText(Point pos, Pointer pointer)
     {
@@ -308,6 +361,11 @@ public sealed partial class CaptureOverlayWindow
                 break;
             case InteractionMode.MovingText:
                 _movingText = null;
+                break;
+            case InteractionMode.MovingElement:
+                // Keep selection + outline until deselect / tool change; update the
+                // cycle anchor so the moved object isn't re-cycled from its old spot.
+                _moveHitPoint = pos;
                 break;
         }
 
@@ -464,6 +522,9 @@ public sealed partial class CaptureOverlayWindow
                 return true;
             case VirtualKey.Number4:
                 _ = EnterOcrModeAsync();
+                return true;
+            case VirtualKey.Number5:
+                SetTool(_drawing.Settings.Tool == ToolKind.Move ? ToolKind.None : ToolKind.Move);
                 return true;
         }
         return false;

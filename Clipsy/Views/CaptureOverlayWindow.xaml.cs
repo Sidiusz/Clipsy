@@ -34,7 +34,7 @@ namespace Clipsy.Views;
 // .ColorPicker/.Actions/.Ocr (+ this file: ctor, window setup, win32 interop).
 public sealed partial class CaptureOverlayWindow : Window
 {
-    private enum InteractionMode { Idle, SelectingNew, MovingSelection, ResizingSelection, DrawingStroke, DrawingRect, Erasing, PlacingText, SelectingOcrText, MovingText }
+    private enum InteractionMode { Idle, SelectingNew, MovingSelection, ResizingSelection, DrawingStroke, DrawingRect, Erasing, PlacingText, SelectingOcrText, MovingText, MovingElement }
     private enum HandlePos { TL, T, TR, R, BR, B, BL, L }
 
     private const double MinSelectionSize = 4.0;
@@ -290,6 +290,7 @@ public sealed partial class CaptureOverlayWindow : Window
         ToolTipService.SetToolTip(TextBtn,    Strings.Get("TipText"));
         ToolTipService.SetToolTip(ShapesBtn,  Strings.Get("TipShapes"));
         ToolTipService.SetToolTip(OcrBtn,     Strings.Get("TipOcr"));
+        if (MoveBtn != null) ToolTipService.SetToolTip(MoveBtn, Strings.Get("TipMove"));
 
         ToolTipService.SetToolTip(OcrSelectAllBtn, Strings.Get("TipOcrSelectAll"));
         ToolTipService.SetToolTip(OcrCopyBtn,      Strings.Get("TipOcrCopy"));

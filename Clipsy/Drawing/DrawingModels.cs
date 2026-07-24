@@ -13,6 +13,7 @@ public enum ToolKind
     Line,
     Arrow,
     Text,
+    Move,
 }
 
 public sealed class DrawingSettings
@@ -81,6 +82,9 @@ public abstract class DrawElement
     public Color Color { get; init; }
     public abstract bool HitTest(Point p, double radius);
     public abstract Rect BoundingBox { get; }
+
+    /// <summary>Translate the element by (dx, dy) for the move tool.</summary>
+    public abstract void Offset(double dx, double dy);
 }
 
 public sealed class StrokeElement : DrawElement
@@ -114,6 +118,12 @@ public sealed class StrokeElement : DrawElement
         return false;
     }
 
+    public override void Offset(double dx, double dy)
+    {
+        for (int i = 0; i < Points.Count; i++)
+            Points[i] = new Point(Points[i].X + dx, Points[i].Y + dy);
+    }
+
     private static double SegmentDistance(Point a, Point b, Point p)
     {
         double dx = b.X - a.X, dy = b.Y - a.Y;
@@ -134,10 +144,13 @@ public sealed class StrokeElement : DrawElement
 
 public sealed class RectangleElement : DrawElement
 {
-    public required Rect Bounds { get; init; }
+    public required Rect Bounds { get; set; }
     public double Thickness { get; init; }
 
     public override Rect BoundingBox => Bounds;
+
+    public override void Offset(double dx, double dy)
+        => Bounds = new Rect(Bounds.X + dx, Bounds.Y + dy, Bounds.Width, Bounds.Height);
 
     public override bool HitTest(Point p, double radius)
     {
@@ -152,10 +165,13 @@ public sealed class RectangleElement : DrawElement
 
 public sealed class EllipseElement : DrawElement
 {
-    public required Rect Bounds { get; init; }
+    public required Rect Bounds { get; set; }
     public double Thickness { get; init; }
 
     public override Rect BoundingBox => Bounds;
+
+    public override void Offset(double dx, double dy)
+        => Bounds = new Rect(Bounds.X + dx, Bounds.Y + dy, Bounds.Width, Bounds.Height);
 
     public override bool HitTest(Point p, double radius)
     {
@@ -180,9 +196,15 @@ public sealed class EllipseElement : DrawElement
 
 public sealed class LineElement : DrawElement
 {
-    public required Point Start { get; init; }
-    public required Point End { get; init; }
+    public required Point Start { get; set; }
+    public required Point End { get; set; }
     public double Thickness { get; init; }
+
+    public override void Offset(double dx, double dy)
+    {
+        Start = new Point(Start.X + dx, Start.Y + dy);
+        End = new Point(End.X + dx, End.Y + dy);
+    }
 
     /// <summary>Arrow tool: draw an open arrowhead at End.</summary>
     public bool EndArrow { get; init; }
@@ -238,4 +260,7 @@ public sealed class TextElement : DrawElement
         return p.X >= b.X - radius && p.X <= b.X + b.Width + radius
             && p.Y >= b.Y - radius && p.Y <= b.Y + b.Height + radius;
     }
+
+    public override void Offset(double dx, double dy)
+        => Position = new Point(Position.X + dx, Position.Y + dy);
 }
