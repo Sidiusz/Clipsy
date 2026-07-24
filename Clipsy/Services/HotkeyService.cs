@@ -75,6 +75,9 @@ public sealed class HotkeyService : IDisposable
         {
             IsBackground = true,
             Name = "Clipsy.HotkeyPump",
+            // High priority so the WH_KEYBOARD_LL hook is serviced within the OS
+            // hook timeout under load, else typing lags system-wide.
+            Priority = ThreadPriority.Highest,
         };
         _thread.SetApartmentState(ApartmentState.STA);
         _thread.Start();
