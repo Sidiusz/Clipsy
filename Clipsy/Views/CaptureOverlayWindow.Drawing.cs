@@ -32,8 +32,8 @@ public sealed partial class CaptureOverlayWindow
                     Thickness = _drawing.Settings.PencilThickness,
                     Color = _drawing.Settings.Color,
                 };
-                // Rendered on the GPU canvas (not a growing XAML Polyline).
-                _drawing.SetActivePreview(_activeStroke);
+                // Painted into the GPU cache incrementally (O(1) per move).
+                _drawing.BeginActiveStroke(_drawing.Settings.Color, _drawing.Settings.PencilThickness, pos);
                 RootGrid.CapturePointer(pointer);
                 break;
             case ToolKind.Rectangle:
@@ -166,7 +166,7 @@ public sealed partial class CaptureOverlayWindow
             if (dx * dx + dy * dy < MinStrokePointDistSq) return;
         }
         pts.Add(pos);
-        _drawing.Invalidate();
+        _drawing.AppendActiveStroke(pos);
     }
 
     private void FinishStroke()
@@ -179,8 +179,7 @@ public sealed partial class CaptureOverlayWindow
             var only = _activeStroke.Points[0];
             _activeStroke.Points.Add(new Point(only.X + 0.01, only.Y + 0.01));
         }
-        _drawing.SetActivePreview(null);
-        _drawing.Add(_activeStroke);
+        _drawing.EndActiveStroke(_activeStroke);
         _activeStroke = null;
     }
 
