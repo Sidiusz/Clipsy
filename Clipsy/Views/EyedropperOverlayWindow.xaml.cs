@@ -275,18 +275,11 @@ public sealed partial class EyedropperOverlayWindow : Window
     {
         try
         {
-            using var ms = new MemoryStream(_frame.ImageBytes);
-            _bitmap = new System.Drawing.Bitmap(ms);
-            var rect = new System.Drawing.Rectangle(0, 0, _bitmap.Width, _bitmap.Height);
-            var data = _bitmap.LockBits(rect,
-                System.Drawing.Imaging.ImageLockMode.ReadOnly,
-                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            _stride = data.Stride;
-            _pixels = new byte[Math.Abs(data.Stride) * _bitmap.Height];
-            Marshal.Copy(data.Scan0, _pixels, 0, _pixels.Length);
-            _bitmap.UnlockBits(data);
-            // CopyFromScreen leaves alpha=0; force opaque so WriteableBitmap renders correctly.
-            for (int i = 3; i < _pixels.Length; i += 4) _pixels[i] = 0xFF;
+            // Frame carries opaque BGRA (stride = width*4); alias it and rebuild
+            // a GDI bitmap only for GetPixel/size.
+            _bitmap = ScreenFreezeService.CreateBitmap(_frame);
+            _stride = _frame.PixelWidth * 4;
+            _pixels = _frame.PixelBytes;
         }
         catch (Exception ex)
         {

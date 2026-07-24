@@ -80,10 +80,6 @@ public sealed partial class CaptureOverlayWindow : Window
     private double _scanDir = 1.0;
     private Point _ocrDragStart;
 
-    // Pre-allocated dim geometry — avoids GC pressure and XAML re-layout on every PointerMoved.
-    private readonly RectangleGeometry _dimFull = new();
-    private readonly RectangleGeometry _dimHole = new();
-
     public CaptureOverlayWindow(ScreenFreezeService.FrozenFrame frame)
     {
         _frame = frame;
@@ -97,11 +93,6 @@ public sealed partial class CaptureOverlayWindow : Window
         this.SystemBackdrop = null;
 
         ThemeService.Register(RootGrid);
-
-        // Wire up pre-allocated dim geometries once so UpdateDimGeometry only
-        // mutates Rect, never allocates or modifies the Children collection.
-        DimGeometry.Children.Add(_dimFull);
-        DimGeometry.Children.Add(_dimHole);
 
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = GetAppWindowForCurrentWindow();
@@ -154,20 +145,126 @@ public sealed partial class CaptureOverlayWindow : Window
         Activated += OnActivated;
         Closed += OnOverlayClosed;
         RootGrid.SizeChanged += OnRootGridSizeChanged;
-        // Frame is decoded synchronously, so the 2nd composition tick is
-        // guaranteed to contain it — uncloak then. No async-decode race.
-        int composed = 0;
-        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFirstFrames;
-        void OnFirstFrames(object? s, object e)
-        {
-            composed++;
-            if (composed < 2) return;
-            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFirstFrames;
-            Uncloak();
-        }
-        StartRevealWatchdog();
+        ArmReveal();
 
         SetTool(ToolKind.None);
+    }
+
+    // Re-cloaks and re-runs the proven cloak→reveal handshake. Called from the
+    // ctor and on every reuse, so the reveal path itself never changes.
+    private int _composedCount;
+    private void ArmReveal()
+    {
+        _cloaked = true;
+        _revealed = false;
+        try
+        {
+            int cloak = 1;
+            DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref cloak, sizeof(int));
+            SetWindowLong(_hwnd, GWL_EXSTYLE, WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED);
+            SetLayeredWindowAttributes(_hwnd, 0, 0, LWA_ALPHA);
+        }
+        catch { }
+        _composedCount = 0;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFirstFrames;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFirstFrames;
+        StartRevealWatchdog();
+    }
+
+    // Frame is decoded synchronously, so the 2nd composition tick is guaranteed
+    // to contain it — uncloak then. No async-decode race.
+    private void OnFirstFrames(object? s, object e)
+    {
+        _composedCount++;
+        if (_composedCount < 2) return;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFirstFrames;
+        Uncloak();
+    }
+
+    // ---------- Window reuse ----------
+    // Building the WinUI window costs ~80 ms of XAML init per capture. Keep one
+    // instance alive and re-arm it instead of constructing a new one each time.
+
+    internal void PrepareForReuse(ScreenFreezeService.FrozenFrame frame)
+    {
+        _frame = frame;
+        _closed = false;
+        ResetForReuse();
+        ConfigureAsOverlay();   // un-hides (SWP_SHOWWINDOW), resizes to current bounds
+        TryLoadFrozenImage();   // swap in the new capture's bitmap
+        ArmReveal();
+    }
+
+    // Hides + fully resets, keeping the instance alive for the next capture.
+    internal void HideAndReset()
+    {
+        HideForClose();
+        try { ShowWindow(_hwnd, SW_HIDE); } catch { }
+        ResetForReuse();
+    }
+
+    // Returns every interaction surface to its just-opened state. Composed from
+    // the existing exit/cancel paths plus explicit flag/visual resets.
+    private void ResetForReuse()
+    {
+        if (_inOcrMode) ExitOcrMode();
+        if (_tempEyedropper) ExitTempEyedropper(pick: false);
+        if (_eyedropperActive) ExitEyedropperMode();
+        if (_activeTextBox != null) CancelText();
+
+        RemoveActiveDrawingVisuals();
+        _drawing.ClearAll();
+        _movingText = null;
+        _draggingActiveText = false;
+        _mode = InteractionMode.Idle;
+
+        if (_selectionRenderHooked)
+        {
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSelectionRenderTick;
+            _selectionRenderHooked = false;
+        }
+        _selectionVisualDirty = false;
+
+        _hasSelection = false;
+        _selectionFromFallback = false;
+        _selectionRect = default;
+        _selectionAtDragStart = default;
+        _lastClickTick = 0;
+        _anchorRight = true;
+        _anchorBottom = true;
+
+        SelectionLayer.Visibility = Visibility.Collapsed;
+        HideToolbars();
+        SetTool(ToolKind.None);
+
+        try { ColorFlyout?.Hide(); } catch { }
+        if (ShapesFlyout != null) ShapesFlyout.Visibility = Visibility.Collapsed;
+        if (FontsFlyout != null) FontsFlyout.Visibility = Visibility.Collapsed;
+        _shapesClickHandled = false;
+        _textClickHandled = false;
+        if (_hoverTimer != null) { _hoverTimer.Stop(); _hoverTimer = null; }
+
+        // New capture → eyedropper must resample; drop the aliased buffer.
+        _eyedropperPixels = null;
+
+        // Intro animation replays from these start values.
+        DimLayer.Opacity = 0;
+        Hint.Opacity = 0;
+        HintTranslate.Y = 0;
+        Hint.Visibility = Visibility.Visible;
+    }
+
+    private void RemoveActiveDrawingVisuals()
+    {
+        if (_activeStrokeVisual != null) DrawingCanvas.Children.Remove(_activeStrokeVisual);
+        if (_activeRectVisual != null) DrawingCanvas.Children.Remove(_activeRectVisual);
+        if (_activeLineVisual != null) DrawingCanvas.Children.Remove(_activeLineVisual);
+        if (_activeArrowVisual != null) DrawingCanvas.Children.Remove(_activeArrowVisual);
+        _activeStroke = null;
+        _activeStrokeVisual = null;
+        _activeRectVisual = null;
+        _activeLineVisual = null;
+        _activeArrowVisual = null;
     }
 
     private void ApplyLocalization()
@@ -431,7 +528,7 @@ public sealed partial class CaptureOverlayWindow : Window
                 Duration = new Duration(TimeSpan.FromMilliseconds(120)),
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
             };
-            Storyboard.SetTarget(dimFade, DimPath);
+            Storyboard.SetTarget(dimFade, DimLayer);
             Storyboard.SetTargetProperty(dimFade, "Opacity");
             sb.Children.Add(dimFade);
 
@@ -467,7 +564,7 @@ public sealed partial class CaptureOverlayWindow : Window
         {
             // Cosmetic only — but the elements start hidden (Opacity 0 in
             // XAML), so on any failure snap them to their final state.
-            DimPath.Opacity = 1;
+            DimLayer.Opacity = 1;
             Hint.Opacity = 1;
             HintTranslate.Y = 0;
         }
@@ -501,7 +598,6 @@ public sealed partial class CaptureOverlayWindow : Window
             _magBitmap = null;
             DrawingCanvas.Children.Clear();
             CursorPreviewLayer.Children.Clear();
-            DimGeometry.Children.Clear();
             RootGrid.Children.Clear();
             this.Content = null;
         }
@@ -514,30 +610,11 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         try
         {
-            // Decode synchronously into a WriteableBitmap; BitmapImage decodes
-            // async even via SetSource, forcing a black flash or an open delay.
-            using var ms = new System.IO.MemoryStream(_frame.ImageBytes);
-            using var src = new System.Drawing.Bitmap(ms);
-            var wb = new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(src.Width, src.Height);
-            var data = src.LockBits(
-                new System.Drawing.Rectangle(0, 0, src.Width, src.Height),
-                System.Drawing.Imaging.ImageLockMode.ReadOnly,
-                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            try
-            {
-                using var dst = wb.PixelBuffer.AsStream();
-                int rowBytes = src.Width * 4;
-                var row = new byte[rowBytes];
-                for (int y = 0; y < src.Height; y++)
-                {
-                    Marshal.Copy(data.Scan0 + y * data.Stride, row, 0, rowBytes);
-                    dst.Write(row, 0, rowBytes);
-                }
-            }
-            finally
-            {
-                src.UnlockBits(data);
-            }
+            // Raw BGRA copies straight into the WriteableBitmap — no decode, no
+            // per-row loop. BitmapImage decodes async and would flash black.
+            var wb = new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(_frame.PixelWidth, _frame.PixelHeight);
+            using (var dst = wb.PixelBuffer.AsStream())
+                dst.Write(_frame.PixelBytes, 0, _frame.PixelBytes.Length);
             wb.Invalidate();
             FrozenImage.Source = wb;
 
@@ -547,7 +624,7 @@ public sealed partial class CaptureOverlayWindow : Window
             FrozenImage.Width = b.Width / dpiScale;
             FrozenImage.Height = b.Height / dpiScale;
 
-            // FrozenImage opacity controlled by DimPath only
+            // FrozenImage opacity controlled by DimLayer only
         }
         catch (Exception ex)
         {
@@ -618,6 +695,10 @@ public sealed partial class CaptureOverlayWindow : Window
 
     [DllImport("user32.dll")]
     private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_HIDE = 0;
 
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     // Off-screen warm-up position for the first (black-erase) present.

@@ -108,24 +108,11 @@ public sealed partial class CaptureOverlayWindow
         if (_eyedropperPixels != null) return;
         try
         {
-            using var ms = new MemoryStream(_frame.ImageBytes);
-            using var bmp = new System.Drawing.Bitmap(ms);
-            _eyeW = bmp.Width;
-            _eyeH = bmp.Height;
-
-            // Pre-copy all pixels once so sampling/magnifier read from the byte[]
-            // (Format32bppArgb = BGRA); the GDI+ bitmap is disposed right after.
-            var rect = new System.Drawing.Rectangle(0, 0, _eyeW, _eyeH);
-            var data = bmp.LockBits(rect,
-                System.Drawing.Imaging.ImageLockMode.ReadOnly,
-                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            _eyedropperStride = data.Stride;
-            var byteCount = Math.Abs(data.Stride) * _eyeH;
-            _eyedropperPixels = new byte[byteCount];
-            Marshal.Copy(data.Scan0, _eyedropperPixels, 0, byteCount);
-            bmp.UnlockBits(data);
-            // CopyFromScreen leaves alpha=0; force opaque so WriteableBitmap renders correctly.
-            for (int i = 3; i < _eyedropperPixels.Length; i += 4) _eyedropperPixels[i] = 0xFF;
+            // Frame already holds opaque BGRA (stride = width*4); sample it directly.
+            _eyeW = _frame.PixelWidth;
+            _eyeH = _frame.PixelHeight;
+            _eyedropperStride = _eyeW * 4;
+            _eyedropperPixels = _frame.PixelBytes;
         }
         catch (Exception ex)
         {

@@ -30,18 +30,18 @@
                Opacity="1.0"
                IsHitTestVisible="False" />
 
-        <!-- Even-odd dim cut-out for the selected region -->
+        <!-- Dim mask as 4 solid bands around the selection hole. Solid rects are
+             GPU-composited; a full-screen EvenOdd Path re-rasterized on the CPU
+             every pointer move (the 4K selection-drag FPS killer). -->
         <!-- Opacity starts at 0: the window's first frame is composed BEFORE
              the intro animation runs, so a visible dim here flashed dark,
              snapped transparent, then faded back in. -->
-        <Path x:Name="DimPath"
-              Opacity="0"
-              Fill="{ThemeResource ClipsyOverlayDimBrush}"
-              IsHitTestVisible="False">
-            <Path.Data>
-                <GeometryGroup x:Name="DimGeometry" FillRule="EvenOdd" />
-            </Path.Data>
-        </Path>
+        <Canvas x:Name="DimLayer" Opacity="0" IsHitTestVisible="False">
+            <Rectangle x:Name="DimTop"    Fill="{ThemeResource ClipsyOverlayDimBrush}" />
+            <Rectangle x:Name="DimBottom" Fill="{ThemeResource ClipsyOverlayDimBrush}" />
+            <Rectangle x:Name="DimLeft"   Fill="{ThemeResource ClipsyOverlayDimBrush}" />
+            <Rectangle x:Name="DimRight"  Fill="{ThemeResource ClipsyOverlayDimBrush}" />
+        </Canvas>
 
         <!-- Drawings live in root DIPs (kept anchored on resize). -->
         <Canvas x:Name="DrawingCanvas"

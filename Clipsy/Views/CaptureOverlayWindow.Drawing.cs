@@ -158,9 +158,21 @@ public sealed partial class CaptureOverlayWindow
         return (p1, p2);
     }
 
+    // Drop points closer than ~1.4 px to the last one. High-poll mice + intermediate
+    // points otherwise pile thousands of sub-pixel points into one Polyline, and
+    // WinUI re-tessellates the whole thing every frame — the continuous-draw lag.
+    private const double MinStrokePointDistSq = 2.0;
+
     private void ExtendStroke(Point pos)
     {
         if (_activeStroke == null || _activeStrokeVisual == null) return;
+        var pts = _activeStroke.Points;
+        if (pts.Count > 0)
+        {
+            var last = pts[pts.Count - 1];
+            double dx = pos.X - last.X, dy = pos.Y - last.Y;
+            if (dx * dx + dy * dy < MinStrokePointDistSq) return;
+        }
         _activeStroke.Points.Add(pos);
         _activeStrokeVisual.Points.Add(pos);
     }

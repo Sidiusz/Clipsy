@@ -2,10 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.IO;
 using System.Runtime.InteropServices;
-using Microsoft.UI.Xaml.Media.Imaging;
-using Windows.Storage.Streams;
 
 namespace Clipsy.Services;
 
@@ -17,9 +14,12 @@ public sealed class ScreenFreezeService
 
     public sealed class FrozenFrame
     {
-        // BMP-encoded: PNG of a full 4K virtual screen takes seconds; BMP is a
-        // raw memcpy and decodes instantly. Buffer is transient.
-        public required byte[] ImageBytes { get; init; }
+        // Raw top-down BGRA32, opaque, tightly packed (stride = Width*4). Kept
+        // decoded: BMP encode + re-decode churned ~100 MB on the LOH per capture
+        // and stalled the open on GC. This copies straight into WriteableBitmap.
+        public required byte[] PixelBytes { get; init; }
+        public required int PixelWidth { get; init; }
+        public required int PixelHeight { get; init; }
         public required Rectangle VirtualBounds { get; init; }
         public required IReadOnlyList<MonitorInfo> Monitors { get; init; }
     }
@@ -28,9 +28,6 @@ public sealed class ScreenFreezeService
     {
         var bounds = GetVirtualScreenBounds();
         var monitors = EnumerateMonitors();
-
-        // Small delay to ensure any UI animations or window transitions complete
-        System.Threading.Thread.Sleep(50);
 
         using var bmp = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(bmp))
@@ -46,30 +43,43 @@ public sealed class ScreenFreezeService
                 DrawCursorOnto(g, bounds.X, bounds.Y);
         }
 
-        using var ms = new MemoryStream();
-        bmp.Save(ms, ImageFormat.Bmp);
+        int w = bmp.Width, h = bmp.Height;
+        int stride = w * 4;
+        var pixels = new byte[stride * h];
+        var data = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            if (data.Stride == stride)
+                Marshal.Copy(data.Scan0, pixels, 0, pixels.Length);
+            else
+                for (int y = 0; y < h; y++)
+                    Marshal.Copy(data.Scan0 + y * data.Stride, pixels, y * stride, stride);
+        }
+        finally { bmp.UnlockBits(data); }
+
+        // CopyFromScreen leaves alpha at 0; force opaque so the premultiplied
+        // WriteableBitmap shows the frame instead of full transparency.
+        for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 0xFF;
 
         return new FrozenFrame
         {
-            ImageBytes = ms.ToArray(),
+            PixelBytes = pixels,
+            PixelWidth = w,
+            PixelHeight = h,
             VirtualBounds = bounds,
             Monitors = monitors,
         };
     }
 
-    public static async System.Threading.Tasks.Task<BitmapImage> ToBitmapImageAsync(byte[] png)
+    // Rebuilds a GDI bitmap from the raw buffer for the eyedropper/renderer
+    // (off the launch hot path). Caller owns the returned bitmap.
+    public static Bitmap CreateBitmap(FrozenFrame f)
     {
-        var stream = new InMemoryRandomAccessStream();
-        using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
-        {
-            writer.WriteBytes(png);
-            await writer.StoreAsync();
-            await writer.FlushAsync();
-            writer.DetachStream();
-        }
-        stream.Seek(0);
-        var bmp = new BitmapImage();
-        await bmp.SetSourceAsync(stream);
+        var bmp = new Bitmap(f.PixelWidth, f.PixelHeight, PixelFormat.Format32bppArgb);
+        var data = bmp.LockBits(new Rectangle(0, 0, f.PixelWidth, f.PixelHeight),
+            ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        try { Marshal.Copy(f.PixelBytes, 0, data.Scan0, f.PixelBytes.Length); }
+        finally { bmp.UnlockBits(data); }
         return bmp;
     }
 
