@@ -91,7 +91,7 @@ public sealed partial class CaptureOverlayWindow
             Padding = new Thickness(10, 5, 10, 5),
             Child = new FontIcon
             {
-                Glyph = "", // Move (Segoe Fluent Icons)
+                Glyph = "\uE7C2", // Move glyph (escaped so it survives editors)
                 FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
                 FontSize = 16,
                 Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
