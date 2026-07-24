@@ -57,7 +57,6 @@ public sealed partial class CaptureOverlayWindow : Window
     private Point _dragStart;
     private HandlePos _activeHandle;
 
-    private Polyline? _activeStrokeVisual;
     private StrokeElement? _activeStroke;
     private Shape? _activeRectVisual;
     private Line? _activeLineVisual;
@@ -112,7 +111,7 @@ public sealed partial class CaptureOverlayWindow : Window
         // already shows the snapshot, not black-then-desktop.
         TryLoadFrozenImage();
 
-        _drawing = new DrawingController(DrawingCanvas);
+        _drawing = new DrawingController(CommittedLayer);
         ApplyLocalization();
         PositionHintOnPrimaryScreen();
         BuildHandles();
@@ -256,12 +255,11 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void RemoveActiveDrawingVisuals()
     {
-        if (_activeStrokeVisual != null) DrawingCanvas.Children.Remove(_activeStrokeVisual);
+        _drawing.SetActivePreview(null);
         if (_activeRectVisual != null) DrawingCanvas.Children.Remove(_activeRectVisual);
         if (_activeLineVisual != null) DrawingCanvas.Children.Remove(_activeLineVisual);
         if (_activeArrowVisual != null) DrawingCanvas.Children.Remove(_activeArrowVisual);
         _activeStroke = null;
-        _activeStrokeVisual = null;
         _activeRectVisual = null;
         _activeLineVisual = null;
         _activeArrowVisual = null;
@@ -479,6 +477,9 @@ public sealed partial class CaptureOverlayWindow : Window
         // Shown with NOACTIVATE, so grab foreground/focus explicitly once visible.
         ForceForeground(_hwnd);
         RootGrid.Focus(FocusState.Programmatic);
+        // Force a GPU redraw now the window is visible: a ClearAll invalidate
+        // issued while hidden is dropped, leaving last capture's drawings.
+        _drawing?.Invalidate();
         PlayIntroAnimations();
     }
 
@@ -598,6 +599,8 @@ public sealed partial class CaptureOverlayWindow : Window
             _magBitmap = null;
             DrawingCanvas.Children.Clear();
             CursorPreviewLayer.Children.Clear();
+            // Win2D holds a GPU device; release it explicitly.
+            try { CommittedLayer.RemoveFromVisualTree(); } catch { }
             RootGrid.Children.Clear();
             this.Content = null;
         }

@@ -97,7 +97,6 @@ public sealed partial class CaptureOverlayWindow
                 Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
             },
         };
-        ToolTipService.SetToolTip(handle, "Drag to reposition");
         Canvas.SetLeft(handle, tbLeft);
         Canvas.SetTop(handle, tbTop - 30); // sit just above the box
         DrawingCanvas.Children.Add(handle);
@@ -185,7 +184,7 @@ public sealed partial class CaptureOverlayWindow
         Canvas.SetLeft(_activeTextBox, newLeft);
         Canvas.SetTop(_activeTextBox,  newTop);
         Canvas.SetLeft(_activeDragHandle, newLeft);
-        Canvas.SetTop(_activeDragHandle, newTop - 18);
+        Canvas.SetTop(_activeDragHandle, newTop - 30);
         // Move the anchor too so future re-centering on first keystroke
         // (if it hasn't fired yet) stays consistent with the new position.
         _activeTextAnchor = new Point(
@@ -269,28 +268,25 @@ public sealed partial class CaptureOverlayWindow
         }
         DrawingCanvas.IsHitTestVisible = false;
         if (string.IsNullOrWhiteSpace(text)) return;
-        var tb = new TextBlock
+        // Measure with an off-tree TextBlock; the committed glyph itself renders
+        // on the GPU canvas, not as a XAML node.
+        var probe = new TextBlock
         {
             Text = text,
             FontFamily = family,
             FontSize = _drawing.Settings.TextSize,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(_drawing.Settings.Color),
-            IsHitTestVisible = false,
         };
-        Canvas.SetLeft(tb, x);
-        Canvas.SetTop(tb, y);
-        tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var size = tb.DesiredSize;
-        var element = new TextElement
+        probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        _drawing.Add(new TextElement
         {
-            Visual = tb,
             Position = new Point(x, y),
             Text = text,
             FontSize = _drawing.Settings.TextSize,
-            MeasuredSize = size,
-        };
-        _drawing.Add(element);
+            FontFamily = _drawing.Settings.TextFont,
+            MeasuredSize = probe.DesiredSize,
+            Color = _drawing.Settings.Color,
+        });
     }
 
     private void CancelText()

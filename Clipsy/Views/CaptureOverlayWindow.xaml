@@ -11,7 +11,8 @@
 <Window
     x:Class="Clipsy.Views.CaptureOverlayWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml">
 
     <Grid x:Name="RootGrid"
           Background="Transparent"
@@ -43,7 +44,11 @@
             <Rectangle x:Name="DimRight"  Fill="{ThemeResource ClipsyOverlayDimBrush}" />
         </Canvas>
 
-        <!-- Drawings live in root DIPs (kept anchored on resize). -->
+        <!-- Committed drawings render here on the GPU (Win2D), redrawn only on
+             change — keeps the visual tree flat no matter how much is drawn. -->
+        <canvas:CanvasControl x:Name="CommittedLayer" IsHitTestVisible="False" ClearColor="Transparent" />
+
+        <!-- In-progress (active) stroke/shape + text entry live here as XAML. -->
         <Canvas x:Name="DrawingCanvas"
                 Background="Transparent"
                 IsHitTestVisible="False" />

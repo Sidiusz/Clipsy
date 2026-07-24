@@ -224,8 +224,7 @@ public sealed partial class CaptureOverlayWindow
                     double nx = pos.X - _movingTextGrab.X;
                     double ny = pos.Y - _movingTextGrab.Y;
                     _movingText.Position = new Point(nx, ny);
-                    Canvas.SetLeft(_movingText.Visual, nx);
-                    Canvas.SetTop(_movingText.Visual, ny);
+                    _drawing.Invalidate();
                 }
                 break;
         }
@@ -342,8 +341,11 @@ public sealed partial class CaptureOverlayWindow
 
         // Apply the new thickness live to whichever shape the user is currently
         // dragging so the visual matches the cursor preview immediately.
-        if (_activeStrokeVisual != null)
-            _activeStrokeVisual.StrokeThickness = _drawing.Settings.PencilThickness;
+        if (_activeStroke != null)
+        {
+            _activeStroke.Thickness = _drawing.Settings.PencilThickness;
+            _drawing.Invalidate();
+        }
         if (_activeRectVisual != null)
             _activeRectVisual.StrokeThickness = _drawing.Settings.Tool == ToolKind.Ellipse
                 ? _drawing.Settings.EllipseThickness
