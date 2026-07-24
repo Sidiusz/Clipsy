@@ -531,6 +531,14 @@
                                                 <ComboBoxItem x:Name="UpdMonthly" Content="Monthly" Tag="monthly" />
                                                 <ComboBoxItem x:Name="UpdNever" Content="Never" Tag="never" />
                                             </ComboBox>
+                                            <Button x:Name="BtnChangelog"
+                                                    Style="{StaticResource ClipsyButtonGhost}"
+                                                    Click="OnOpenChangelog">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xE7C3;" FontSize="13" />
+                                                    <TextBlock x:Name="BtnChangelogText" Text="Changelog" />
+                                                </StackPanel>
+                                            </Button>
                                             <Button x:Name="BtnCheckNow"
                                                     Style="{StaticResource ClipsyButtonGhost}"
                                                     Click="OnCheckUpdates">

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
@@ -19,6 +20,8 @@ public enum UpdateCheckStatus
 }
 
 public sealed record UpdateCheckResult(UpdateCheckStatus Status, UpdateInfo? Info);
+
+public sealed record ReleaseNote(string Version, string Title, string Notes, DateTime Published, string Url);
 
 public static class UpdateService
 {
@@ -62,6 +65,47 @@ public static class UpdateService
 
         // Fallback: github.com web redirect. Survives API 403 / rate limits.
         return await CheckViaWebRedirectAsync();
+    }
+
+    private const string ApiReleasesUrl = "https://api.github.com/repos/Sidiusz/Clipsy/releases?per_page=100";
+
+    public static async Task<IReadOnlyList<ReleaseNote>> FetchReleasesAsync()
+    {
+        try
+        {
+            var json = await _http.GetStringAsync(ApiReleasesUrl);
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return Array.Empty<ReleaseNote>();
+
+            var list = new List<ReleaseNote>();
+            foreach (var r in doc.RootElement.EnumerateArray())
+            {
+                if (r.TryGetProperty("draft", out var dr) && dr.GetBoolean()) continue;
+                var tag = r.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
+                if (string.IsNullOrEmpty(tag)) continue;
+                var name = r.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                var body = r.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
+                var url = r.TryGetProperty("html_url", out var u) ? u.GetString() ?? "" : "";
+                DateTime published = r.TryGetProperty("published_at", out var p)
+                    && p.TryGetDateTime(out var dt) ? dt : DateTime.MinValue;
+                list.Add(new ReleaseNote(tag.TrimStart('v', 'V'), name, body, published, url));
+            }
+            list.Sort((a, b) => CompareVersionsDesc(a.Version, b.Version));
+            return list;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Clipsy] Fetch releases failed: {ex.Message}");
+            return Array.Empty<ReleaseNote>();
+        }
+    }
+
+    private static int CompareVersionsDesc(string a, string b)
+    {
+        TryParseVersion(a, out var va);
+        TryParseVersion(b, out var vb);
+        return vb.CompareTo(va);
     }
 
     private static UpdateInfo? ParseApiRelease(string json)

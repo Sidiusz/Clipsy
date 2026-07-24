@@ -18,6 +18,7 @@ public sealed class AppSettings
     public string? LastVideoFolder { get; set; }
     public string UpdateInterval { get; set; } = "daily";   // hourly / daily / weekly / monthly / never
     public bool AutoDownloadUpdates { get; set; } = true;   // download installer when PC is idle
+    public string LastChangelogVersion { get; set; } = "";  // version whose changelog was auto-shown
     public string AfterSaveAction { get; set; } = "nothing"; // open-file / open-folder / nothing
 
     // Screenshot

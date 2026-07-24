@@ -256,6 +256,7 @@ public sealed partial class SettingsWindow : Window
             Activate();
             SetForegroundWindow(_hwnd);
             StartTipRotation();
+            MaybeShowChangelogAfterUpdate();
         }
         catch (Exception ex) { Diagnostics.Show("SettingsWindow.Reveal", ex); }
     }
@@ -941,6 +942,20 @@ public sealed partial class SettingsWindow : Window
 
     private void OnCheckUpdates(object sender, RoutedEventArgs e)
         => _ = UpdateManager.CheckAsync(true);
+
+    private void OnOpenChangelog(object sender, RoutedEventArgs e)
+        => ChangelogWindow.ShowWindow();
+
+    // First Settings open after an update auto-shows the changelog once.
+    private void MaybeShowChangelogAfterUpdate()
+    {
+        var current = UpdateService.CurrentVersion();
+        var s = SettingsService.Instance.Settings;
+        if (s.LastChangelogVersion == current) return;
+        s.LastChangelogVersion = current;
+        SettingsService.Instance.Save();
+        ChangelogWindow.ShowWindow();
+    }
 
     private void OnUpdateActionClick(object sender, RoutedEventArgs e)
         => UpdateManager.PrimaryAction();

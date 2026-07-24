@@ -152,6 +152,7 @@ public sealed partial class SettingsWindow
         ScreenshotFolderPick.Content = Strings.Get("BtnBrowse");
         VideoFolderPick.Content      = Strings.Get("BtnBrowse");
         BtnCheckNow.Content          = Strings.Get("BtnCheckNow");
+        BtnChangelogText.Text        = Strings.Get("BtnChangelog");
         BtnReset.Content             = Strings.Get("BtnReset");
         BtnClose.Content             = Strings.Get("BtnClose");
         BtnSave.Content              = Strings.Get("BtnSave");
