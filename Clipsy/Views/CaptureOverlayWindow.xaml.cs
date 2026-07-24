@@ -255,7 +255,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void RemoveActiveDrawingVisuals()
     {
-        _drawing.SetActivePreview(null);
+        _drawing.CancelActiveStroke();
         if (_activeRectVisual != null) DrawingCanvas.Children.Remove(_activeRectVisual);
         if (_activeLineVisual != null) DrawingCanvas.Children.Remove(_activeLineVisual);
         if (_activeArrowVisual != null) DrawingCanvas.Children.Remove(_activeArrowVisual);
@@ -479,7 +479,7 @@ public sealed partial class CaptureOverlayWindow : Window
         RootGrid.Focus(FocusState.Programmatic);
         // Force a GPU redraw now the window is visible: a ClearAll invalidate
         // issued while hidden is dropped, leaving last capture's drawings.
-        _drawing?.Invalidate();
+        _drawing?.InvalidateCommitted();
         PlayIntroAnimations();
     }
 
@@ -600,6 +600,7 @@ public sealed partial class CaptureOverlayWindow : Window
             DrawingCanvas.Children.Clear();
             CursorPreviewLayer.Children.Clear();
             // Win2D holds a GPU device; release it explicitly.
+            try { _drawing?.DisposeResources(); } catch { }
             try { CommittedLayer.RemoveFromVisualTree(); } catch { }
             RootGrid.Children.Clear();
             this.Content = null;

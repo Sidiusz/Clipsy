@@ -27,9 +27,19 @@ public sealed class DrawingController
         LineJoin = CanvasLineJoin.Round,
     };
 
-    // In-progress pencil stroke, drawn on the GPU on top of committed content so
-    // a single long stroke never grows a XAML Polyline (the continuous-draw lag).
-    private StrokeElement? _activePreview;
+    // Committed content is baked into an offscreen target and rebuilt only on
+    // change, so an active-draw frame is one blit — flat FPS no matter how much
+    // is already drawn.
+    private CanvasRenderTarget? _cache;
+    private bool _cacheDirty = true;
+
+    // In-progress pencil stroke: each new segment is painted straight into the
+    // cache (O(1) per move), never a per-frame geometry rebuild from all points.
+    private bool _activeOpen;
+    private bool _activeMissedPaint;
+    private Color _activeColor;
+    private double _activeThickness;
+    private Point _activeLast;
 
     public DrawingSettings Settings { get; } = new();
     public IReadOnlyList<DrawElement> Elements => _elements;
@@ -40,16 +50,68 @@ public sealed class DrawingController
         _canvas.Draw += OnDraw;
     }
 
-    public void Invalidate() => _canvas.Invalidate();
+    // Committed content changed (move/undo/etc.): rebuild the cache next draw.
+    public void InvalidateCommitted() { _cacheDirty = true; _canvas.Invalidate(); }
 
-    public void SetActivePreview(StrokeElement? s) { _activePreview = s; _canvas.Invalidate(); }
+    public void BeginActiveStroke(Color color, double thickness, Point start)
+    {
+        _activeColor = color;
+        _activeThickness = thickness;
+        _activeLast = start;
+        _activeOpen = true;
+        _activeMissedPaint = false;
+        PaintActiveSegment(start, start); // start dot (round cap)
+    }
+
+    public void SetActiveThickness(double thickness) => _activeThickness = thickness;
+
+    public void AppendActiveStroke(Point pt)
+    {
+        if (!_activeOpen) return;
+        PaintActiveSegment(_activeLast, pt);
+        _activeLast = pt;
+    }
+
+    // Commit: pixels are already in the cache from the incremental paint, so add
+    // the element without a full rebuild. Undo/erase later rebuild from the list.
+    public void EndActiveStroke(StrokeElement e)
+    {
+        _activeOpen = false;
+        _elements.Add(e);
+        _undo.Push(new HistoryOp(HistoryKind.Add, e));
+        _redo.Clear();
+        // Cache wasn't ready for some segments — rebuild so the stroke shows.
+        if (_activeMissedPaint) InvalidateCommitted();
+    }
+
+    // Discard an in-progress stroke: repaint the cache from committed elements.
+    public void CancelActiveStroke()
+    {
+        if (!_activeOpen) return;
+        _activeOpen = false;
+        InvalidateCommitted();
+    }
+
+    private void PaintActiveSegment(Point a, Point b)
+    {
+        if (_cache == null) { _activeMissedPaint = true; _canvas.Invalidate(); return; }
+        using var cds = _cache.CreateDrawingSession();
+        cds.DrawLine(V(a), V(b), _activeColor, (float)_activeThickness, RoundStroke);
+        _canvas.Invalidate();
+    }
+
+    public void DisposeResources()
+    {
+        _cache?.Dispose();
+        _cache = null;
+    }
 
     public void Add(DrawElement e)
     {
         _elements.Add(e);
         _undo.Push(new HistoryOp(HistoryKind.Add, e));
         _redo.Clear();
-        _canvas.Invalidate();
+        InvalidateCommitted();
     }
 
     public void Remove(DrawElement e)
@@ -57,7 +119,7 @@ public sealed class DrawingController
         if (!_elements.Remove(e)) return;
         _undo.Push(new HistoryOp(HistoryKind.Remove, e));
         _redo.Clear();
-        _canvas.Invalidate();
+        InvalidateCommitted();
     }
 
     public bool Undo()
@@ -66,7 +128,7 @@ public sealed class DrawingController
         var op = _undo.Pop();
         ApplyInverse(op);
         _redo.Push(op);
-        _canvas.Invalidate();
+        InvalidateCommitted();
         return true;
     }
 
@@ -76,7 +138,7 @@ public sealed class DrawingController
         var op = _redo.Pop();
         Apply(op);
         _undo.Push(op);
-        _canvas.Invalidate();
+        InvalidateCommitted();
         return true;
     }
 
@@ -85,7 +147,7 @@ public sealed class DrawingController
         _elements.Clear();
         _undo.Clear();
         _redo.Clear();
-        _canvas.Invalidate();
+        InvalidateCommitted();
     }
 
     public DrawElement? HitTestTopmost(Point p, double radius)
@@ -109,7 +171,7 @@ public sealed class DrawingController
             _elements.RemoveAt(i);
             changed = true;
         }
-        if (changed) { _redo.Clear(); _canvas.Invalidate(); }
+        if (changed) { _redo.Clear(); InvalidateCommitted(); }
         return changed;
     }
 
@@ -145,7 +207,7 @@ public sealed class DrawingController
             // Eraser commits make the existing history meaningless for the
             // affected stroke; clear redo and skip undo bookkeeping.
             _redo.Clear();
-            _canvas.Invalidate();
+            InvalidateCommitted();
         }
         return changed;
     }
@@ -198,14 +260,33 @@ public sealed class DrawingController
     private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         var ds = args.DrawingSession;
-        // One bad element (e.g. an unresolvable font) must not blank the canvas.
+        EnsureCache(sender);
+        if (_cache != null) ds.DrawImage(_cache);
+    }
+
+    private void EnsureCache(CanvasControl sender)
+    {
+        float w = (float)sender.Size.Width;
+        float h = (float)sender.Size.Height;
+        if (w <= 0 || h <= 0) { _cache = null; return; }
+
+        if (_cache == null ||
+            System.Math.Abs(_cache.Size.Width - w) > 0.5 ||
+            System.Math.Abs(_cache.Size.Height - h) > 0.5)
+        {
+            _cache?.Dispose();
+            _cache = new CanvasRenderTarget(sender, w, h);
+            _cacheDirty = true;
+        }
+        if (!_cacheDirty) return;
+        _cacheDirty = false;
+
+        using var cds = _cache.CreateDrawingSession();
+        cds.Clear(Microsoft.UI.Colors.Transparent);
+        // One bad element (e.g. an unresolvable font) must not blank the cache.
         foreach (var el in _elements)
         {
-            try { DrawOne(ds, el); } catch { }
-        }
-        if (_activePreview != null)
-        {
-            try { DrawStroke(ds, _activePreview); } catch { }
+            try { DrawOne(cds, el); } catch { }
         }
     }
 

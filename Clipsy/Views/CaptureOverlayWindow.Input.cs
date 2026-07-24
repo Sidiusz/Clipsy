@@ -224,7 +224,7 @@ public sealed partial class CaptureOverlayWindow
                     double nx = pos.X - _movingTextGrab.X;
                     double ny = pos.Y - _movingTextGrab.Y;
                     _movingText.Position = new Point(nx, ny);
-                    _drawing.Invalidate();
+                    _drawing.InvalidateCommitted();
                 }
                 break;
         }
@@ -344,7 +344,7 @@ public sealed partial class CaptureOverlayWindow
         if (_activeStroke != null)
         {
             _activeStroke.Thickness = _drawing.Settings.PencilThickness;
-            _drawing.Invalidate();
+            _drawing.SetActiveThickness(_drawing.Settings.PencilThickness);
         }
         if (_activeRectVisual != null)
             _activeRectVisual.StrokeThickness = _drawing.Settings.Tool == ToolKind.Ellipse
