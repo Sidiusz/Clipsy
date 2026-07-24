@@ -46,44 +46,21 @@ public static class TranslationService
             bool google = string.Equals(service, "Google", StringComparison.OrdinalIgnoreCase);
             int limit = google ? ChunkLimitGoogle : ChunkLimitMyMemory;
 
-            // Translate paragraph-by-paragraph to preserve line structure;
-            // sentence-level chunking only kicks in for an over-limit paragraph.
-            var paragraphs = text.Split('\n');
-            var translated = new string[paragraphs.Length];
-
-            for (int i = 0; i < paragraphs.Length; i++)
+            // Pack as many lines as fit into each request (newlines preserved) so
+            // the engine translates with full cross-line context. Translating each
+            // OCR line alone produced disjointed, meaningless output.
+            var chunks = PackChunks(text, limit);
+            var parts = new List<string>(chunks.Count);
+            foreach (var c in chunks)
             {
-                var p = paragraphs[i];
-                if (string.IsNullOrWhiteSpace(p))
-                {
-                    translated[i] = p;
-                    continue;
-                }
-                if (p.Length <= limit)
-                {
-                    var t = google
-                        ? await TranslateChunkGoogleAsync(p, from, to)
-                        : await TranslateChunkMyMemoryAsync(p, from, to);
-                    if (t == null) return null;
-                    translated[i] = t;
-                }
-                else
-                {
-                    var chunks = SplitIntoChunks(p, limit);
-                    var parts = new List<string>(chunks.Count);
-                    foreach (var c in chunks)
-                    {
-                        var t = google
-                            ? await TranslateChunkGoogleAsync(c, from, to)
-                            : await TranslateChunkMyMemoryAsync(c, from, to);
-                        if (t == null) return null;
-                        parts.Add(t);
-                    }
-                    translated[i] = string.Join(" ", parts);
-                }
+                if (string.IsNullOrWhiteSpace(c)) { parts.Add(c); continue; }
+                var t = google
+                    ? await TranslateChunkGoogleAsync(c, from, to)
+                    : await TranslateChunkMyMemoryAsync(c, from, to);
+                if (t == null) return null;
+                parts.Add(t);
             }
-
-            return string.Join("\n", translated);
+            return string.Join("\n", parts);
         }
         catch (Exception ex)
         {
@@ -123,6 +100,29 @@ public static class TranslationService
                 sb.Append(seg[0].GetString());
         }
         return sb.ToString();
+    }
+
+    // Pack whole lines into <=limit requests, keeping newlines so the engine sees
+    // context. An over-limit single line falls back to sentence chunking.
+    private static List<string> PackChunks(string text, int limit)
+    {
+        var result = new List<string>();
+        var cur = new StringBuilder();
+        foreach (var line in text.Split('\n'))
+        {
+            if (line.Length > limit)
+            {
+                if (cur.Length > 0) { result.Add(cur.ToString()); cur.Clear(); }
+                result.AddRange(SplitIntoChunks(line, limit));
+                continue;
+            }
+            int projected = cur.Length == 0 ? line.Length : cur.Length + 1 + line.Length;
+            if (projected > limit && cur.Length > 0) { result.Add(cur.ToString()); cur.Clear(); }
+            if (cur.Length > 0) cur.Append('\n');
+            cur.Append(line);
+        }
+        if (cur.Length > 0) result.Add(cur.ToString());
+        return result;
     }
 
     // Split at sentence boundaries (. ! ? newline) keeping each chunk <= limit chars.
