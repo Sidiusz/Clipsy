@@ -99,6 +99,7 @@ public sealed class RecordingController
 
         _micMuted = settings.MicrophoneEnabled && settings.MicrophoneMuted;
         _hud.InitMic(settings.MicrophoneEnabled, _micMuted);
+        _hud.ConfigureCapabilities(!isFfmpegCodec, !isFfmpegCodec, !isFfmpegCodec);
 
         int virtualScreenH = Services.ScreenFreezeService.GetVirtualScreenBounds().Height;
         _hud.PositionBelowRegion(x, y, w, h, virtualScreenH);
@@ -224,6 +225,7 @@ public sealed class RecordingController
 
     private void OnMicMuteToggled(bool muted)
     {
+        if (_ffmpegRec != null) return;
         _micMuted = muted;
         _service?.SetMicMuted(muted);
         var s = SettingsService.Instance.Settings;
@@ -233,6 +235,7 @@ public sealed class RecordingController
 
     public void ToggleMic()
     {
+        if (_ffmpegRec != null) return;
         _micMuted = !_micMuted;
         _service?.SetMicMuted(_micMuted);
         _hud?.SetMicMuted(_micMuted);

@@ -259,8 +259,9 @@ public static class OcrEngineFactory
 {
     public static IOcrEngine Resolve()
     {
-        // Prefer Tesseract when installed; WinRT OCR uses one profile language.
-        if (TessdataService.InstalledSelectedCodes().Count > 0)
+        var configured = SettingsService.Instance.Settings.OcrEngine;
+        if (string.Equals(configured, "Tesseract", StringComparison.OrdinalIgnoreCase)
+            && TessdataService.InstalledSelectedCodes().Count > 0)
             return new TesseractOcrEngine();
         return new WinRtOcrEngine();
     }

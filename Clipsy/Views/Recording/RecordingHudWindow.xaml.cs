@@ -115,6 +115,13 @@ public sealed partial class RecordingHudWindow : Window
         else UpdateMicTooltip();
     }
 
+    public void ConfigureCapabilities(bool canPause, bool canResizeRegion, bool canToggleMic)
+    {
+        PauseBtn.IsEnabled = canPause;
+        LockBtn.IsEnabled = canResizeRegion;
+        MicBtn.IsEnabled = canToggleMic;
+    }
+
     public void SetMicMuted(bool muted)
     {
         MicBtn.IsChecked = !muted;

@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using Clipsy.Drawing;
+using SkiaSharp;
 using Windows.Foundation;
 using WinColor = Windows.UI.Color;
 
@@ -80,10 +81,18 @@ public static class ScreenshotRenderer
                     break;
                 }
             case OutputFormat.Webp:
-                // System.Drawing.Common can't encode WebP; fall back to PNG.
-                System.Diagnostics.Debug.WriteLine("[Clipsy] WebP requested but not supported; saving PNG.");
-                bmp.Save(ms, ImageFormat.Png);
-                break;
+                {
+                    using var png = new MemoryStream();
+                    bmp.Save(png, ImageFormat.Png);
+                    png.Position = 0;
+                    using var skBitmap = SKBitmap.Decode(png)
+                        ?? throw new InvalidOperationException("Failed to decode screenshot for WebP encoding.");
+                    using var image = SKImage.FromBitmap(skBitmap);
+                    using var data = image.Encode(SKEncodedImageFormat.Webp, Math.Clamp(quality, 1, 100))
+                        ?? throw new InvalidOperationException("Failed to encode WebP screenshot.");
+                    data.SaveTo(ms);
+                    break;
+                }
             default:
                 bmp.Save(ms, ImageFormat.Png);
                 break;
