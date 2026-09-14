@@ -41,9 +41,20 @@ public sealed class RecordingController
         var ui = DispatcherQueue.GetForCurrentThread()
             ?? throw new InvalidOperationException("Recording must be started from the UI thread.");
         var c = new RecordingController(ui);
-        c.Start(x, y, w, h);
         _current = c;
-        return true;
+        try
+        {
+            c.Start(x, y, w, h);
+            return ReferenceEquals(_current, c);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("RecordingController.TryStart", ex);
+            try { c.Cleanup(discardTemp: true); }
+            catch (Exception cleanupEx) { Diagnostics.Log("RecordingController.TryStart Cleanup", cleanupEx); }
+            NotificationService.Error("ErrRecordFailed");
+            return false;
+        }
     }
 
     public void StopFromHotkey()
@@ -402,7 +413,7 @@ public sealed class RecordingController
             settings.Save();
             NotifyVideoSaved(actual, dest, fmt);
             Diagnostics.Log($"  AfterSaveAction.Run action='{settings.Settings.AfterSaveAction}'");
-            AfterSaveAction.Run(dest, settings.Settings.AfterSaveAction);
+            AfterSaveAction.Run(actual, settings.Settings.AfterSaveAction);
             Diagnostics.Log("SilentSave EXIT OK");
         }
         catch (Exception ex)
@@ -537,7 +548,7 @@ public sealed class RecordingController
             }
             NotifyVideoSaved(actual, dest, chosenFmt);
             Diagnostics.Log($"  AfterSaveAction.Run action='{settings.Settings.AfterSaveAction}'");
-            AfterSaveAction.Run(dest, settings.Settings.AfterSaveAction);
+            AfterSaveAction.Run(actual, settings.Settings.AfterSaveAction);
             Diagnostics.Log("OfferSaveAsync EXIT OK");
         }
         catch (Exception ex)
