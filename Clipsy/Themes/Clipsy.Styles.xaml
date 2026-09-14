@@ -611,14 +611,14 @@
                         <Border x:Name="RootBorder" Grid.Column="1"
                                 Background="Transparent"
                                 CornerRadius="6"
-                                Margin="8,0,8,0">
+                                Margin="6,0,6,0">
                             <ContentPresenter x:Name="ContentPresenter"
                                               Content="{TemplateBinding Content}"
                                               ContentTemplate="{TemplateBinding ContentTemplate}"
                                               Foreground="{TemplateBinding Foreground}"
                                               HorizontalContentAlignment="Stretch"
                                               VerticalContentAlignment="Center"
-                                              Padding="10,0" />
+                                              Padding="6,0" />
                         </Border>
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
@@ -1177,7 +1177,7 @@
         <Setter Property="CornerRadius" Value="{StaticResource ClipsyRadiusMd}" />
         <Setter Property="Padding" Value="12,10" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
-        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="UseSystemFocusVisuals" Value="False" />
         <Setter Property="Template">

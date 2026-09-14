@@ -49,7 +49,7 @@
         <!-- ============== Body ============== -->
         <Grid Grid.Row="1" Background="{ThemeResource ClipsyBg0Brush}">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="230" />
+                <ColumnDefinition Width="Auto" MinWidth="220" MaxWidth="280" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
@@ -84,14 +84,14 @@
                                      Checked="OnNavChecked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="22" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavGeneral" Grid.Column="0"
                                           Glyph="&#xE713;" FontSize="16"
                                           VerticalAlignment="Center" />
                                 <TextBlock x:Name="NavGeneralLabel" Grid.Column="1"
-                                           Text="General" FontSize="13" VerticalAlignment="Center" />
+                                           Text="General" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </Grid>
                         </RadioButton>
 
@@ -101,14 +101,14 @@
                                      Checked="OnNavChecked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="22" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavCapture" Grid.Column="0"
                                           Glyph="&#xE722;" FontSize="16"
                                           VerticalAlignment="Center" />
                                 <TextBlock x:Name="NavCaptureLabel" Grid.Column="1"
-                                           Text="Capture" FontSize="13" VerticalAlignment="Center" />
+                                           Text="Capture" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </Grid>
                         </RadioButton>
 
@@ -118,14 +118,14 @@
                                      Checked="OnNavChecked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="22" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavVideo" Grid.Column="0"
                                           Glyph="&#xE714;" FontSize="16"
                                           VerticalAlignment="Center" />
                                 <TextBlock x:Name="NavVideoLabel" Grid.Column="1"
-                                           Text="Video" FontSize="13" VerticalAlignment="Center" />
+                                           Text="Video" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </Grid>
                         </RadioButton>
 
@@ -135,14 +135,14 @@
                                      Checked="OnNavChecked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="22" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavOcr" Grid.Column="0"
                                           Glyph="&#xE775;" FontSize="16"
                                           VerticalAlignment="Center" />
                                 <TextBlock x:Name="NavOcrLabel" Grid.Column="1"
-                                           Text="OCR" FontSize="13" VerticalAlignment="Center" />
+                                           Text="OCR" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </Grid>
                         </RadioButton>
 
@@ -152,14 +152,14 @@
                                      Checked="OnNavChecked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="22" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavGif" Grid.Column="0"
                                           Glyph="&#xE91B;" FontSize="16"
                                           VerticalAlignment="Center" />
                                 <TextBlock x:Name="NavGifLabel" Grid.Column="1"
-                                           Text="GIF" FontSize="13" VerticalAlignment="Center" />
+                                           Text="GIF" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </Grid>
                         </RadioButton>
 
@@ -169,14 +169,14 @@
                                      Checked="OnNavChecked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="22" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavHotkeys" Grid.Column="0"
                                           Glyph="&#xE765;" FontSize="16"
                                           VerticalAlignment="Center" />
                                 <TextBlock x:Name="NavHotkeysLabel" Grid.Column="1"
-                                           Text="Hotkeys" FontSize="13" VerticalAlignment="Center" />
+                                           Text="Hotkeys" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </Grid>
                         </RadioButton>
 
@@ -186,14 +186,14 @@
                                      Checked="OnNavChecked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="22" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavNotifications" Grid.Column="0"
                                           Glyph="&#xEA8F;" FontSize="16"
                                           VerticalAlignment="Center" />
                                 <TextBlock x:Name="NavNotificationsLabel" Grid.Column="1"
-                                           Text="Notifications" FontSize="13" VerticalAlignment="Center" />
+                                           Text="Notifications" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </Grid>
                         </RadioButton>
 
@@ -203,14 +203,14 @@
                                      Checked="OnNavChecked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="22" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <FontIcon x:Name="IconNavInfo" Grid.Column="0"
                                           Glyph="&#xE946;" FontSize="16"
                                           VerticalAlignment="Center" />
                                 <TextBlock x:Name="NavInfoLabel" Grid.Column="1"
-                                           Text="Info" FontSize="13" VerticalAlignment="Center" />
+                                           Text="Info" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </Grid>
                         </RadioButton>
                     </StackPanel>
@@ -226,6 +226,7 @@
                             <TextBlock x:Name="LblTipHeader" Text="TIP" Style="{StaticResource ClipsyLabel}" />
                             <TextBlock x:Name="LblTip"
                                        Text="Press PrtSc anywhere to capture."
+                                       TextWrapping="Wrap"
                                        Style="{StaticResource ClipsyHelper}" />
                         </StackPanel>
                     </Border>
@@ -858,7 +859,7 @@
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="H.264" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
                                                 <TextBlock x:Name="LblCodecH264Desc" Text="Wide compatibility, hardware-accelerated"
-                                                           FontSize="11" />
+                                                           FontSize="11" TextWrapping="Wrap" />
                                             </StackPanel>
                                         </RadioButton>
                                         <RadioButton x:Name="RadioCodecH265" Style="{StaticResource ClipsyRadioCard}"
@@ -866,7 +867,7 @@
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="H.265" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
                                                 <TextBlock x:Name="LblCodecH265Desc" Text="Smaller files, slower encode"
-                                                           FontSize="11" />
+                                                           FontSize="11" TextWrapping="Wrap" />
                                             </StackPanel>
                                         </RadioButton>
                                         <RadioButton x:Name="RadioCodecVp9" Style="{StaticResource ClipsyRadioCard}"
@@ -874,7 +875,7 @@
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="VP9" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
                                                 <TextBlock x:Name="LblCodecVp9Desc" Text="Web-friendly, open codec"
-                                                           FontSize="11" />
+                                                           FontSize="11" TextWrapping="Wrap" />
                                             </StackPanel>
                                         </RadioButton>
                                         <RadioButton x:Name="RadioCodecAv1" Style="{StaticResource ClipsyRadioCard}"
@@ -882,7 +883,7 @@
                                             <StackPanel Spacing="2">
                                                 <TextBlock Text="AV1" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
                                                 <TextBlock x:Name="LblCodecAv1Desc" Text="Smallest, very slow encoder"
-                                                           FontSize="11" />
+                                                           FontSize="11" TextWrapping="Wrap" />
                                             </StackPanel>
                                         </RadioButton>
                                     </StackPanel>
@@ -1191,10 +1192,13 @@
                                             <DataTemplate>
                                                 <Grid>
                                                     <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
                                                         <RowDefinition Height="*" />
                                                         <RowDefinition Height="Auto" />
                                                     </Grid.RowDefinitions>
-                                                    <Grid Grid.Row="0" Padding="14,6" ColumnSpacing="16">
+                                                    <TextBlock Grid.Row="0" Text="{Binding GroupLabel}" Visibility="{Binding GroupVisibility}"
+                                                               Style="{StaticResource ClipsyLabel}" Margin="14,10,14,4" />
+                                                    <Grid Grid.Row="1" Padding="14,6" ColumnSpacing="16">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*" />
                                                             <ColumnDefinition Width="160" />
@@ -1213,7 +1217,7 @@
                                                             <TextBlock Text="{Binding Binding}" />
                                                         </Button>
                                                     </Grid>
-                                                    <Border Grid.Row="1" Height="1"
+                                                    <Border Grid.Row="2" Height="1"
                                                             Background="{ThemeResource ClipsyBorderSubtleBrush}"
                                                             Margin="14,0,14,0" />
                                                 </Grid>

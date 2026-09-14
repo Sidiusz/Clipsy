@@ -334,13 +334,16 @@ public static class Strings
         ["BtnSaveChanges"]        = New("Save changes",                                    "Сохранить"),
 
         // Hotkey row labels
-        ["HkOpenCapture"]         = New("Open screen capture",                            "Открыть захват экрана"),
+        ["HkGroupGeneral"]        = New("General", "Общее"),
+        ["HkGroupScreenshot"]     = New("Screenshot", "Снимок экрана"),
+        ["HkGroupVideo"]          = New("Screen recording", "Запись экрана"),
+        ["HkOpenCapture"]         = New("Open screen capture", "Открыть захват экрана"),
         ["HkSaveSilent"]          = New("Quick-save screenshot",                           "Быстрое сохранение"),
         ["HkCopy"]                = New("Copy to clipboard",                               "Скопировать в буфер обмена"),
         ["HkUndo"]                = New("Undo action",                                     "Отменить действие"),
         ["HkRedo"]                = New("Redo action",                                     "Повторить действие"),
         ["HkSelectAll"]           = New("Select all monitors",                             "Выбрать все мониторы"),
-        ["HkSelectMonitor"]       = New("Select screen under pointer",                       "Выбрать экран под указателем"),
+        ["HkSelectMonitor"]       = New("Select screen under mouse cursor", "Выбрать экран под курсором мыши"),
         ["HkRecordSave"]          = New("Quick-save video recording",                       "Быстрое сохранение записи видео"),
         ["HkMicToggle"]           = New("Mute / unmute microphone",                        "Выкл/вкл микрофон"),
         ["HkPressKeys"]           = New("Press keys...",                                   "Нажмите клавиши..."),

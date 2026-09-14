@@ -15,6 +15,8 @@ public sealed partial class SettingsWindow
     public sealed class HotkeyRow : System.ComponentModel.INotifyPropertyChanged
     {
         public required string Key { get; init; }
+        public string GroupLabel { get; init; } = string.Empty;
+        public Visibility GroupVisibility { get; init; } = Visibility.Collapsed;
 
         private string _label = string.Empty;
         public required string Label
@@ -55,20 +57,27 @@ public sealed partial class SettingsWindow
     {
         foreach (var existing in _hotkeyRows) existing.PropertyChanged -= OnHotkeyRowChanged;
         _hotkeyRows.Clear();
-        AddHotkeyRow("capture",     "HkOpenCapture", _draft.HotkeyCapture);
-        AddHotkeyRow("save-silent", "HkSaveSilent",  _draft.HotkeyScreenshotSilent);
-        AddHotkeyRow("copy",        "HkCopy",        _draft.HotkeyCopy);
-        AddHotkeyRow("undo",        "HkUndo",        _draft.HotkeyUndo);
-        AddHotkeyRow("redo",        "HkRedo",        _draft.HotkeyRedo);
-        AddHotkeyRow("select-all",     "HkSelectAll",     _draft.HotkeySelectAll);
+        AddHotkeyRow("capture", "HkOpenCapture", _draft.HotkeyCapture, "HkGroupGeneral");
+        AddHotkeyRow("undo", "HkUndo", _draft.HotkeyUndo);
+        AddHotkeyRow("redo", "HkRedo", _draft.HotkeyRedo);
+        AddHotkeyRow("save-silent", "HkSaveSilent", _draft.HotkeyScreenshotSilent, "HkGroupScreenshot");
+        AddHotkeyRow("copy", "HkCopy", _draft.HotkeyCopy);
+        AddHotkeyRow("select-all", "HkSelectAll", _draft.HotkeySelectAll);
         AddHotkeyRow("select-monitor", "HkSelectMonitor", _draft.HotkeySelectMonitor);
-        AddHotkeyRow("record-save",    "HkRecordSave",    _draft.HotkeyRecordSilentSave);
-        AddHotkeyRow("mic-toggle",  "HkMicToggle",   _draft.HotkeyMicToggle);
+        AddHotkeyRow("record-save", "HkRecordSave", _draft.HotkeyRecordSilentSave, "HkGroupVideo");
+        AddHotkeyRow("mic-toggle", "HkMicToggle", _draft.HotkeyMicToggle);
     }
 
-    private void AddHotkeyRow(string key, string labelKey, string binding)
+    private void AddHotkeyRow(string key, string labelKey, string binding, string? groupKey = null)
     {
-        var row = new HotkeyRow { Key = key, Label = Strings.Get(labelKey), Binding = binding };
+        var row = new HotkeyRow
+        {
+            Key = key,
+            Label = Strings.Get(labelKey),
+            Binding = binding,
+            GroupLabel = groupKey == null ? string.Empty : Strings.Get(groupKey),
+            GroupVisibility = groupKey == null ? Visibility.Collapsed : Visibility.Visible,
+        };
         row.PropertyChanged += OnHotkeyRowChanged;
         _hotkeyRows.Add(row);
     }
