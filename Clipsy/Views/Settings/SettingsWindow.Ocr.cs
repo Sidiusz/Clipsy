@@ -34,11 +34,11 @@ public sealed partial class SettingsWindow
     {
         var installed = TessdataService.IsInstalled(lang.Code);
 
-        var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+        var grid = new Grid { Margin = new Thickness(0, 2, 0, 2), ColumnSpacing = 8 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90, GridUnitType.Pixel) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72, GridUnitType.Pixel) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(92, GridUnitType.Pixel) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(128, GridUnitType.Pixel) });
 
         // One row, one action (Install/Delete): an installed language is used
         // automatically, so there's no separate "selected" checkbox.
@@ -56,26 +56,28 @@ public sealed partial class SettingsWindow
         {
             Text = lang.ApproxSize,
             VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right,
             Style = (Style)Application.Current.Resources["ClipsyHelper"],
-            Margin = new Thickness(8, 0, 8, 0),
         };
         Grid.SetColumn(sizeBlock, 1);
 
         var progress = new ProgressBar
         {
             Minimum = 0, Maximum = 100, Value = 0,
-            Width = 80,
+            Width = 84,
             Visibility = Visibility.Collapsed,
             VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
         };
         Grid.SetColumn(progress, 2);
 
         var btn = new Button
         {
-            Content = installed ? Strings.Get("BtnDelete") : Strings.Get("BtnInstall"),
-            Style = (Style)Application.Current.Resources[installed ? "ClipsyButtonGhost" : "ClipsyButtonGhost"],
+            Content = installed ? CreateTessDeleteContent() : Strings.Get("BtnInstall"),
+            Style = (Style)Application.Current.Resources["ClipsyButtonGhost"],
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(4, 0, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
         };
         Grid.SetColumn(btn, 3);
 
@@ -101,6 +103,24 @@ public sealed partial class SettingsWindow
         };
 
         return grid;
+    }
+
+    private StackPanel CreateTessDeleteContent()
+    {
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        panel.Children.Add(new FontIcon
+        {
+            Glyph = "\uE74D",
+            FontSize = 12,
+            Foreground = ThemeService.GetBrush("ClipsyDangerBrush", Content as FrameworkElement),
+        });
+        panel.Children.Add(new TextBlock { Text = Strings.Get("BtnDelete"), VerticalAlignment = VerticalAlignment.Center });
+        return panel;
     }
 
     private async Task DownloadTessLangAsync(TessdataLang lang, Grid row, Button btn, ProgressBar progressBar, CheckBox? cb)
