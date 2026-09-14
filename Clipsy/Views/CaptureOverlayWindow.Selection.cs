@@ -157,10 +157,10 @@ public sealed partial class CaptureOverlayWindow
 
     private void UpdateDimGeometry(Rect? hole)
     {
-        double w = RootGrid.ActualWidth;
-        double h = RootGrid.ActualHeight;
-        if (w <= 0) w = _frame.VirtualBounds.Width;
-        if (h <= 0) h = _frame.VirtualBounds.Height;
+        double w = RootGrid.ActualWidth > 0 ? RootGrid.ActualWidth : RootGrid.Width;
+        double h = RootGrid.ActualHeight > 0 ? RootGrid.ActualHeight : RootGrid.Height;
+        if (w <= 0) w = _frame.PixelWidth / DpiScale;
+        if (h <= 0) h = _frame.PixelHeight / DpiScale;
 
         if (!(hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0))
         {
@@ -188,10 +188,17 @@ public sealed partial class CaptureOverlayWindow
     {
         if (w < 0) w = 0;
         if (h < 0) h = 0;
-        Canvas.SetLeft(band, x);
-        Canvas.SetTop(band, y);
-        band.Width = w;
-        band.Height = h;
+        if (band.Width != 1) band.Width = 1;
+        if (band.Height != 1) band.Height = 1;
+        if (band.RenderTransform is not CompositeTransform t)
+        {
+            t = new CompositeTransform();
+            band.RenderTransform = t;
+        }
+        t.ScaleX = w;
+        t.ScaleY = h;
+        t.TranslateX = x;
+        t.TranslateY = y;
     }
 
     // ---------- Per-frame coalescing ----------

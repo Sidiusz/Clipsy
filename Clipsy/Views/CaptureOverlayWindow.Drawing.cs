@@ -155,16 +155,22 @@ public sealed partial class CaptureOverlayWindow
 
     private void ExtendStroke(Point pos)
     {
-        if (_activeStroke == null) return;
+        if (!TryAppendStrokePoint(pos)) return;
+        _drawing.AppendActiveStroke(pos);
+    }
+
+    private bool TryAppendStrokePoint(Point pos)
+    {
+        if (_activeStroke == null) return false;
         var pts = _activeStroke.Points;
         if (pts.Count > 0)
         {
-            var last = pts[pts.Count - 1];
+            var last = pts[^1];
             double dx = pos.X - last.X, dy = pos.Y - last.Y;
-            if (dx * dx + dy * dy < MinStrokePointDistSq) return;
+            if (dx * dx + dy * dy < MinStrokePointDistSq) return false;
         }
         pts.Add(pos);
-        _drawing.AppendActiveStroke(pos);
+        return true;
     }
 
     private void FinishStroke()

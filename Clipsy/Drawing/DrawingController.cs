@@ -71,6 +71,27 @@ public sealed class DrawingController
         _activeLast = pt;
     }
 
+    public void AppendActiveStrokeBatch(IReadOnlyList<Point> points)
+    {
+        if (!_activeOpen || points.Count == 0) return;
+        if (_cache == null)
+        {
+            _activeMissedPaint = true;
+            _activeLast = points[^1];
+            _canvas.Invalidate();
+            return;
+        }
+        using var ds = _cache.CreateDrawingSession();
+        var last = _activeLast;
+        foreach (var pt in points)
+        {
+            ds.DrawLine(V(last), V(pt), _activeColor, (float)_activeThickness, RoundStroke);
+            last = pt;
+        }
+        _activeLast = last;
+        _canvas.Invalidate();
+    }
+
     // Pixels are already in the cache; add the element without a rebuild.
     public void EndActiveStroke(StrokeElement e)
     {

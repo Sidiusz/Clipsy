@@ -209,13 +209,19 @@ public sealed partial class CaptureOverlayWindow
                 RequestSelectionVisualUpdate();
                 break;
             case InteractionMode.DrawingStroke:
-                // GetIntermediatePoints returns all high-frequency samples buffered between
-                // PointerMoved events — critical for smooth strokes at 144Hz+.
+                // Batch buffered mouse samples into one GPU drawing session/invalidate.
                 var pts = e.GetIntermediatePoints(RootGrid);
                 if (pts != null && pts.Count > 0)
-                    foreach (var p in pts) ExtendStroke(p.Position);
+                {
+                    var batch = new System.Collections.Generic.List<Point>(pts.Count);
+                    foreach (var p in pts)
+                        if (TryAppendStrokePoint(p.Position)) batch.Add(p.Position);
+                    _drawing.AppendActiveStrokeBatch(batch);
+                }
                 else
+                {
                     ExtendStroke(pos);
+                }
                 break;
             case InteractionMode.DrawingRect:
                 UpdateActiveShape(pos);
