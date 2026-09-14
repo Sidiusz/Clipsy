@@ -49,7 +49,7 @@
         <!-- ============== Body ============== -->
         <Grid Grid.Row="1" Background="{ThemeResource ClipsyBg0Brush}">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" MinWidth="220" MaxWidth="280" />
+                <ColumnDefinition Width="Auto" MinWidth="200" MaxWidth="280" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
