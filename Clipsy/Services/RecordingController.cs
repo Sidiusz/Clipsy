@@ -254,9 +254,13 @@ public sealed class RecordingController
 
     public void ToggleMic()
     {
-        if (_ffmpegRec != null) return;
         var settings = SettingsService.Instance;
         if (!settings.Settings.MicrophoneEnabled) return;
+        if (_ffmpegRec != null)
+        {
+            _hud?.ShowMicCapabilityMessage();
+            return;
+        }
         _micMuted = !_micMuted;
         _service?.SetMicMuted(_micMuted);
         _hud?.SetMicMuted(_micMuted);

@@ -32,6 +32,12 @@ public sealed partial class RecordingHudWindow : Window
     private TimeSpan _accumulated = TimeSpan.Zero;
     private bool _paused;
     private bool _locked = true;
+    private bool _micMuted = true;
+    private bool _canPause = true;
+    private bool _canResizeRegion = true;
+    private bool _canToggleMic = true;
+    private DispatcherTimer? _capabilityTipTimer;
+    private ToolTip? _openCapabilityTip;
     private Storyboard? _recPulse;
 
     public event Action? PauseRequested;
@@ -117,13 +123,27 @@ public sealed partial class RecordingHudWindow : Window
 
     public void ConfigureCapabilities(bool canPause, bool canResizeRegion, bool canToggleMic)
     {
-        PauseBtn.IsEnabled = canPause;
-        LockBtn.IsEnabled = canResizeRegion;
-        MicBtn.IsEnabled = canToggleMic;
+        _canPause = canPause;
+        _canResizeRegion = canResizeRegion;
+        _canToggleMic = canToggleMic;
+
+        // Keep unsupported controls clickable so we can explain the limitation.
+        // The HUD and its tooltip popup are excluded from capture.
+        PauseBtn.IsEnabled = true;
+        LockBtn.IsEnabled = true;
+        MicBtn.IsEnabled = true;
+        PauseBtn.Opacity = canPause ? 1.0 : 0.45;
+        LockBtn.Opacity = canResizeRegion ? 1.0 : 0.45;
+        MicBtn.Opacity = canToggleMic ? 1.0 : 0.45;
+
+        ToolTipService.SetToolTip(PauseBtn, MakeTip(Strings.Get(canPause ? "TipPause" : "TipPauseUnsupportedFfmpeg")));
+        ToolTipService.SetToolTip(LockBtn, MakeTip(Strings.Get(canResizeRegion ? "TipLock" : "TipResizeUnsupportedFfmpeg")));
+        UpdateMicTooltip();
     }
 
     public void SetMicMuted(bool muted)
     {
+        _micMuted = muted;
         MicBtn.IsChecked = !muted;
         // Never assign null to Foreground (a null brush, not "inherit" — the glyph
         // vanishes); ClearValue restores the template-driven color.
@@ -139,13 +159,43 @@ public sealed partial class RecordingHudWindow : Window
     private void UpdateMicTooltip()
     {
         bool muted = MicBtn.IsChecked != true;
-        string text = Strings.Get(muted ? "TipMicMuted" : "TipMicActive");
+        string text = !_canToggleMic
+            ? Strings.Get("TipMicUnsupportedFfmpeg")
+            : Strings.Get(muted ? "TipMicMuted" : "TipMicActive");
         if (_micTip == null)
         {
             _micTip = MakeTip(text);
             ToolTipService.SetToolTip(MicBtn, _micTip);
         }
         else _micTip.Content = text;
+    }
+
+    public void ShowMicCapabilityMessage()
+    {
+        if (!_canToggleMic) ShowCapabilityTip(MicBtn);
+    }
+
+    private void ShowCapabilityTip(FrameworkElement anchor)
+    {
+        if (ToolTipService.GetToolTip(anchor) is not ToolTip tip) return;
+        if (_openCapabilityTip != null && !ReferenceEquals(_openCapabilityTip, tip))
+            _openCapabilityTip.IsOpen = false;
+        _openCapabilityTip = tip;
+        tip.IsOpen = true;
+        ExcludePopupsFromCapture();
+
+        _capabilityTipTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
+        _capabilityTipTimer.Stop();
+        _capabilityTipTimer.Tick -= OnCapabilityTipTimer;
+        _capabilityTipTimer.Tick += OnCapabilityTipTimer;
+        _capabilityTipTimer.Start();
+    }
+
+    private void OnCapabilityTipTimer(object? sender, object e)
+    {
+        _capabilityTipTimer?.Stop();
+        if (_openCapabilityTip != null) _openCapabilityTip.IsOpen = false;
+        _openCapabilityTip = null;
     }
 
     public IntPtr Hwnd => _hwnd;
@@ -168,6 +218,9 @@ public sealed partial class RecordingHudWindow : Window
     {
         _timer.Stop();
         _hideTimer.Stop();
+        _capabilityTipTimer?.Stop();
+        if (_openCapabilityTip != null) _openCapabilityTip.IsOpen = false;
+        _openCapabilityTip = null;
         _recPulse?.Stop();
         _recPulse = null;
         // Hide the topmost HUD immediately, else the toolbar lingers over the
@@ -312,6 +365,11 @@ public sealed partial class RecordingHudWindow : Window
 
     private void OnPauseClick(object sender, RoutedEventArgs e)
     {
+        if (!_canPause)
+        {
+            ShowCapabilityTip(PauseBtn);
+            return;
+        }
         _paused = !_paused;
         if (_paused)
         {
@@ -336,6 +394,12 @@ public sealed partial class RecordingHudWindow : Window
 
     private void OnLockDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
+        if (!_canResizeRegion)
+        {
+            ShowCapabilityTip(LockBtn);
+            e.Handled = true;
+            return;
+        }
         _locked = !_locked;
         ApplyLockVisual();
         LockChanged?.Invoke(_locked);
@@ -349,6 +413,12 @@ public sealed partial class RecordingHudWindow : Window
 
     private void OnMicToggle(object sender, RoutedEventArgs e)
     {
+        if (!_canToggleMic)
+        {
+            SetMicMuted(_micMuted);
+            ShowCapabilityTip(MicBtn);
+            return;
+        }
         bool muted = MicBtn.IsChecked != true;
         SetMicMuted(muted);
         MicMuteToggled?.Invoke(muted);
