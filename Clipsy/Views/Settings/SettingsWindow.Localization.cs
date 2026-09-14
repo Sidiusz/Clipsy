@@ -1,5 +1,6 @@
 using Clipsy.Localization;
 using Clipsy.Services;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Clipsy.Views.Settings;
@@ -192,6 +193,27 @@ public sealed partial class SettingsWindow
         RefreshComboDisplay(OcrEngineBox);
         RefreshComboDisplay(TranslateServiceBox);
         _loading = wasLoading;
+        UpdateSidebarWidth();
+    }
+
+    private void UpdateSidebarWidth()
+    {
+        if (SidebarColumn == null) return;
+        double maxTextWidth = 0;
+        foreach (var text in new[]
+        {
+            Strings.Get("TabGeneral"), Strings.Get("TabCapture"), Strings.Get("TabVideo"),
+            Strings.Get("TabOcr"), Strings.Get("TabGif"), Strings.Get("TabHotkeys"),
+            Strings.Get("TabNotifications"), Strings.Get("TabInfo")
+        })
+        {
+            var probe = new TextBlock { Text = text, FontSize = 13, FontFamily = NavGeneralLabel.FontFamily };
+            probe.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            maxTextWidth = System.Math.Max(maxTextWidth, probe.DesiredSize.Width);
+        }
+        // 22 icon + template margins/padding/accent + a small trailing safety gap.
+        double width = System.Math.Clamp(System.Math.Ceiling(maxTextWidth + 62), 200, 280);
+        SidebarColumn.Width = new GridLength(width);
     }
 
     private static void RefreshComboDisplay(ComboBox? cb)
