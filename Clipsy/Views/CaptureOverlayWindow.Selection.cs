@@ -198,19 +198,20 @@ public sealed partial class CaptureOverlayWindow
 
     private static void SetBand(Microsoft.UI.Xaml.Shapes.Rectangle band, double x, double y, double w, double h)
     {
-        if (w < 0) w = 0;
-        if (h < 0) h = 0;
-        if (band.Width != 1) band.Width = 1;
-        if (band.Height != 1) band.Height = 1;
-        if (band.RenderTransform is not CompositeTransform t)
+        w = System.Math.Max(0, w);
+        h = System.Math.Max(0, h);
+        if (w <= 0 || h <= 0)
         {
-            t = new CompositeTransform();
-            band.RenderTransform = t;
+            band.Visibility = Visibility.Collapsed;
+            return;
         }
-        t.ScaleX = w;
-        t.ScaleY = h;
-        t.TranslateX = x;
-        t.TranslateY = y;
+
+        band.RenderTransform = null;
+        band.Width = w;
+        band.Height = h;
+        Canvas.SetLeft(band, x);
+        Canvas.SetTop(band, y);
+        band.Visibility = Visibility.Visible;
     }
 
     // ---------- Per-frame coalescing ----------
