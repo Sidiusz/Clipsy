@@ -13,10 +13,12 @@ namespace Clipsy.Services;
 public sealed class RecordingService : IDisposable
 {
     private Recorder? _recorder;
-    // One DisplayRecordingSource per monitor the region overlaps (a single
-    // source captures only one monitor), each placed into the output canvas.
+    // Register every monitor once so a live region can move/resize across
+    // displays without trying to add recording sources after the encoder starts.
     private readonly List<DisplayRecordingSource> _sources = new();
-    private readonly List<Rectangle> _sourceMonitors = new(); // monitor bounds, parallel to _sources
+    private readonly List<Rectangle> _sourceMonitors = new(); // parallel to _sources
+    private Rectangle _sourceCanvasBounds;
+    private Rectangle _activeRegion;
     private string _tempPath = string.Empty;
 
     public event Action<string>? RecordingComplete;
@@ -33,6 +35,7 @@ public sealed class RecordingService : IDisposable
 
         bool captureVideoCursor = SettingsService.Instance.Settings.CaptureVideoCursor;
         BuildSources(x, y, width, height, captureVideoCursor);
+        _activeRegion = new Rectangle(x, y, width, height);
 
         var s = SettingsService.Instance.Settings;
         var (outW, outH) = ResolveOutputSize(s.VideoResolution, width, height);
@@ -58,6 +61,8 @@ public sealed class RecordingService : IDisposable
             {
                 RecorderMode = RecorderMode.Video,
                 OutputFrameSize = new ScreenSize(outW, outH),
+                SourceRect = GetCanvasCrop(_activeRegion),
+                Stretch = StretchMode.Uniform,
             },
             VideoEncoderOptions = new VideoEncoderOptions
             {
@@ -94,41 +99,30 @@ public sealed class RecordingService : IDisposable
         _recorder.Record(_tempPath);
     }
 
-    // One source per overlapped monitor: each crops its monitor to the slice and
-    // is positioned at the slice offset, reproducing the desktop layout.
+    // Each monitor occupies its physical position inside one virtual-desktop canvas.
+    // Sources outside the current region are disabled and re-enabled dynamically.
     private void BuildSources(int rx, int ry, int rw, int rh, bool cursor)
     {
         _sources.Clear();
         _sourceMonitors.Clear();
-
+        _sourceCanvasBounds = ScreenFreezeService.GetVirtualScreenBounds();
         var region = new Rectangle(rx, ry, rw, rh);
         foreach (var (name, bounds) in EnumerateMonitors())
         {
-            var inter = Rectangle.Intersect(region, bounds);
-            if (inter.Width <= 0 || inter.Height <= 0) continue;
-
-            _sources.Add(new DisplayRecordingSource(name)
+            bool active = Intersects(region, bounds);
+            var source = new DisplayRecordingSource(name)
             {
-                SourceRect = new ScreenRect(inter.X - bounds.X, inter.Y - bounds.Y, inter.Width, inter.Height),
-                Position   = new ScreenPoint(inter.X - rx, inter.Y - ry),
+                SourceRect = new ScreenRect(0, 0, bounds.Width, bounds.Height),
+                Position = new ScreenPoint(bounds.X - _sourceCanvasBounds.X, bounds.Y - _sourceCanvasBounds.Y),
+                IsVideoCaptureEnabled = active,
                 IsCursorCaptureEnabled = cursor,
                 Stretch = StretchMode.None,
-            });
+            };
+            _sources.Add(source);
             _sourceMonitors.Add(bounds);
         }
-
-        // Fallback: region matched no monitor (shouldn't happen) — record the
-        // main monitor cropped to the requested screen rect.
         if (_sources.Count == 0)
-        {
-            _sources.Add(new DisplayRecordingSource(DisplayRecordingSource.MainMonitor)
-            {
-                SourceRect = new ScreenRect(rx, ry, rw, rh),
-                IsCursorCaptureEnabled = cursor,
-                Stretch = StretchMode.Fill,
-            });
-            _sourceMonitors.Add(new Rectangle(rx, ry, rw, rh));
-        }
+            throw new InvalidOperationException("No display recording sources are available.");
     }
 
     private static IEnumerable<(string DeviceName, Rectangle Bounds)> EnumerateMonitors()
@@ -185,7 +179,7 @@ public sealed class RecordingService : IDisposable
         if (_pendingRegionWhilePaused)
         {
             _pendingRegionWhilePaused = false;
-            ApplyCurrentSourceRect();
+            ApplyCurrentRegion();
         }
     }
     public void Stop() => _recorder?.Stop();
@@ -209,42 +203,51 @@ public sealed class RecordingService : IDisposable
     public void UpdateRegion(int x, int y, int width, int height)
     {
         if (_recorder == null || _sources.Count == 0) return;
-
-        // Recompute each source's crop + position for the new region. Monitor
-        // set is fixed at Start, so growing onto a new monitor won't add it.
-        var region = new Rectangle(x, y, width, height);
-        for (int i = 0; i < _sources.Count; i++)
-        {
-            var b = _sourceMonitors[i];
-            var inter = Rectangle.Intersect(region, b);
-            if (inter.Width <= 0 || inter.Height <= 0) continue;
-            _sources[i].SourceRect = new ScreenRect(inter.X - b.X, inter.Y - b.Y, inter.Width, inter.Height);
-            _sources[i].Position   = new ScreenPoint(inter.X - x, inter.Y - y);
-        }
-
+        _activeRegion = new Rectangle(x, y, width, height);
         if (_paused)
         {
-            // Defer; dynamic-options Apply() during pause is a no-op.
             _pendingRegionWhilePaused = true;
             return;
         }
-        ApplyCurrentSourceRect();
+        ApplyCurrentRegion();
     }
 
-    private void ApplyCurrentSourceRect()
+    private void ApplyCurrentRegion()
     {
         if (_recorder == null || _sources.Count == 0) return;
         try
         {
             var builder = _recorder.GetDynamicOptionsBuilder();
-            foreach (var src in _sources)
-                builder.SetUpdatedRecordingSource(src);
+            builder.SetDynamicOutputOptions(new DynamicOutputOptions
+            {
+                SourceRect = GetCanvasCrop(_activeRegion),
+            });
+            for (int i = 0; i < _sources.Count; i++)
+            {
+                _sources[i].IsVideoCaptureEnabled = Intersects(_activeRegion, _sourceMonitors[i]);
+                builder.SetUpdatedRecordingSource(_sources[i]);
+            }
             builder.Apply();
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] UpdateRegion dynamic apply failed: {ex.Message}");
         }
+    }
+
+    private ScreenRect GetCanvasCrop(Rectangle region)
+    {
+        var clipped = Rectangle.Intersect(region, _sourceCanvasBounds);
+        if (clipped.Width <= 0 || clipped.Height <= 0)
+            return new ScreenRect(0, 0, 1, 1);
+        return new ScreenRect(clipped.X - _sourceCanvasBounds.X, clipped.Y - _sourceCanvasBounds.Y,
+            clipped.Width, clipped.Height);
+    }
+
+    private static bool Intersects(Rectangle a, Rectangle b)
+    {
+        var r = Rectangle.Intersect(a, b);
+        return r.Width > 0 && r.Height > 0;
     }
 
     public RecorderStatus Status => _recorder?.Status ?? RecorderStatus.Idle;
