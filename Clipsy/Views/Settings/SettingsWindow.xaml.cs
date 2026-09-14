@@ -51,6 +51,9 @@ public sealed partial class SettingsWindow : Window
     private bool _initialAutostart;
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _notifyTimer;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _revealFallback;
+    private bool _revealed = true;
+    private int _revealFrames;
 
     // Sidebar tip rotation: a shuffled queue of tip keys cycled on a timer with
     // a fade swap. Not tied to the active tab — purely ambient.
@@ -147,6 +150,8 @@ public sealed partial class SettingsWindow : Window
         Closed += (_, _) =>
         {
             _tipTimer?.Stop();
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRevealFrame;
+            _revealFallback?.Stop();
             SettingsService.Instance.SettingsChanged -= OnGlobalSettingsChanged;
             UpdateManager.StateChanged -= RenderUpdateStatus;
             if (_open == this) _open = null;
@@ -234,6 +239,7 @@ public sealed partial class SettingsWindow : Window
     // Bring this already-warm window on-screen, centered, focused.
     private void Reveal()
     {
+        ArmReveal();
         try
         {
             // Refresh values in case settings changed since warm-up.
@@ -258,7 +264,51 @@ public sealed partial class SettingsWindow : Window
             StartTipRotation();
             MaybeShowChangelogAfterUpdate();
         }
-        catch (Exception ex) { Diagnostics.Show("SettingsWindow.Reveal", ex); }
+        catch (Exception ex)
+        {
+            CompleteReveal();
+            Diagnostics.Show("SettingsWindow.Reveal", ex);
+        }
+    }
+
+    private void ArmReveal()
+    {
+        _revealed = false;
+        _revealFrames = 0;
+        SetCloak(true);
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRevealFrame;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnRevealFrame;
+        _revealFallback?.Stop();
+        _revealFallback = DispatcherQueue.CreateTimer();
+        _revealFallback.Interval = TimeSpan.FromMilliseconds(450);
+        _revealFallback.IsRepeating = false;
+        _revealFallback.Tick += (_, _) => CompleteReveal();
+        _revealFallback.Start();
+    }
+
+    private void OnRevealFrame(object? sender, object e)
+    {
+        if (_revealed) return;
+        if (++_revealFrames >= 2) CompleteReveal();
+    }
+
+    private void CompleteReveal()
+    {
+        if (_revealed) return;
+        _revealed = true;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRevealFrame;
+        _revealFallback?.Stop();
+        SetCloak(false);
+    }
+
+    private void SetCloak(bool on)
+    {
+        try
+        {
+            int value = on ? 1 : 0;
+            DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref value, sizeof(int));
+        }
+        catch { }
     }
 
     private Windows.Graphics.RectInt32 WorkArea() =>
@@ -272,9 +322,11 @@ public sealed partial class SettingsWindow : Window
     private const int GWL_EXSTYLE      = -20;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_APPWINDOW  = 0x00040000;
+    private const int DWMWA_CLOAK       = 13;
     [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr h, int n);
     [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr h, int n, int v);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
     // Warm a spare hidden instance (off the user's critical path). Show(false)
     // doesn't steal focus, so this is safe to call any time.
