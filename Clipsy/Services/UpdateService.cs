@@ -90,9 +90,6 @@ public static class UpdateService
             Diagnostics.Log("UpdateService.FetchReleases API", ex);
         }
 
-        var cached = LoadReleaseCache();
-        if (cached.Count > 0) return cached;
-
         try
         {
             var xml = await _http.GetStringAsync(ReleasesAtomUrl);
@@ -103,8 +100,9 @@ public static class UpdateService
         catch (Exception ex)
         {
             Diagnostics.Log("UpdateService.FetchReleases Atom", ex);
-            return Array.Empty<ReleaseNote>();
         }
+
+        return LoadReleaseCache();
     }
 
     private static IReadOnlyList<ReleaseNote> ParseApiReleases(string json)
