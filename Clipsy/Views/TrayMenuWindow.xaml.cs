@@ -54,7 +54,7 @@ public sealed partial class TrayMenuWindow : Window
         ApplyLocalization();
 
         Activated += OnActivated;
-        Closed += (_, _) => _closed = true;
+        Closed += (_, _) => PrepareForShutdown();
         WarmUp();
 
         // Re-localize when language flips so the next tray-menu open shows
@@ -89,6 +89,16 @@ public sealed partial class TrayMenuWindow : Window
     }
 
     // ─── Public API ───
+
+    public void PrepareForShutdown()
+    {
+        if (_closed) return;
+        _closed = true;
+        StopFade();
+        Activated -= OnActivated;
+        SettingsService.Instance.SettingsChanged -= OnSettingsChanged;
+        UpdateManager.StateChanged -= RenderUpdate;
+    }
 
     public void ShowAtCursor()
     {
@@ -330,6 +340,7 @@ public sealed partial class TrayMenuWindow : Window
 
     private void OnItemPointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        if (_closed) return;
         if (sender is Grid g)
             g.Background = ThemeService.GetBrush("ClipsyAccentPressedBrush", Content as FrameworkElement);
     }
@@ -341,7 +352,7 @@ public sealed partial class TrayMenuWindow : Window
 
     private void SetHover(Grid row, bool on)
     {
-        if (!_parts.TryGetValue(row, out var p)) return;
+        if (_closed || !_parts.TryGetValue(row, out var p)) return;
 
         var accent    = ThemeService.GetBrush("ClipsyAccentBrush", Content as FrameworkElement);
         var black     = new SolidColorBrush(Colors.Black);

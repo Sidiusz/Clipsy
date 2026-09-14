@@ -26,7 +26,10 @@ public partial class App : Application
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Unhandled: {e.Exception}");
             Diagnostics.Log("App.UnhandledException", e.Exception);
-            e.Handled = true;
+            // Do not leave the process alive in a corrupted/zombie UI state.
+            // The external watchdog restarts unexpected failures; clean exit is
+            // signalled before intentional shutdown so it will not resurrect it.
+            e.Handled = false;
         };
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
@@ -231,6 +234,7 @@ public partial class App : Application
         SettingsService.Instance.SettingsChanged -= OnSettingsChangedRewireHotkeys;
         Hotkey?.Dispose();
         HostWindow?.TrayIconControl.Dispose();
+        _trayMenu?.PrepareForShutdown();
         _trayMenu?.Close();
         _trayMenu = null;
         Application.Current.Exit();
