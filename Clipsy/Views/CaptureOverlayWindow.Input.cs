@@ -122,11 +122,8 @@ public sealed partial class CaptureOverlayWindow
             return;
         }
 
-        // Outside or no selection: start new selection
-        if (_drawing.Elements.Count > 0)
-        {
-            _drawing.ClearAll();
-        }
+        // Outside or no selection: start new selection. Existing drawings and
+        // text stay in root coordinates, so reselecting only changes the crop.
         _mode = InteractionMode.SelectingNew;
         _hasSelection = false;
         _dragStart = pos;
