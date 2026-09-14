@@ -429,10 +429,7 @@ public sealed partial class CaptureOverlayWindow
             double mw = m.Bounds.Width * sx;
             double mh = m.Bounds.Height * sy;
             if (pos.X >= mx && pos.X <= mx + mw && pos.Y >= my && pos.Y <= my + mh)
-            {
-                if (_drawing.Elements.Count > 0) _drawing.ClearAll();
                 return SelectMonitor(m);
-            }
         }
         return false;
     }

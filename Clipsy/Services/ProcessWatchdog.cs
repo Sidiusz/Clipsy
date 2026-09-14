@@ -9,6 +9,7 @@ public static class ProcessWatchdog
 {
     private const int HeartbeatTimeoutSeconds = 90;
     private const int RestartLoopGuardSeconds = 20;
+    private const int CleanExitGraceSeconds = 10;
     private static EventWaitHandle? _cleanExit;
     private static EventWaitHandle? _heartbeat;
     private static int _started;
@@ -67,9 +68,9 @@ public static class ProcessWatchdog
 
             while (true)
             {
-                if (clean.WaitOne(0)) return 0;
+                if (clean.WaitOne(0)) return FinishCleanExit(parent, parentPid);
                 missedHeartbeatSeconds = heartbeat.WaitOne(1000) ? 0 : missedHeartbeatSeconds + 1;
-                if (clean.WaitOne(0)) return 0;
+                if (clean.WaitOne(0)) return FinishCleanExit(parent, parentPid);
                 if (parent.HasExited) break;
 
                 if (missedHeartbeatSeconds >= HeartbeatTimeoutSeconds)
@@ -85,7 +86,7 @@ public static class ProcessWatchdog
                 }
             }
 
-            if (clean.WaitOne(0)) return 0;
+            if (clean.WaitOne(0)) return FinishCleanExit(parent, parentPid);
             if (!AllowRestart()) return 0;
             Thread.Sleep(750);
 
@@ -100,6 +101,21 @@ public static class ProcessWatchdog
             Log($"watchdog failed: {ex}");
             return 1;
         }
+    }
+
+    private static int FinishCleanExit(Process parent, int parentPid)
+    {
+        try
+        {
+            if (!parent.HasExited && !parent.WaitForExit(CleanExitGraceSeconds * 1000))
+            {
+                Log($"clean exit timeout; terminating pid={parentPid}");
+                parent.Kill();
+                parent.WaitForExit(5000);
+            }
+        }
+        catch (Exception ex) { Log($"clean exit enforcement failed: {ex.Message}"); }
+        return 0;
     }
 
     private static bool AllowRestart()
