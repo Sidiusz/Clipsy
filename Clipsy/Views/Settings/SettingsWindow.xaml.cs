@@ -539,6 +539,7 @@ public sealed partial class SettingsWindow : Window
         _draft.VideoBitrateMbps = (int)BitrateSlider.Value;
 
         _draft.MicrophoneEnabled = MicEnabledSwitch.IsChecked == true;
+        if (!_draft.MicrophoneEnabled) _draft.MicrophoneMuted = true;
         _draft.MicrophoneDevice  = (MicDeviceBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
 
         _draft.GifColors = (int)GifColorSlider.Value;

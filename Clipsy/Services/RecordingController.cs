@@ -85,7 +85,14 @@ public sealed class RecordingController
     {
         _x = x; _y = y; _w = w; _h = h;
 
-        var settings = SettingsService.Instance.Settings;
+        var settingsService = SettingsService.Instance;
+        var settings = settingsService.Settings;
+        if (!settings.MicrophoneStateInitialized)
+        {
+            settings.MicrophoneMuted = true;
+            settings.MicrophoneStateInitialized = true;
+            settingsService.Save();
+        }
         var codec = settings.VideoCodec;
         bool isFfmpegCodec = codec == "VP9" || codec == "AV1";
         // Native container of the temp file (what the encoder actually writes).
@@ -239,17 +246,23 @@ public sealed class RecordingController
         if (_ffmpegRec != null) return;
         _micMuted = muted;
         _service?.SetMicMuted(muted);
-        var s = SettingsService.Instance.Settings;
-        s.MicrophoneMuted = muted;
-        SettingsService.Instance.Save();
+        var settings = SettingsService.Instance;
+        settings.Settings.MicrophoneMuted = muted;
+        settings.Settings.MicrophoneStateInitialized = true;
+        settings.Save();
     }
 
     public void ToggleMic()
     {
         if (_ffmpegRec != null) return;
+        var settings = SettingsService.Instance;
+        if (!settings.Settings.MicrophoneEnabled) return;
         _micMuted = !_micMuted;
         _service?.SetMicMuted(_micMuted);
         _hud?.SetMicMuted(_micMuted);
+        settings.Settings.MicrophoneMuted = _micMuted;
+        settings.Settings.MicrophoneStateInitialized = true;
+        settings.Save();
     }
 
     private void OnDrawColorChanged(byte r, byte g, byte b)

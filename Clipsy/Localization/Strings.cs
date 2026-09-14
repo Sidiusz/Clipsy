@@ -225,7 +225,7 @@ public static class Strings
         // Microphone settings
         ["LblMicrophone"]       = New("Microphone",                            "Микрофон"),
         ["LblMicEnabled"]       = New("Record microphone",                     "Записывать микрофон"),
-        ["HelperMic"]           = New("Record the microphone along with the screen. Default: off.", "Записывать микрофон вместе с экраном. По умолчанию: выкл."),
+        ["HelperMic"]           = New("Makes the microphone available while recording. Enabled by default; the first recording starts muted, and the last mute state is remembered.", "Делает микрофон доступным во время записи. По умолчанию функция включена, первая запись начинается с выключенным микрофоном, а последнее состояние запоминается."),
         ["LblMicDevice"]        = New("Input device",                          "Устройство ввода"),
         ["HelperMicDevice"]     = New("Leave on default to use the system microphone.", "Оставьте «по умолчанию», чтобы использовать системный микрофон."),
         ["OptMicDefault"]       = New("Default system microphone",             "Системный микрофон по умолчанию"),

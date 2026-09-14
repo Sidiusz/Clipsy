@@ -33,8 +33,11 @@ public sealed class AppSettings
     public int VideoBitrateMbps { get; set; } = 8;
 
     // Microphone
-    public bool MicrophoneEnabled { get; set; } = false;
-    public bool MicrophoneMuted { get; set; } = false;
+    public bool MicrophoneEnabled { get; set; } = true;
+    public bool MicrophoneMuted { get; set; } = true;
+    // False for settings created before persistent mic-state semantics existed.
+    // The first recording initializes them safely to muted.
+    public bool MicrophoneStateInitialized { get; set; } = false;
     public string MicrophoneDevice { get; set; } = "";       // empty = default system device (DeviceName from Recorder.GetSystemAudioDevices)
     public string HotkeyMicToggle { get; set; } = "";        // empty = disabled
 
