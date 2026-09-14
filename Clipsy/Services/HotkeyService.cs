@@ -324,6 +324,12 @@ public sealed class HotkeyService : IDisposable
         vk = KeyNameToVk(parts[^1].Trim());
     }
 
+    public static bool MatchesBinding(string? binding, Windows.System.VirtualKey key)
+    {
+        ParseBinding(binding, out uint vk, out uint mods);
+        return vk != 0 && vk == (uint)key && mods == CurrentModifiers();
+    }
+
     private static uint KeyNameToVk(string name) => name.ToLowerInvariant() switch
     {
         "snapshot" or "printscreen" or "print screen" => 0x2C,

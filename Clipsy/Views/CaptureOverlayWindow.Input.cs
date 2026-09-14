@@ -457,7 +457,6 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        bool ctrl = IsCtrlDown();
         if (_activeTextBox != null) return; // typing in textbox; handled by it
 
         // Modifier held over a draw tool → enter temp eyedropper immediately,
@@ -471,39 +470,59 @@ public sealed partial class CaptureOverlayWindow
             return;
         }
 
+        if (e.Key == VirtualKey.Escape)
+        {
+            e.Handled = true;
+            HandleEscape();
+            return;
+        }
+
+        var hotkeys = SettingsService.Instance.Settings;
+        if (HotkeyService.MatchesBinding(hotkeys.HotkeySelectAll, e.Key))
+        {
+            e.Handled = true;
+            SelectAll();
+            return;
+        }
+        if (HotkeyService.MatchesBinding(hotkeys.HotkeySelectMonitor, e.Key))
+        {
+            e.Handled = SelectMonitorUnderCursor();
+            return;
+        }
+        if (HotkeyService.MatchesBinding(hotkeys.HotkeyUndo, e.Key))
+        {
+            e.Handled = true;
+            _drawing.Undo();
+            return;
+        }
+        if (HotkeyService.MatchesBinding(hotkeys.HotkeyRedo, e.Key))
+        {
+            e.Handled = true;
+            _drawing.Redo();
+            return;
+        }
+        if (HotkeyService.MatchesBinding(hotkeys.HotkeyScreenshotSilent, e.Key))
+        {
+            if (_inOcrMode) return;
+            e.Handled = true;
+            _ = SaveSilentAsync();
+            return;
+        }
+        if (HotkeyService.MatchesBinding(hotkeys.HotkeyCopy, e.Key))
+        {
+            if (_eyedropperActive) return;
+            if (FocusManager.GetFocusedElement(RootGrid.XamlRoot) is TextBox) return;
+            e.Handled = true;
+            if (_inOcrMode) { _ = CopyOcrTextAsync(); return; }
+            _ = CopyAsync();
+            return;
+        }
+
+        bool ctrl = IsCtrlDown();
         switch (e.Key)
         {
-            case VirtualKey.Escape:
-                e.Handled = true;
-                HandleEscape();
-                return;
-            case VirtualKey.A when ctrl:
-                e.Handled = true;
-                SelectAll();
-                return;
-            case VirtualKey.Z when ctrl:
-                e.Handled = true;
-                _drawing.Undo();
-                return;
-            case VirtualKey.Y when ctrl:
-                e.Handled = true;
-                _drawing.Redo();
-                return;
-            case VirtualKey.S when ctrl:
-                if (_inOcrMode) return; // do not steal save during OCR
-                e.Handled = true;
-                _ = SaveSilentAsync();
-                return;
-            case VirtualKey.C when ctrl:
-                // Don't intercept when eyedropper is active or a text field has focus.
-                if (_eyedropperActive) return;
-                if (FocusManager.GetFocusedElement(RootGrid.XamlRoot) is TextBox) return;
-                e.Handled = true;
-                if (_inOcrMode) { _ = CopyOcrTextAsync(); return; }
-                _ = CopyAsync();
-                return;
             case VirtualKey.Number1 or VirtualKey.Number2 or VirtualKey.Number3
-                 or VirtualKey.Number4 when !ctrl:
+                 or VirtualKey.Number4 or VirtualKey.Number5 when !ctrl:
                 if (HandleToolHotkey(e.Key)) e.Handled = true;
                 return;
         }

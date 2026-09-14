@@ -1,4 +1,5 @@
 using Clipsy.Drawing;
+using Clipsy.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -368,6 +369,31 @@ public sealed partial class CaptureOverlayWindow
         SetSelection(rect);
     }
 
+    private bool SelectMonitorUnderCursor()
+    {
+        if (!GetCursorPos(out POINT p)) return false;
+        foreach (var m in _frame.Monitors)
+        {
+            if (p.X >= m.Bounds.Left && p.X < m.Bounds.Right
+                && p.Y >= m.Bounds.Top && p.Y < m.Bounds.Bottom)
+                return SelectMonitor(m);
+        }
+        return false;
+    }
+
+    private bool SelectMonitor(ScreenFreezeService.MonitorInfo monitor)
+    {
+        var b = _frame.VirtualBounds;
+        double gw = RootGrid.ActualWidth, gh = RootGrid.ActualHeight;
+        if (gw <= 0 || gh <= 0 || b.Width <= 0 || b.Height <= 0) return false;
+        double sx = gw / b.Width, sy = gh / b.Height;
+        SetSelection(new Rect(
+            (monitor.Bounds.X - b.X) * sx, (monitor.Bounds.Y - b.Y) * sy,
+            monitor.Bounds.Width * sx, monitor.Bounds.Height * sy));
+        _selectionFromFallback = false;
+        return true;
+    }
+
     // Snap the selection to the monitor under the cursor (double-click empty
     // area); no-op inside an existing selection. Returns true on snap.
     private bool TrySelectMonitorAt(Point pos)
@@ -394,9 +420,7 @@ public sealed partial class CaptureOverlayWindow
             if (pos.X >= mx && pos.X <= mx + mw && pos.Y >= my && pos.Y <= my + mh)
             {
                 if (_drawing.Elements.Count > 0) _drawing.ClearAll();
-                SetSelection(new Rect(mx, my, mw, mh));
-                _selectionFromFallback = false;
-                return true;
+                return SelectMonitor(m);
             }
         }
         return false;

@@ -61,6 +61,7 @@ public sealed partial class SettingsWindow : Window
     {
         "TipSelectScreenDouble",
         "TipSelectAll",
+        "TipSelectMonitor",
         "TipOcrEngine",
         "TipOcrLang",
         "TipTranslate",
@@ -723,6 +724,7 @@ public sealed partial class SettingsWindow : Window
         if (_draft.HotkeyUndo != _initial.HotkeyUndo) _dirty.Add("hk-undo");
         if (_draft.HotkeyRedo != _initial.HotkeyRedo) _dirty.Add("hk-redo");
         if (_draft.HotkeySelectAll != _initial.HotkeySelectAll) _dirty.Add("hk-select-all");
+        if (_draft.HotkeySelectMonitor != _initial.HotkeySelectMonitor) _dirty.Add("hk-select-monitor");
         if (_draft.HotkeyRecordSilentSave != _initial.HotkeyRecordSilentSave) _dirty.Add("hk-record-save");
         if (_draft.HotkeyMicToggle != _initial.HotkeyMicToggle) _dirty.Add("hk-mic-toggle");
         if (_draft.MicrophoneEnabled != _initial.MicrophoneEnabled) _dirty.Add("mic-enabled");

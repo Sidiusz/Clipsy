@@ -45,6 +45,7 @@ public sealed partial class SettingsWindow
             case "undo": _draft.HotkeyUndo = binding; break;
             case "redo": _draft.HotkeyRedo = binding; break;
             case "select-all": _draft.HotkeySelectAll = binding; break;
+            case "select-monitor": _draft.HotkeySelectMonitor = binding; break;
             case "record-save": _draft.HotkeyRecordSilentSave = binding; break;
             case "mic-toggle":  _draft.HotkeyMicToggle = binding; break;
         }
@@ -59,8 +60,9 @@ public sealed partial class SettingsWindow
         AddHotkeyRow("copy",        "HkCopy",        _draft.HotkeyCopy);
         AddHotkeyRow("undo",        "HkUndo",        _draft.HotkeyUndo);
         AddHotkeyRow("redo",        "HkRedo",        _draft.HotkeyRedo);
-        AddHotkeyRow("select-all",  "HkSelectAll",   _draft.HotkeySelectAll);
-        AddHotkeyRow("record-save", "HkRecordSave",  _draft.HotkeyRecordSilentSave);
+        AddHotkeyRow("select-all",     "HkSelectAll",     _draft.HotkeySelectAll);
+        AddHotkeyRow("select-monitor", "HkSelectMonitor", _draft.HotkeySelectMonitor);
+        AddHotkeyRow("record-save",    "HkRecordSave",    _draft.HotkeyRecordSilentSave);
         AddHotkeyRow("mic-toggle",  "HkMicToggle",   _draft.HotkeyMicToggle);
     }
 

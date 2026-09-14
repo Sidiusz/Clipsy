@@ -189,18 +189,7 @@ public sealed partial class CaptureOverlayWindow
     private void OnMenuSelectScreen(object sender, RoutedEventArgs e)
     {
         if (sender is MenuFlyoutItem mfi && mfi.Tag is ScreenFreezeService.MonitorInfo m)
-        {
-            var b = _frame.VirtualBounds;
-            double rootW = RootGrid.ActualWidth > 0 ? RootGrid.ActualWidth : RootGrid.Width;
-            double rootH = RootGrid.ActualHeight > 0 ? RootGrid.ActualHeight : RootGrid.Height;
-            if (rootW <= 0 || rootH <= 0 || b.Width <= 0 || b.Height <= 0) return;
-            double sx = rootW / b.Width;
-            double sy = rootH / b.Height;
-            var rect = new Rect(
-                (m.Bounds.X - b.X) * sx, (m.Bounds.Y - b.Y) * sy,
-                m.Bounds.Width * sx, m.Bounds.Height * sy);
-            SetSelection(rect);
-        }
+            SelectMonitor(m);
     }
 
     private void OnMenuSelectAll(object sender, RoutedEventArgs e) => SelectAll();

@@ -60,6 +60,7 @@ public sealed class AppSettings
     public string HotkeyUndo { get; set; } = "Ctrl+Z";
     public string HotkeyRedo { get; set; } = "Ctrl+Y";
     public string HotkeySelectAll { get; set; } = "Ctrl+A";
+    public string HotkeySelectMonitor { get; set; } = "Ctrl+B";
     public string HotkeyRecordSilentSave { get; set; } = ""; // disabled by default
 
     // Updates
