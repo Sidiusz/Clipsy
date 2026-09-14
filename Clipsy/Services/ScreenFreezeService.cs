@@ -24,6 +24,18 @@ public sealed class ScreenFreezeService
 
     public FrozenFrame Capture()
     {
+        IntPtr previousDpi = IntPtr.Zero;
+        try { previousDpi = SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { }
+        try { return CaptureCore(); }
+        finally
+        {
+            if (previousDpi != IntPtr.Zero)
+                try { SetThreadDpiAwarenessContext(previousDpi); } catch { }
+        }
+    }
+
+    private FrozenFrame CaptureCore()
+    {
         var bounds = GetVirtualScreenBounds();
         var monitors = EnumerateMonitors();
 
@@ -118,6 +130,9 @@ public sealed class ScreenFreezeService
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT { public int left, top, right, bottom; }

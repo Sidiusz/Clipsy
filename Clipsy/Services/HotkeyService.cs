@@ -238,7 +238,7 @@ public sealed class HotkeyService : IDisposable
                 if (_captureViaLL && vk == _captureVk && mods == _captureMods)
                 {
                     var cb = _captureCallback;
-                    if (cb != null) _dispatcher.TryEnqueue(() => cb());
+                    cb?.Invoke(); // callback only signals the dedicated capture worker
                     return new IntPtr(1); // swallow so OS shortcut doesn't also fire
                 }
                 if (_recordViaLL && vk == _recordVk && mods == _recordMods)
@@ -275,7 +275,7 @@ public sealed class HotkeyService : IDisposable
             if (id == HOTKEY_CAPTURE)
             {
                 var cb = _captureCallback;
-                if (cb != null) _dispatcher.TryEnqueue(() => cb());
+                cb?.Invoke();
             }
             else if (id == HOTKEY_RECORD)
             {

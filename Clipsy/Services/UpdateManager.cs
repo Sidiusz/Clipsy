@@ -117,7 +117,10 @@ public static class UpdateManager
     {
         if (string.IsNullOrEmpty(InstallerPath)) return;
         if (UpdateService.LaunchInstaller(InstallerPath))
+        {
+            ProcessWatchdog.MarkCleanExit();
             try { Microsoft.UI.Xaml.Application.Current.Exit(); } catch { }
+        }
     }
 
     public static void SkipCurrent()

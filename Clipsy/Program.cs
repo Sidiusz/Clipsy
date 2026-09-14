@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Threading;
+using System.Runtime.InteropServices;
 using Clipsy.Services;
 
 namespace Clipsy;
@@ -14,6 +15,10 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (ProcessWatchdog.TryRunWatchdog(args, out int watchdogExitCode))
+            return watchdogExitCode;
+
+        TryEnablePerMonitorV2();
         bool createdNew;
         // Created-new is the authoritative signal; it also covers an abandoned
         // mutex left by a crashed previous instance.
@@ -28,6 +33,8 @@ public static class Program
             try { mutex.WaitOne(TimeSpan.FromSeconds(3)); }
             catch (AbandonedMutexException) { /* previous owner died — now ours */ }
         }
+
+        ProcessWatchdog.StartForCurrentProcess();
 
         // Install native crash capture before XAML init so a fail-fast / AV
         // leaves a minidump + breadcrumb instead of vanishing silently.
@@ -51,4 +58,11 @@ public static class Program
         }
     }
 
+    private static void TryEnablePerMonitorV2()
+    {
+        try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch { }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
 }

@@ -308,39 +308,22 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         try
         {
-            const int SM_XVIRTUALSCREEN = 76;
-            const int SM_YVIRTUALSCREEN = 77;
-            const int SM_CXSCREEN = 0;
-            const int SM_CYSCREEN = 1;
-
-            [System.Runtime.InteropServices.DllImport("user32.dll")]
-            static extern int GetSystemMetrics(int nIndex);
-
-            var primaryWidth = GetSystemMetrics(SM_CXSCREEN);
-            var primaryHeight = GetSystemMetrics(SM_CYSCREEN);
-            var virtualX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-            var virtualY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-
-            if (primaryWidth > 0 && primaryHeight > 0)
-            {
-                // Primary monitor starts at (0,0) in screen coordinates
-                // Convert to virtual coordinates by subtracting virtual origin
-                var primaryCenterX = (primaryWidth / 2) - virtualX;
-                var primaryTopY = 72 - virtualY;
-
-                Hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                var hintWidth = Hint.DesiredSize.Width;
-                Hint.Margin = new Thickness(primaryCenterX - (hintWidth / 2), primaryTopY, 0, 0);
-            }
-            else
+            var b = _frame.VirtualBounds;
+            var primary = _frame.Monitors.FirstOrDefault(m => m.IsPrimary);
+            double rootW = RootGrid.ActualWidth > 0 ? RootGrid.ActualWidth : RootGrid.Width;
+            double rootH = RootGrid.ActualHeight > 0 ? RootGrid.ActualHeight : RootGrid.Height;
+            if (primary == null || rootW <= 0 || rootH <= 0 || b.Width <= 0 || b.Height <= 0)
             {
                 Hint.Margin = new Thickness(50, 72, 0, 0);
+                return;
             }
+            double sx = rootW / b.Width, sy = rootH / b.Height;
+            double centerX = (primary.Bounds.X - b.X + primary.Bounds.Width / 2.0) * sx;
+            double topY = (primary.Bounds.Y - b.Y) * sy + 72;
+            Hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Hint.Margin = new Thickness(centerX - Hint.DesiredSize.Width / 2, topY, 0, 0);
         }
-        catch
-        {
-            Hint.Margin = new Thickness(50, 72, 0, 0);
-        }
+        catch { Hint.Margin = new Thickness(50, 72, 0, 0); }
     }
 
     private AppWindow GetAppWindowForCurrentWindow()
@@ -623,8 +606,17 @@ public sealed partial class CaptureOverlayWindow : Window
         }
     }
 
-    // DPI scale used across the drawing/save partials.
-    private double DpiScale => Content?.XamlRoot?.RasterizationScale ?? 1.0;
+    // Derive capture scale from the frozen frame and actual XAML surface.
+    private double DpiScale
+    {
+        get
+        {
+            double logicalWidth = RootGrid.ActualWidth > 0 ? RootGrid.ActualWidth : RootGrid.Width;
+            if (logicalWidth > 0 && _frame != null && _frame.PixelWidth > 0)
+                return _frame.PixelWidth / logicalWidth;
+            return Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        }
+    }
 
     // ---------- Win32 interop ----------
 

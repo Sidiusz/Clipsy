@@ -17,6 +17,7 @@ public partial class App : Application
     private Clipsy.Views.TrayMenuWindow? _trayMenu;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _updateTimer;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _idleTimer;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _watchdogTimer;
 
     public App()
     {
@@ -66,6 +67,8 @@ public partial class App : Application
         // Activate the host to start the XAML island; offscreen tool-window so
         // invisible, but must be active or the TaskbarIcon commands never wire.
         HostWindow.Activate();
+        CaptureOverlayHost.Initialize(HostWindow.DispatcherQueue);
+        StartWatchdogHeartbeat();
 
         // Pre-create the tray menu after the XAML island is live.
         _trayMenu = new Clipsy.Views.TrayMenuWindow();
@@ -115,6 +118,18 @@ public partial class App : Application
 
     // Periodic re-check so a long-running tray instance finds updates without a
     // restart; CheckUpdatesIfDueAsync itself gates on the chosen interval.
+    private void StartWatchdogHeartbeat()
+    {
+        var dq = HostWindow?.DispatcherQueue;
+        if (dq == null) return;
+        ProcessWatchdog.Pulse();
+        _watchdogTimer = dq.CreateTimer();
+        _watchdogTimer.Interval = TimeSpan.FromSeconds(5);
+        _watchdogTimer.IsRepeating = true;
+        _watchdogTimer.Tick += (_, _) => ProcessWatchdog.Pulse();
+        _watchdogTimer.Start();
+    }
+
     private void StartUpdateTimer()
     {
         var dq = HostWindow?.DispatcherQueue;
@@ -147,11 +162,17 @@ public partial class App : Application
             RecordingController.Current?.StopFromHotkey();
             return;
         }
-        // Defer to the UI queue so overlay creation never runs inside the tray's
-        // nested TrackPopupMenu pump (XBF init NRE) or a busy hotkey callback.
-        var dq = HostWindow?.DispatcherQueue;
-        if (dq != null) dq.TryEnqueue(CaptureOverlayHost.ShowOverlay);
-        else CaptureOverlayHost.ShowOverlay();
+        CaptureOverlayHost.RequestOverlay();
+    }
+
+    private void OnCaptureHotkeyRequested()
+    {
+        if (RecordingController.IsRecording)
+        {
+            HostWindow?.DispatcherQueue.TryEnqueue(() => RecordingController.Current?.StopFromHotkey());
+            return;
+        }
+        CaptureOverlayHost.RequestOverlay();
     }
 
     private void OnSettingsRequested()
@@ -171,7 +192,7 @@ public partial class App : Application
         string capture = string.IsNullOrWhiteSpace(s.HotkeyCapture) ? "Snapshot" : s.HotkeyCapture;
         string? record = string.IsNullOrWhiteSpace(s.HotkeyRecordSilentSave) ? null : s.HotkeyRecordSilentSave;
         string? mic    = string.IsNullOrWhiteSpace(s.HotkeyMicToggle) ? null : s.HotkeyMicToggle;
-        bool ok = Hotkey!.Register(OnCaptureRequested, capture, OnRecordStopRequested, record, OnMicToggleRequested, mic);
+        bool ok = Hotkey!.Register(OnCaptureHotkeyRequested, capture, OnRecordStopRequested, record, OnMicToggleRequested, mic);
         if (!ok)
         {
             // Capture hotkey didn't register (another app owns it) — warn so the
@@ -204,6 +225,9 @@ public partial class App : Application
 
     private void OnExitRequested()
     {
+        ProcessWatchdog.MarkCleanExit();
+        _watchdogTimer?.Stop();
+        CaptureOverlayHost.Shutdown();
         SettingsService.Instance.SettingsChanged -= OnSettingsChangedRewireHotkeys;
         Hotkey?.Dispose();
         HostWindow?.TrayIconControl.Dispose();
@@ -221,7 +245,7 @@ public partial class App : Application
             RecordingController.Current?.StopFromHotkey();
             return;
         }
-        CaptureOverlayHost.ShowOverlay();
+        CaptureOverlayHost.RequestOverlay();
     }
 
     private void OnOpenVideoFolderRequested()
