@@ -3,7 +3,7 @@
 
 #define ClipsyName "Clipsy"
 #ifndef ClipsyVersion
-#define ClipsyVersion "1.0.3"
+#define ClipsyVersion "1.0.4"
 #endif
 #define ClipsyPublisher "Sidiusz"
 #define ClipsyURL "https://github.com/Sidiusz/Clipsy"
@@ -123,12 +123,3 @@ begin
   if CurUninstallStep = usUninstall then
     DeleteAutostartTask;
 end;
-
-
-
-
-
-
-
-
-
