@@ -3,7 +3,8 @@
     x:Class="Clipsy.Views.Settings.SettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:muxc="using:Microsoft.UI.Xaml.Controls">
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:Clipsy.Controls">
 
     <Grid Background="{ThemeResource ClipsyBg0Brush}">
         <!-- Round all input fields in Settings. Scoped here so overlay/HUD
@@ -873,7 +874,10 @@
                                         <RadioButton x:Name="RadioCodecVp9" Style="{StaticResource ClipsyRadioCard}"
                                                      GroupName="Codec" Tag="VP9" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
-                                                <TextBlock Text="VP9" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Text="VP9" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
+                                                    <controls:ExperimentalBadge />
+                                                </StackPanel>
                                                 <TextBlock x:Name="LblCodecVp9Desc" Text="Web-friendly, open codec"
                                                            FontSize="11" TextWrapping="Wrap" />
                                             </StackPanel>
@@ -881,7 +885,10 @@
                                         <RadioButton x:Name="RadioCodecAv1" Style="{StaticResource ClipsyRadioCard}"
                                                      GroupName="Codec" Tag="AV1" Checked="OnAnyControlChanged">
                                             <StackPanel Spacing="2">
-                                                <TextBlock Text="AV1" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Text="AV1" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
+                                                    <controls:ExperimentalBadge />
+                                                </StackPanel>
                                                 <TextBlock x:Name="LblCodecAv1Desc" Text="Smallest, very slow encoder"
                                                            FontSize="11" TextWrapping="Wrap" />
                                             </StackPanel>
@@ -937,8 +944,11 @@
                         <!-- ===== OCR ===== -->
                         <StackPanel x:Name="PaneOcr" Spacing="16" HorizontalAlignment="Stretch" Visibility="Collapsed">
                             <StackPanel Spacing="4">
-                                <TextBlock x:Name="HdrOcr" Text="Text Recognition"
-                                           Style="{StaticResource ClipsySectionTitle}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock x:Name="HdrOcr" Text="Text Recognition"
+                                               Style="{StaticResource ClipsySectionTitle}" />
+                                    <controls:ExperimentalBadge />
+                                </StackPanel>
                                 <TextBlock x:Name="SubOcr"
                                            Text="OCR engine and translation settings."
                                            Style="{StaticResource ClipsyHelper}" />
@@ -953,8 +963,11 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock x:Name="LblOcrEngine" Text="OCR engine"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock x:Name="LblOcrEngine" Text="OCR engine"
+                                                           Style="{StaticResource ClipsyBodyStrong}" />
+                                                <controls:ExperimentalBadge />
+                                            </StackPanel>
                                             <TextBlock x:Name="HelperOcr"
                                                        Text="Engine that recognizes text in captures."
                                                        Style="{StaticResource ClipsyHelper}" />

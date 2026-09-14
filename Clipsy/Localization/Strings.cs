@@ -146,6 +146,7 @@ public static class Strings
         ["HelperAutoDownload"]   = New("Download the installer automatically while the PC is idle.", "Автоматически скачивать установщик, когда компьютер простаивает."),
         ["LblAppManagement"]    = New("App management",            "Управление приложением"),
         ["LblCodec"]            = New("Codec",                     "Кодек"),
+        ["ExperimentalWarning"] = New("Experimental feature. It may be partially unavailable, unstable, or cause the application to crash. Use at your own risk.", "Экспериментальная функция. Она может работать не полностью, нестабильно или приводить к сбоям и вылету приложения. Используйте на свой страх и риск."),
         ["CodecH264Desc"]       = New("Wide compatibility, hardware-accelerated", "Широкая совместимость, аппаратное ускорение"),
         ["CodecH265Desc"]       = New("Smaller files, slower encoding", "Файлы меньше, кодирование медленнее"),
         ["CodecVp9Desc"]        = New("Open codec via FFmpeg. Pause, live region resize, and microphone switching are unavailable during recording.", "Открытый кодек через FFmpeg. Во время записи недоступны пауза, изменение области и переключение микрофона."),
