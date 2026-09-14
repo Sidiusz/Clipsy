@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Clipsy.Localization;
 using Clipsy.Services;
 using Microsoft.UI;
@@ -18,6 +19,10 @@ public sealed partial class ChangelogWindow : Window
     private static ChangelogWindow? _open;
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
+    private bool _revealed;
+    private bool _closed;
+    private int _revealFrames;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _revealFallback;
 
     public ChangelogWindow()
     {
@@ -25,13 +30,20 @@ public sealed partial class ChangelogWindow : Window
         ThemeService.Register(Content as FrameworkElement);
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
+        SetCloak(true);
         _appWindow.Title = Strings.Get("ChangelogTitle");
         _appWindow.Resize(new SizeInt32(560, 680));
 
         TitleLabel.Text = Strings.Get("ChangelogTitle");
         HeaderLabel.Text = Strings.Get("ChangelogLoading");
 
-        Closed += (_, _) => { if (_open == this) _open = null; };
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRevealFrame;
+            _revealFallback?.Stop();
+            if (_open == this) _open = null;
+        };
         if (Content is FrameworkElement fe) fe.Loaded += (_, _) => _ = LoadAsync();
     }
 
@@ -41,6 +53,7 @@ public sealed partial class ChangelogWindow : Window
         var w = new ChangelogWindow();
         _open = w;
         w.CenterOnScreen();
+        w.ArmReveal();
         w.Activate();
     }
 
@@ -52,10 +65,51 @@ public sealed partial class ChangelogWindow : Window
             area.X + (area.Width - 560) / 2, area.Y + (area.Height - 680) / 2));
     }
 
+    private void ArmReveal()
+    {
+        _revealed = false;
+        _revealFrames = 0;
+        SetCloak(true);
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRevealFrame;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnRevealFrame;
+        _revealFallback?.Stop();
+        _revealFallback = DispatcherQueue.CreateTimer();
+        _revealFallback.Interval = TimeSpan.FromMilliseconds(450);
+        _revealFallback.IsRepeating = false;
+        _revealFallback.Tick += (_, _) => CompleteReveal();
+        _revealFallback.Start();
+    }
+
+    private void OnRevealFrame(object? sender, object e)
+    {
+        if (_revealed) return;
+        if (++_revealFrames >= 2) CompleteReveal();
+    }
+
+    private void CompleteReveal()
+    {
+        if (_revealed) return;
+        _revealed = true;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRevealFrame;
+        _revealFallback?.Stop();
+        SetCloak(false);
+    }
+
+    private void SetCloak(bool on)
+    {
+        try
+        {
+            int value = on ? 1 : 0;
+            DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref value, sizeof(int));
+        }
+        catch { }
+    }
+
     private async System.Threading.Tasks.Task LoadAsync()
     {
         var current = UpdateService.CurrentVersion();
         var releases = await UpdateService.FetchReleasesAsync();
+        if (_closed) return;
 
         if (releases.Count == 0)
         {
@@ -131,4 +185,10 @@ public sealed partial class ChangelogWindow : Window
                 Foreground = new SolidColorBrush(fg),
             },
         };
+
+    private const int DWMWA_CLOAK = 13;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
 }
