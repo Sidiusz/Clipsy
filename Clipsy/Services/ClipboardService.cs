@@ -7,6 +7,15 @@ namespace Clipsy.Services;
 
 public static class ClipboardService
 {
+    public static Task SetTextAsync(string text)
+    {
+        var dp = new DataPackage();
+        dp.SetText(text);
+        Clipboard.SetContent(dp);
+        Clipboard.Flush();
+        return Task.CompletedTask;
+    }
+
     public static async Task SetImageAsync(byte[] pngBytes)
     {
         var ras = new InMemoryRandomAccessStream();

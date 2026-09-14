@@ -80,6 +80,9 @@ public sealed partial class SettingsWindow
         HelperDynamicIslands.Text   = Strings.Get("HelperDynamicIslands");
         LblEyedropperMod.Text          = Strings.Get("LblEyedropperMod");
         HelperEyedropperMod.Text       = Strings.Get("HelperEyedropperMod");
+        EyedropperModCustom.Content    = Strings.Get("OptEyedropperCustom");
+        LblEyedropperCopyHex.Text      = Strings.Get("LblEyedropperCopyHex");
+        HelperEyedropperCopyHex.Text   = Strings.Get("HelperEyedropperCopyHex");
         LblVideoFormat.Text         = Strings.Get("LblVideoFormat");
         LblVideoCursor.Text         = Strings.Get("LblVideoCursor");
         HelperVideoCursor.Text      = Strings.Get("HelperVideoCursor");
@@ -183,6 +186,7 @@ public sealed partial class SettingsWindow
         RefreshComboDisplay(LangBox);
         RefreshComboDisplay(ScreenshotFormatBox);
         RefreshComboDisplay(AfterSaveBox);
+        RefreshComboDisplay(EyedropperModBox);
         RefreshComboDisplay(UpdateIntervalBox);
         RefreshComboDisplay(VideoFormatBox);
         RefreshComboDisplay(OcrEngineBox);

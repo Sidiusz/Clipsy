@@ -190,6 +190,11 @@ public sealed partial class CaptureOverlayWindow
         _drawing.Settings.Color = c;
         ColorPickerCtl.Color = c;
         EnsureSwatchBrush().Color = c;
+        if (SettingsService.Instance.Settings.CopyEyedropperHexToClipboard)
+        {
+            try { _ = ClipboardService.SetTextAsync($"#{c.R:X2}{c.G:X2}{c.B:X2}"); }
+            catch (Exception ex) { Diagnostics.Log("Eyedropper copy HEX", ex); }
+        }
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]

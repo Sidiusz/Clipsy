@@ -602,12 +602,30 @@
                                                        Text="Hold this key while a draw tool is active to pick a color."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ComboBox x:Name="EyedropperModBox" Grid.Column="1" Width="240" HorizontalAlignment="Right"
-                                                  VerticalAlignment="Center"
-                                                  SelectionChanged="OnAnyControlChanged">
-                                            <ComboBoxItem x:Name="EyedropperModAlt" Content="Alt" Tag="Alt" />
-                                            <ComboBoxItem x:Name="EyedropperModCtrl" Content="Ctrl" Tag="Ctrl" />
-                                        </ComboBox>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                            <ComboBox x:Name="EyedropperModBox" Width="140"
+                                                      SelectionChanged="OnEyedropperModifierChanged">
+                                                <ComboBoxItem x:Name="EyedropperModAlt" Content="Alt" Tag="Alt" />
+                                                <ComboBoxItem x:Name="EyedropperModCtrl" Content="Ctrl" Tag="Ctrl" />
+                                                <ComboBoxItem x:Name="EyedropperModShift" Content="Shift" Tag="Shift" />
+                                                <ComboBoxItem x:Name="EyedropperModCustom" Content="Custom key…" Tag="custom" />
+                                            </ComboBox>
+                                            <Button x:Name="EyedropperCustomKeyButton" Width="108" Visibility="Collapsed"
+                                                    Style="{StaticResource ClipsyButtonGhost}" Click="OnEyedropperCustomKeyClick" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblEyedropperCopyHex" Text="Copy picked HEX" Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperEyedropperCopyHex" Text="Copy #RRGGBB after picking a color." Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="EyedropperCopyHexSwitch" Grid.Column="1" Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAnyToggleChanged" VerticalAlignment="Center" />
                                     </Grid>
                                 </StackPanel>
                             </Border>

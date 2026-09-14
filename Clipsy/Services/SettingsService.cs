@@ -49,7 +49,8 @@ public sealed class AppSettings
     public bool DynamicToolbarIslands { get; set; } = false;
 
     // Hold this modifier while a draw tool is active to temporarily eyedrop.
-    public string EyedropperModifier { get; set; } = "Alt"; // Alt / Ctrl
+    public string EyedropperModifier { get; set; } = "Alt"; // Alt / Ctrl / Shift / VirtualKey name
+    public bool CopyEyedropperHexToClipboard { get; set; } = false;
 
     // GIF
     public int GifColors { get; set; } = 256;

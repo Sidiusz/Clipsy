@@ -101,6 +101,7 @@ public sealed partial class SettingsWindow : Window
         ["ss-cursor"] = "capture",
         ["dyn-islands"] = "capture",
         ["eyedropper-mod"] = "capture",
+        ["eyedropper-copy"] = "capture",
         ["after-save"] = "general",
         ["update-int"] = "general",
         ["auto-dl"] = "general",
@@ -376,6 +377,7 @@ public sealed partial class SettingsWindow : Window
         AutostartSwitch.IsChecked        = _initialAutostart;
         ScreenshotCursorSwitch.IsChecked = _draft.CaptureScreenshotCursor;
         DynamicIslandsSwitch.IsChecked   = _draft.DynamicToolbarIslands;
+        EyedropperCopyHexSwitch.IsChecked = _draft.CopyEyedropperHexToClipboard;
         VideoCursorSwitch.IsChecked      = _draft.CaptureVideoCursor;
         MicEnabledSwitch.IsChecked       = _draft.MicrophoneEnabled;
         GifDitherSwitch.IsChecked        = _draft.GifDither;
@@ -426,6 +428,7 @@ public sealed partial class SettingsWindow : Window
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
         ScreenshotCursorSwitch.IsChecked = _draft.CaptureScreenshotCursor;
         DynamicIslandsSwitch.IsChecked   = _draft.DynamicToolbarIslands;
+        EyedropperCopyHexSwitch.IsChecked = _draft.CopyEyedropperHexToClipboard;
         SelectComboByTag(VideoFormatBox, _draft.VideoFormat);
         VideoCursorSwitch.IsChecked = _draft.CaptureVideoCursor;
 
@@ -436,7 +439,7 @@ public sealed partial class SettingsWindow : Window
         UpdateJpgQualityRowVisibility();
 
         SelectComboByTag(AfterSaveBox, _draft.AfterSaveAction);
-        SelectComboByTag(EyedropperModBox, _draft.EyedropperModifier);
+        LoadEyedropperModifier();
         SelectComboByTag(UpdateIntervalBox, _draft.UpdateInterval);
         AutoDownloadSwitch.IsChecked = _draft.AutoDownloadUpdates;
 
@@ -520,7 +523,8 @@ public sealed partial class SettingsWindow : Window
         _draft.CaptureVideoCursor = VideoCursorSwitch.IsChecked == true;
         _draft.JpgQuality = (int)JpgQualitySlider.Value;
         _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
-        _draft.EyedropperModifier = SelectedComboTag(EyedropperModBox);
+        _draft.EyedropperModifier = GetEyedropperModifierBinding();
+        _draft.CopyEyedropperHexToClipboard = EyedropperCopyHexSwitch.IsChecked == true;
         _draft.UpdateInterval = SelectedComboTag(UpdateIntervalBox);
         _draft.AutoDownloadUpdates = AutoDownloadSwitch.IsChecked == true;
 
@@ -723,6 +727,7 @@ public sealed partial class SettingsWindow : Window
         if (_draft.JpgQuality != _initial.JpgQuality) _dirty.Add("jpg-q");
         if (_draft.AfterSaveAction != _initial.AfterSaveAction) _dirty.Add("after-save");
         if (_draft.EyedropperModifier != _initial.EyedropperModifier) _dirty.Add("eyedropper-mod");
+        if (_draft.CopyEyedropperHexToClipboard != _initial.CopyEyedropperHexToClipboard) _dirty.Add("eyedropper-copy");
         if (_draft.UpdateInterval != _initial.UpdateInterval) _dirty.Add("update-int");
         if (_draft.AutoDownloadUpdates != _initial.AutoDownloadUpdates) _dirty.Add("auto-dl");
         if (_draft.NotificationsEnabled  != _initial.NotificationsEnabled  ||
@@ -774,6 +779,7 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblScreenshotCursor, "LblScreenshotCursor", _dirty.Contains("ss-cursor"));
         SetLabel(LblDynamicIslands, "LblDynamicIslands", _dirty.Contains("dyn-islands"));
         SetLabel(LblEyedropperMod, "LblEyedropperMod", _dirty.Contains("eyedropper-mod"));
+        SetLabel(LblEyedropperCopyHex, "LblEyedropperCopyHex", _dirty.Contains("eyedropper-copy"));
         SetLabel(LblVideoFormat, "LblVideoFormat", _dirty.Contains("vid-format"));
         SetLabel(LblVideoCursor, "LblVideoCursor", _dirty.Contains("vid-cursor"));
         SetLabel(LblJpgQuality, "LblJpgQuality", _dirty.Contains("jpg-q"));

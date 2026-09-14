@@ -462,7 +462,6 @@ public sealed partial class CaptureOverlayWindow
         // Modifier held over a draw tool → enter temp eyedropper immediately,
         // even without a mouse move.
         if (!_inOcrMode && _drawing.Settings.Tool != ToolKind.None
-            && (e.Key == VirtualKey.Menu || e.Key == VirtualKey.Control)
             && IsEyedropperModifierDown())
         {
             EnterTempEyedropper();
@@ -588,17 +587,19 @@ public sealed partial class CaptureOverlayWindow
 
     private static bool IsEyedropperModifierDown()
     {
-        var key = SettingsService.Instance.Settings.EyedropperModifier == "Ctrl"
-            ? VirtualKey.Control : VirtualKey.Menu;
+        var binding = SettingsService.Instance.Settings.EyedropperModifier;
+        VirtualKey key;
+        if (string.Equals(binding, "Ctrl", StringComparison.OrdinalIgnoreCase)) key = VirtualKey.Control;
+        else if (string.Equals(binding, "Alt", StringComparison.OrdinalIgnoreCase)) key = VirtualKey.Menu;
+        else if (string.Equals(binding, "Shift", StringComparison.OrdinalIgnoreCase)) key = VirtualKey.Shift;
+        else if (!Enum.TryParse(binding, ignoreCase: true, out key) || key == VirtualKey.None) return false;
         var state = InputKeyboardSource.GetKeyStateForCurrentThread(key);
         return (state & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
     }
 
     private void OnKeyUp(object sender, KeyRoutedEventArgs e)
     {
-        if (_tempEyedropper
-            && (e.Key == VirtualKey.Menu || e.Key == VirtualKey.Control)
-            && !IsEyedropperModifierDown())
+        if (_tempEyedropper && !IsEyedropperModifierDown())
         {
             ExitTempEyedropper(pick: true);
             e.Handled = true;
