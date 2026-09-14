@@ -9,6 +9,7 @@ public sealed partial class SettingsWindow
     private void ApplyLocalization()
     {
         NavGeneralLabel.Text  = Strings.Get("TabGeneral");
+        NavCaptureLabel.Text  = Strings.Get("TabCapture");
         NavVideoLabel.Text    = Strings.Get("TabVideo");
         NavOcrLabel.Text      = Strings.Get("TabOcr");
         NavGifLabel.Text      = Strings.Get("TabGif");
@@ -21,6 +22,7 @@ public sealed partial class SettingsWindow
         if (LblTip != null)           LblTip.Text          = Strings.Get(_tipKeys[_currentTipKeyIndex]);
 
         HdrGeneral.Text  = Strings.Get("TabGeneral");
+        HdrCapture.Text  = Strings.Get("TabCapture");
         HdrVideo.Text    = Strings.Get("TabVideo");
         HdrOcr.Text      = Strings.Get("TabOcr");
         HdrGif.Text      = Strings.Get("TabGif");
@@ -29,6 +31,7 @@ public sealed partial class SettingsWindow
         SubNotifications.Text = Strings.Get("SubNotifications");
 
         SubGeneral.Text  = Strings.Get("SubGeneral");
+        SubCapture.Text  = Strings.Get("SubCapture");
         SubVideo.Text    = Strings.Get("SubVideo");
         SubOcr.Text      = Strings.Get("SubOcr");
         SubGif.Text      = Strings.Get("SubGif");
@@ -58,6 +61,12 @@ public sealed partial class SettingsWindow
 
         LblLanguage.Text         = Strings.Get("LblLanguage");
         LblTheme.Text            = Strings.Get("LblTheme");
+        LblStorage.Text          = Strings.Get("LblStorage");
+        LblCaptureScreenshots.Text = Strings.Get("LblCaptureScreenshots");
+        LblCaptureOverlay.Text   = Strings.Get("LblCaptureOverlay");
+        LblRecordingOutput.Text  = Strings.Get("LblRecordingOutput");
+        LblRecordingAudio.Text   = Strings.Get("LblRecordingAudio");
+        LblRecordingEncoder.Text = Strings.Get("LblRecordingEncoder");
         LblOcrEngine.Text        = Strings.Get("LblOcrEngine");
         LblScreenshotFolder.Text = Strings.Get("LblScreenshotFolder");
         LblVideoFolder.Text      = Strings.Get("LblVideoFolder");
@@ -69,6 +78,8 @@ public sealed partial class SettingsWindow
         HelperScreenshotCursor.Text = Strings.Get("HelperScreenshotCursor");
         LblDynamicIslands.Text      = Strings.Get("LblDynamicIslands");
         HelperDynamicIslands.Text   = Strings.Get("HelperDynamicIslands");
+        LblEyedropperMod.Text          = Strings.Get("LblEyedropperMod");
+        HelperEyedropperMod.Text       = Strings.Get("HelperEyedropperMod");
         LblVideoFormat.Text         = Strings.Get("LblVideoFormat");
         LblVideoCursor.Text         = Strings.Get("LblVideoCursor");
         HelperVideoCursor.Text      = Strings.Get("HelperVideoCursor");
@@ -77,6 +88,8 @@ public sealed partial class SettingsWindow
         HelperAfterSave.Text     = Strings.Get("HelperAfterSave");
         LblUpdates.Text          = Strings.Get("LblUpdates");
         HelperUpdates.Text       = Strings.Get("HelperUpdates");
+        LblAutoDownload.Text     = Strings.Get("LblAutoDownload");
+        HelperAutoDownload.Text  = Strings.Get("HelperAutoDownload");
         LblAppManagement.Text    = Strings.Get("LblAppManagement");
         LblNotifyMaster.Text     = Strings.Get("LblNotifyMaster");
         LblNotifyScreenshot.Text = Strings.Get("LblNotifyScreenshot");
@@ -151,7 +164,7 @@ public sealed partial class SettingsWindow
 
         ScreenshotFolderPick.Content = Strings.Get("BtnBrowse");
         VideoFolderPick.Content      = Strings.Get("BtnBrowse");
-        BtnCheckNow.Content          = Strings.Get("BtnCheckNow");
+        BtnCheckNowText.Text         = Strings.Get("BtnCheckNow");
         BtnChangelogText.Text        = Strings.Get("BtnChangelog");
         BtnReset.Content             = Strings.Get("BtnReset");
         BtnClose.Content             = Strings.Get("BtnClose");

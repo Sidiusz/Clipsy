@@ -65,7 +65,7 @@ public sealed partial class SettingsWindow : Window
         "TipOcrEngine",
         "TipOcrLang",
         "TipTranslate",
-        "TipEyedropper",
+        "TipEyedropperSettings",
         "TipResizeHandles",
         "TipCopySaveKeys",
         "TipClearDrawings",
@@ -96,12 +96,14 @@ public sealed partial class SettingsWindow : Window
         ["vid-folder"] = "general",
         ["remember"] = "general",
         ["autostart"] = "general",
-        ["ss-format"] = "general",
-        ["jpg-q"] = "general",
-        ["ss-cursor"] = "general",
-        ["dyn-islands"] = "general",
+        ["ss-format"] = "capture",
+        ["jpg-q"] = "capture",
+        ["ss-cursor"] = "capture",
+        ["dyn-islands"] = "capture",
+        ["eyedropper-mod"] = "capture",
         ["after-save"] = "general",
         ["update-int"] = "general",
+        ["auto-dl"] = "general",
         ["notif"] = "notifications",
         ["translate-svc"]  = "ocr",
         ["translate-from"] = "ocr",
@@ -218,7 +220,7 @@ public sealed partial class SettingsWindow : Window
             ThemeService.ApplyTo(Content as FrameworkElement);
             VersionLabel.Text = Strings.Get("VersionPrefix") + GetVersion();
             BuildDateLabel.Text = GetBuildDate();
-            foreach (var rb in new[] { NavGeneral, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
+            foreach (var rb in new[] { NavGeneral, NavCapture, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
                 if (rb.IsChecked == true) { OnNavChecked(rb, new RoutedEventArgs()); break; }
         }
         catch (Exception ex) { Diagnostics.Show("SettingsWindow.SetupOnce", ex); }
@@ -749,11 +751,13 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblScreenshotFormat, "LblScreenshotFormat", _dirty.Contains("ss-format"));
         SetLabel(LblScreenshotCursor, "LblScreenshotCursor", _dirty.Contains("ss-cursor"));
         SetLabel(LblDynamicIslands, "LblDynamicIslands", _dirty.Contains("dyn-islands"));
+        SetLabel(LblEyedropperMod, "LblEyedropperMod", _dirty.Contains("eyedropper-mod"));
         SetLabel(LblVideoFormat, "LblVideoFormat", _dirty.Contains("vid-format"));
         SetLabel(LblVideoCursor, "LblVideoCursor", _dirty.Contains("vid-cursor"));
         SetLabel(LblJpgQuality, "LblJpgQuality", _dirty.Contains("jpg-q"));
         SetLabel(LblAfterSave, "LblAfterSave", _dirty.Contains("after-save"));
         SetLabel(LblUpdates, "LblUpdates", _dirty.Contains("update-int"));
+        SetLabel(LblAutoDownload, "LblAutoDownload", _dirty.Contains("auto-dl"));
         SetLabel(LblNotifyMaster, "LblNotifyMaster", _dirty.Contains("notif"));
         SetLabel(LblCodec, "LblCodec", _dirty.Contains("codec"));
         SetLabel(LblResolution, "LblResolution", _dirty.Contains("resolution"));
@@ -764,10 +768,12 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblGifDither, "LblGifDither", _dirty.Contains("gif-dither"));
 
         SetNavLabel(NavGeneralLabel, "TabGeneral", "general");
+        SetNavLabel(NavCaptureLabel, "TabCapture", "capture");
         SetNavLabel(NavVideoLabel,   "TabVideo",   "video");
         SetNavLabel(NavOcrLabel,     "TabOcr",     "ocr");
         SetNavLabel(NavGifLabel,     "TabGif",     "gif");
         SetNavLabel(NavHotkeysLabel, "TabHotkeys", "hotkeys");
+        SetNavLabel(NavNotificationsLabel, "TabNotifications", "notifications");
         SetNavLabel(NavInfoLabel,    "TabInfo",    "info");
     }
 
@@ -1061,6 +1067,7 @@ public sealed partial class SettingsWindow : Window
         var key = rb.Tag as string;
 
         PaneGeneral.Visibility = key == "general" ? Visibility.Visible : Visibility.Collapsed;
+        PaneCapture.Visibility = key == "capture" ? Visibility.Visible : Visibility.Collapsed;
         PaneVideo.Visibility   = key == "video"   ? Visibility.Visible : Visibility.Collapsed;
         PaneOcr.Visibility     = key == "ocr"     ? Visibility.Visible : Visibility.Collapsed;
         PaneGif.Visibility     = key == "gif"     ? Visibility.Visible : Visibility.Collapsed;
@@ -1073,6 +1080,7 @@ public sealed partial class SettingsWindow : Window
         FrameworkElement? shown = key switch
         {
             "general"       => PaneGeneral,
+            "capture"       => PaneCapture,
             "video"         => PaneVideo,
             "ocr"           => PaneOcr,
             "gif"           => PaneGif,
@@ -1095,7 +1103,7 @@ public sealed partial class SettingsWindow : Window
     private void RefreshNavIcons()
     {
         string? key = null;
-        foreach (var rb in new[] { NavGeneral, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
+        foreach (var rb in new[] { NavGeneral, NavCapture, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
             if (rb?.IsChecked == true) { key = rb.Tag as string; break; }
 
         try
@@ -1103,6 +1111,7 @@ public sealed partial class SettingsWindow : Window
             var accent = ThemeService.GetBrush("ClipsyAccentBrush", Content as FrameworkElement);
             var dim = ThemeService.GetBrush("ClipsyText2Brush", Content as FrameworkElement);
             IconNavGeneral.Foreground = key == "general" ? accent : dim;
+            IconNavCapture.Foreground = key == "capture" ? accent : dim;
             IconNavVideo.Foreground   = key == "video"   ? accent : dim;
             IconNavOcr.Foreground     = key == "ocr"     ? accent : dim;
             IconNavGif.Foreground     = key == "gif"     ? accent : dim;
@@ -1117,7 +1126,7 @@ public sealed partial class SettingsWindow : Window
     // the style Foreground resolves against the app theme until a state re-applies.
     private void SnapNavVisuals()
     {
-        foreach (var rb in new[] { NavGeneral, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
+        foreach (var rb in new[] { NavGeneral, NavCapture, NavVideo, NavOcr, NavGif, NavHotkeys, NavNotifications, NavInfo })
         {
             if (rb == null) continue;
             VisualStateManager.GoToState(rb, rb.IsChecked == true ? "Checked" : "Unchecked", false);

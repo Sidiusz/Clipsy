@@ -95,6 +95,23 @@
                             </Grid>
                         </RadioButton>
 
+                        <RadioButton x:Name="NavCapture" Tag="capture"
+                                     Style="{StaticResource ClipsyNavRadio}"
+                                     GroupName="ClipsyNav"
+                                     Checked="OnNavChecked">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon x:Name="IconNavCapture" Grid.Column="0"
+                                          Glyph="&#xE722;" FontSize="16"
+                                          VerticalAlignment="Center" />
+                                <TextBlock x:Name="NavCaptureLabel" Grid.Column="1"
+                                           Text="Capture" FontSize="13" VerticalAlignment="Center" />
+                            </Grid>
+                        </RadioButton>
+
                         <RadioButton x:Name="NavVideo" Tag="video"
                                      Style="{StaticResource ClipsyNavRadio}"
                                      GroupName="ClipsyNav"
@@ -109,6 +126,23 @@
                                           VerticalAlignment="Center" />
                                 <TextBlock x:Name="NavVideoLabel" Grid.Column="1"
                                            Text="Video" FontSize="13" VerticalAlignment="Center" />
+                            </Grid>
+                        </RadioButton>
+
+                        <RadioButton x:Name="NavOcr" Tag="ocr"
+                                     Style="{StaticResource ClipsyNavRadio}"
+                                     GroupName="ClipsyNav"
+                                     Checked="OnNavChecked">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="28" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon x:Name="IconNavOcr" Grid.Column="0"
+                                          Glyph="&#xE775;" FontSize="16"
+                                          VerticalAlignment="Center" />
+                                <TextBlock x:Name="NavOcrLabel" Grid.Column="1"
+                                           Text="OCR" FontSize="13" VerticalAlignment="Center" />
                             </Grid>
                         </RadioButton>
 
@@ -143,23 +177,6 @@
                                           VerticalAlignment="Center" />
                                 <TextBlock x:Name="NavHotkeysLabel" Grid.Column="1"
                                            Text="Hotkeys" FontSize="13" VerticalAlignment="Center" />
-                            </Grid>
-                        </RadioButton>
-
-                        <RadioButton x:Name="NavOcr" Tag="ocr"
-                                     Style="{StaticResource ClipsyNavRadio}"
-                                     GroupName="ClipsyNav"
-                                     Checked="OnNavChecked">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="28" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <FontIcon x:Name="IconNavOcr" Grid.Column="0"
-                                          Glyph="&#xE775;" FontSize="16"
-                                          VerticalAlignment="Center" />
-                                <TextBlock x:Name="NavOcrLabel" Grid.Column="1"
-                                           Text="OCR" FontSize="13" VerticalAlignment="Center" />
                             </Grid>
                         </RadioButton>
 
@@ -307,6 +324,8 @@
 
                             <Border Style="{StaticResource ClipsyGroupCard}">
                                 <StackPanel Spacing="16">
+                                    <TextBlock x:Name="LblStorage" Text="Files and saving"
+                                               Style="{StaticResource ClipsyBodyStrong}" />
                                     <StackPanel Spacing="10">
                                         <TextBlock x:Name="LblScreenshotFolder" Text="Screenshot folder"
                                                    Style="{StaticResource ClipsyBodyStrong}" />
@@ -322,7 +341,7 @@
                                                     Click="OnScreenshotFolderPick" />
                                         </Grid>
                                     </StackPanel>
-
+                                    <Border Style="{StaticResource ClipsyHairline}" />
                                     <StackPanel Spacing="10">
                                         <TextBlock x:Name="LblVideoFolder" Text="Video folder"
                                                    Style="{StaticResource ClipsyBodyStrong}" />
@@ -338,9 +357,7 @@
                                                     Click="OnVideoFolderPick" />
                                         </Grid>
                                     </StackPanel>
-
                                     <Border Style="{StaticResource ClipsyHairline}" />
-
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -359,86 +376,7 @@
                                                       Click="OnAnyToggleChanged"
                                                       VerticalAlignment="Center" />
                                     </Grid>
-
                                     <Border Style="{StaticResource ClipsyHairline}" />
-
-                                    <Grid ColumnSpacing="16">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" x:Name="LblScreenshotFormat" Text="Screenshot format"
-                                                   Style="{StaticResource ClipsyBodyStrong}"
-                                                   VerticalAlignment="Center" />
-                                        <ComboBox x:Name="ScreenshotFormatBox" Grid.Column="1" Width="260" HorizontalAlignment="Right"
-                                                  SelectionChanged="OnScreenshotFormatChanged"
-                                                  VerticalAlignment="Center">
-                                            <ComboBoxItem x:Name="FmtPng" Content="PNG (lossless)" Tag="png" />
-                                            <ComboBoxItem x:Name="FmtJpg" Content="JPEG (smaller)" Tag="jpg" />
-                                            <ComboBoxItem x:Name="FmtWebp" Content="WebP (preview, falls back to PNG)" Tag="webp" />
-                                        </ComboBox>
-                                    </Grid>
-
-                                    <Grid x:Name="JpgQualityRow" ColumnSpacing="10" Visibility="Collapsed">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="48" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Spacing="6">
-                                            <TextBlock x:Name="LblJpgQuality" Text="JPEG quality"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
-                                            <Slider x:Name="JpgQualitySlider" StepFrequency="1"
-                                                    Minimum="1" Maximum="100" Value="85"
-                                                    ValueChanged="OnJpgQualityChanged"
-                                                    VerticalAlignment="Center" />
-                                        </StackPanel>
-                                        <TextBlock x:Name="JpgQualityLabel" Grid.Column="1"
-                                                   VerticalAlignment="Bottom" Margin="0,0,0,4"
-                                                   Style="{StaticResource ClipsyMono}" />
-                                    </Grid>
-
-                                    <Border Style="{StaticResource ClipsyHairline}" />
-
-                                    <Grid ColumnSpacing="16">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock x:Name="LblScreenshotCursor" Text="Include cursor"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock x:Name="HelperScreenshotCursor"
-                                                       Text="Show the mouse pointer in screenshots. Default: off."
-                                                       Style="{StaticResource ClipsyHelper}" />
-                                        </StackPanel>
-                                        <ToggleButton x:Name="ScreenshotCursorSwitch" Grid.Column="1"
-                                                      Style="{StaticResource ClipsyMiniToggle}"
-                                                      Click="OnAnyToggleChanged"
-                                                      VerticalAlignment="Center" />
-                                    </Grid>
-
-                                    <Border Style="{StaticResource ClipsyHairline}" />
-
-                                    <Grid ColumnSpacing="16">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock x:Name="LblDynamicIslands" Text="Dynamic tool islands"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock x:Name="HelperDynamicIslands"
-                                                       Text="Toolbars dock to the corner where the selection drag ends."
-                                                       Style="{StaticResource ClipsyHelper}" />
-                                        </StackPanel>
-                                        <ToggleButton x:Name="DynamicIslandsSwitch" Grid.Column="1"
-                                                      Style="{StaticResource ClipsyMiniToggle}"
-                                                      Click="OnAnyToggleChanged"
-                                                      VerticalAlignment="Center" />
-                                    </Grid>
-
-                                    <Border Style="{StaticResource ClipsyHairline}" />
-
                                     <Grid ColumnSpacing="16">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -457,28 +395,6 @@
                                             <ComboBoxItem x:Name="AfterNothing" Content="Do nothing" Tag="nothing" />
                                             <ComboBoxItem x:Name="AfterOpenFile" Content="Open file" Tag="open-file" />
                                             <ComboBoxItem x:Name="AfterOpenFolder" Content="Open folder" Tag="open-folder" />
-                                        </ComboBox>
-                                    </Grid>
-
-                                    <Border Style="{StaticResource ClipsyHairline}" />
-
-                                    <Grid ColumnSpacing="16">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock x:Name="LblEyedropperMod" Text="Eyedropper modifier"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock x:Name="HelperEyedropperMod"
-                                                       Text="Hold this key while a draw tool is active to pick a color."
-                                                       Style="{StaticResource ClipsyHelper}" />
-                                        </StackPanel>
-                                        <ComboBox x:Name="EyedropperModBox" Grid.Column="1" Width="240" HorizontalAlignment="Right"
-                                                  VerticalAlignment="Center"
-                                                  SelectionChanged="OnAnyControlChanged">
-                                            <ComboBoxItem x:Name="EyedropperModAlt" Content="Alt" Tag="Alt" />
-                                            <ComboBoxItem x:Name="EyedropperModCtrl" Content="Ctrl" Tag="Ctrl" />
                                         </ComboBox>
                                     </Grid>
                                 </StackPanel>
@@ -544,7 +460,7 @@
                                                     Click="OnCheckUpdates">
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                                     <FontIcon Glyph="&#xE72C;" FontSize="13" />
-                                                    <TextBlock Text="Check now" />
+                                                    <TextBlock x:Name="BtnCheckNowText" Text="Check now" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -589,6 +505,114 @@
 
                         </StackPanel>
 
+                        <StackPanel x:Name="PaneCapture" Spacing="16" HorizontalAlignment="Stretch" Visibility="Collapsed">
+                            <StackPanel Spacing="4">
+                                <TextBlock x:Name="HdrCapture" Text="Capture" Style="{StaticResource ClipsySectionTitle}" />
+                                <TextBlock x:Name="SubCapture" Text="Screenshot output and capture overlay behavior." Style="{StaticResource ClipsyHelper}" />
+                            </StackPanel>
+
+                            <Border Style="{StaticResource ClipsyGroupCard}">
+                                <StackPanel Spacing="16">
+                                    <TextBlock x:Name="LblCaptureScreenshots" Text="Screenshots" Style="{StaticResource ClipsyBodyStrong}" />
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" x:Name="LblScreenshotFormat" Text="Screenshot format"
+                                                   Style="{StaticResource ClipsyBodyStrong}"
+                                                   VerticalAlignment="Center" />
+                                        <ComboBox x:Name="ScreenshotFormatBox" Grid.Column="1" Width="260" HorizontalAlignment="Right"
+                                                  SelectionChanged="OnScreenshotFormatChanged"
+                                                  VerticalAlignment="Center">
+                                            <ComboBoxItem x:Name="FmtPng" Content="PNG (lossless)" Tag="png" />
+                                            <ComboBoxItem x:Name="FmtJpg" Content="JPEG (smaller)" Tag="jpg" />
+                                            <ComboBoxItem x:Name="FmtWebp" Content="WebP (preview, falls back to PNG)" Tag="webp" />
+                                        </ComboBox>
+                                    </Grid>
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+                                    <Grid x:Name="JpgQualityRow" ColumnSpacing="10" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="48" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="6">
+                                            <TextBlock x:Name="LblJpgQuality" Text="JPEG quality"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <Slider x:Name="JpgQualitySlider" StepFrequency="1"
+                                                    Minimum="1" Maximum="100" Value="85"
+                                                    ValueChanged="OnJpgQualityChanged"
+                                                    VerticalAlignment="Center" />
+                                        </StackPanel>
+                                        <TextBlock x:Name="JpgQualityLabel" Grid.Column="1"
+                                                   VerticalAlignment="Bottom" Margin="0,0,0,4"
+                                                   Style="{StaticResource ClipsyMono}" />
+                                    </Grid>
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblScreenshotCursor" Text="Include cursor"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperScreenshotCursor"
+                                                       Text="Show the mouse pointer in screenshots. Default: off."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="ScreenshotCursorSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAnyToggleChanged"
+                                                      VerticalAlignment="Center" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource ClipsyGroupCard}">
+                                <StackPanel Spacing="16">
+                                    <TextBlock x:Name="LblCaptureOverlay" Text="Capture overlay" Style="{StaticResource ClipsyBodyStrong}" />
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblDynamicIslands" Text="Dynamic tool islands"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperDynamicIslands"
+                                                       Text="Toolbars dock to the corner where the selection drag ends."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="DynamicIslandsSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAnyToggleChanged"
+                                                      VerticalAlignment="Center" />
+                                    </Grid>
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblEyedropperMod" Text="Eyedropper modifier"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperEyedropperMod"
+                                                       Text="Hold this key while a draw tool is active to pick a color."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ComboBox x:Name="EyedropperModBox" Grid.Column="1" Width="240" HorizontalAlignment="Right"
+                                                  VerticalAlignment="Center"
+                                                  SelectionChanged="OnAnyControlChanged">
+                                            <ComboBoxItem x:Name="EyedropperModAlt" Content="Alt" Tag="Alt" />
+                                            <ComboBoxItem x:Name="EyedropperModCtrl" Content="Ctrl" Tag="Ctrl" />
+                                        </ComboBox>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
                         <!-- ===== Video ===== -->
                         <StackPanel x:Name="PaneVideo" Spacing="16" HorizontalAlignment="Stretch" Visibility="Collapsed">
                             <StackPanel Spacing="4">
@@ -598,139 +622,7 @@
                                            Text="Codec, resolution, and bitrate for screen recordings."
                                            Style="{StaticResource ClipsyHelper}" />
                             </StackPanel>
-
-                            <Border Style="{StaticResource ClipsyGroupCard}">
-                                <StackPanel Spacing="10">
-                                    <StackPanel Spacing="4">
-                                        <TextBlock x:Name="LblCodec" Text="Codec"
-                                                   Style="{StaticResource ClipsyBodyStrong}" />
-                                        <TextBlock x:Name="HelperCodec"
-                                                   Text="How the video is compressed. Affects file size, encoding speed and compatibility."
-                                                   Style="{StaticResource ClipsyHelper}" />
-                                    </StackPanel>
-                                    <StackPanel Spacing="6">
-                                        <RadioButton x:Name="RadioCodecH264" Style="{StaticResource ClipsyRadioCard}"
-                                                     GroupName="Codec" Tag="H.264" Checked="OnAnyControlChanged">
-                                            <StackPanel Spacing="2">
-                                                <TextBlock Text="H.264" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
-                                                <TextBlock x:Name="LblCodecH264Desc" Text="Wide compatibility, hardware-accelerated"
-                                                           FontSize="11" />
-                                            </StackPanel>
-                                        </RadioButton>
-                                        <RadioButton x:Name="RadioCodecH265" Style="{StaticResource ClipsyRadioCard}"
-                                                     GroupName="Codec" Tag="H.265" Checked="OnAnyControlChanged">
-                                            <StackPanel Spacing="2">
-                                                <TextBlock Text="H.265" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
-                                                <TextBlock x:Name="LblCodecH265Desc" Text="Smaller files, slower encode"
-                                                           FontSize="11" />
-                                            </StackPanel>
-                                        </RadioButton>
-                                        <RadioButton x:Name="RadioCodecVp9" Style="{StaticResource ClipsyRadioCard}"
-                                                     GroupName="Codec" Tag="VP9" Checked="OnAnyControlChanged">
-                                            <StackPanel Spacing="2">
-                                                <TextBlock Text="VP9" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
-                                                <TextBlock x:Name="LblCodecVp9Desc" Text="Web-friendly, open codec"
-                                                           FontSize="11" />
-                                            </StackPanel>
-                                        </RadioButton>
-                                        <RadioButton x:Name="RadioCodecAv1" Style="{StaticResource ClipsyRadioCard}"
-                                                     GroupName="Codec" Tag="AV1" Checked="OnAnyControlChanged">
-                                            <StackPanel Spacing="2">
-                                                <TextBlock Text="AV1" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
-                                                <TextBlock x:Name="LblCodecAv1Desc" Text="Smallest, very slow encoder"
-                                                           FontSize="11" />
-                                            </StackPanel>
-                                        </RadioButton>
-                                    </StackPanel>
-
-                                    <Border Style="{StaticResource ClipsyHairline}" />
-
-                                    <!-- FFmpeg section -->
-                                    <Grid ColumnSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock x:Name="LblFfmpegSection" Text="FFmpeg"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock x:Name="HelperCodecVp9Av1"
-                                                       Style="{StaticResource ClipsyHelper}" />
-                                        </StackPanel>
-                                        <Border x:Name="FfmpegStatusBadge" Grid.Column="1"
-                                                BorderThickness="1" CornerRadius="12" Padding="10,4"
-                                                VerticalAlignment="Center">
-                                            <TextBlock x:Name="FfmpegStatusText"
-                                                       FontSize="11" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
-                                        </Border>
-                                    </Grid>
-
-                                    <StackPanel x:Name="FfmpegProgressRow" Spacing="4" Visibility="Collapsed">
-                                        <ProgressBar x:Name="FfmpegProgressBar"
-                                                     Minimum="0" Maximum="100" Value="0" />
-                                        <TextBlock x:Name="FfmpegProgressText"
-                                                   Style="{StaticResource ClipsyHelper}" />
-                                    </StackPanel>
-
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Button x:Name="BtnInstallFfmpeg"
-                                                Style="{StaticResource ClipsyButtonGhost}"
-                                                Click="OnFfmpegInstall" />
-                                        <Button x:Name="BtnDeleteFfmpeg"
-                                                Style="{StaticResource ClipsyButtonGhost}"
-                                                Click="OnFfmpegDelete"
-                                                Visibility="Collapsed" />
-                                        <Button x:Name="BtnCancelFfmpeg"
-                                                Style="{StaticResource ClipsyButtonGhost}"
-                                                Click="OnFfmpegCancel"
-                                                Visibility="Collapsed" />
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Microphone card -->
-                            <Border Style="{StaticResource ClipsyGroupCard}">
-                                <StackPanel Spacing="16">
-                                    <Grid ColumnSpacing="16">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock x:Name="LblMicEnabled" Text="Record microphone"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock x:Name="HelperMic"
-                                                       Text="Record the microphone along with the screen. Default: off."
-                                                       Style="{StaticResource ClipsyHelper}" />
-                                        </StackPanel>
-                                        <ToggleButton x:Name="MicEnabledSwitch" Grid.Column="1"
-                                                      Style="{StaticResource ClipsyMiniToggle}"
-                                                      Click="OnMicEnabledToggled"
-                                                      VerticalAlignment="Center" />
-                                    </Grid>
-
-                                    <StackPanel x:Name="MicDevicePanel" Spacing="16" Visibility="Collapsed">
-                                        <Border Style="{StaticResource ClipsyHairline}" />
-                                        <Grid ColumnSpacing="16">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                                <TextBlock x:Name="LblMicDevice" Text="Input device"
-                                                           Style="{StaticResource ClipsyBodyStrong}" />
-                                                <TextBlock x:Name="HelperMicDevice"
-                                                           Text="Leave on default to use the system microphone."
-                                                           Style="{StaticResource ClipsyHelper}" />
-                                            </StackPanel>
-                                            <ComboBox x:Name="MicDeviceBox" Grid.Column="1" Width="240"
-                                                      SelectionChanged="OnMicDeviceChanged"
-                                                      VerticalAlignment="Center" />
-                                        </Grid>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
+                            <TextBlock x:Name="LblRecordingOutput" Text="Output" Style="{StaticResource ClipsyLabel}" />
                             <Border Style="{StaticResource ClipsyGroupCard}">
                                 <StackPanel Spacing="16">
                                     <Grid ColumnSpacing="16">
@@ -890,86 +782,135 @@
                                     </Border>
                                 </StackPanel>
                             </Border>
-                        </StackPanel>
-
-                        <!-- ===== GIF ===== -->
-                        <StackPanel x:Name="PaneGif" Spacing="16" HorizontalAlignment="Stretch" Visibility="Collapsed">
-                            <StackPanel Spacing="4">
-                                <TextBlock x:Name="HdrGif" Text="GIF"
-                                           Style="{StaticResource ClipsySectionTitle}" />
-                                <TextBlock x:Name="SubGif"
-                                           Text="Output settings when exporting recordings as animated GIF."
-                                           Style="{StaticResource ClipsyHelper}" />
-                            </StackPanel>
-
+                            <TextBlock x:Name="LblRecordingAudio" Text="Audio" Style="{StaticResource ClipsyLabel}" />
                             <Border Style="{StaticResource ClipsyGroupCard}">
                                 <StackPanel Spacing="16">
-                                    <StackPanel Spacing="10">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock x:Name="LblGifColors" Text="Color count"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock x:Name="HelperGifColors"
-                                                       Text="Palette size of the GIF: fewer colors mean a smaller file. Default: 256"
-                                                       Style="{StaticResource ClipsyHelper}" />
-                                        </StackPanel>
-                                        <Grid ColumnSpacing="10">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="48" />
-                                            </Grid.ColumnDefinitions>
-                                            <Slider x:Name="GifColorSlider" Grid.Column="0" StepFrequency="16"
-                                                    Minimum="16" Maximum="256" Value="128"
-                                                    ValueChanged="OnGifColorChanged" />
-                                            <TextBlock x:Name="GifColorLabel" Grid.Column="1"
-                                                       VerticalAlignment="Center"
-                                                       Style="{StaticResource ClipsyMono}"
-                                                       HorizontalAlignment="Right" />
-                                        </Grid>
-                                    </StackPanel>
-
-                                    <Border Style="{StaticResource ClipsyHairline}" />
-
-                                    <StackPanel Spacing="10">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock x:Name="LblGifFps" Text="Frame rate"
-                                                       Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock x:Name="HelperGifFps"
-                                                       Text="How many frames per second the GIF contains. Default: 12"
-                                                       Style="{StaticResource ClipsyHelper}" />
-                                        </StackPanel>
-                                        <Grid ColumnSpacing="10">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="48" />
-                                            </Grid.ColumnDefinitions>
-                                            <Slider x:Name="GifFpsSlider" Grid.Column="0" StepFrequency="1"
-                                                    Minimum="1" Maximum="30" Value="12"
-                                                    ValueChanged="OnGifFpsChanged" />
-                                            <TextBlock x:Name="GifFpsLabel" Grid.Column="1"
-                                                       VerticalAlignment="Center"
-                                                       Style="{StaticResource ClipsyMono}"
-                                                       HorizontalAlignment="Right" />
-                                        </Grid>
-                                    </StackPanel>
-
-                                    <Border Style="{StaticResource ClipsyHairline}" />
-
-                                    <Grid>
+                                    <Grid ColumnSpacing="16">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
-                                            <TextBlock x:Name="LblGifDither" Text="Dithering" Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock x:Name="HelperGifDither"
-                                                       Text="Blends palette colors to hide banding; the file gets a bit larger. Default: on."
+                                            <TextBlock x:Name="LblMicEnabled" Text="Record microphone"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperMic"
+                                                       Text="Record the microphone along with the screen. Default: off."
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <ToggleButton x:Name="GifDitherSwitch" Grid.Column="1"
+                                        <ToggleButton x:Name="MicEnabledSwitch" Grid.Column="1"
                                                       Style="{StaticResource ClipsyMiniToggle}"
-                                                      Click="OnAnyToggleChanged"
+                                                      Click="OnMicEnabledToggled"
                                                       VerticalAlignment="Center" />
                                     </Grid>
+
+                                    <StackPanel x:Name="MicDevicePanel" Spacing="16" Visibility="Collapsed">
+                                        <Border Style="{StaticResource ClipsyHairline}" />
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                                <TextBlock x:Name="LblMicDevice" Text="Input device"
+                                                           Style="{StaticResource ClipsyBodyStrong}" />
+                                                <TextBlock x:Name="HelperMicDevice"
+                                                           Text="Leave on default to use the system microphone."
+                                                           Style="{StaticResource ClipsyHelper}" />
+                                            </StackPanel>
+                                            <ComboBox x:Name="MicDeviceBox" Grid.Column="1" Width="240"
+                                                      SelectionChanged="OnMicDeviceChanged"
+                                                      VerticalAlignment="Center" />
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock x:Name="LblRecordingEncoder" Text="Encoder" Style="{StaticResource ClipsyLabel}" />
+                            <Border Style="{StaticResource ClipsyGroupCard}">
+                                <StackPanel Spacing="10">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock x:Name="LblCodec" Text="Codec"
+                                                   Style="{StaticResource ClipsyBodyStrong}" />
+                                        <TextBlock x:Name="HelperCodec"
+                                                   Text="How the video is compressed. Affects file size, encoding speed and compatibility."
+                                                   Style="{StaticResource ClipsyHelper}" />
+                                    </StackPanel>
+                                    <StackPanel Spacing="6">
+                                        <RadioButton x:Name="RadioCodecH264" Style="{StaticResource ClipsyRadioCard}"
+                                                     GroupName="Codec" Tag="H.264" Checked="OnAnyControlChanged">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="H.264" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
+                                                <TextBlock x:Name="LblCodecH264Desc" Text="Wide compatibility, hardware-accelerated"
+                                                           FontSize="11" />
+                                            </StackPanel>
+                                        </RadioButton>
+                                        <RadioButton x:Name="RadioCodecH265" Style="{StaticResource ClipsyRadioCard}"
+                                                     GroupName="Codec" Tag="H.265" Checked="OnAnyControlChanged">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="H.265" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
+                                                <TextBlock x:Name="LblCodecH265Desc" Text="Smaller files, slower encode"
+                                                           FontSize="11" />
+                                            </StackPanel>
+                                        </RadioButton>
+                                        <RadioButton x:Name="RadioCodecVp9" Style="{StaticResource ClipsyRadioCard}"
+                                                     GroupName="Codec" Tag="VP9" Checked="OnAnyControlChanged">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="VP9" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
+                                                <TextBlock x:Name="LblCodecVp9Desc" Text="Web-friendly, open codec"
+                                                           FontSize="11" />
+                                            </StackPanel>
+                                        </RadioButton>
+                                        <RadioButton x:Name="RadioCodecAv1" Style="{StaticResource ClipsyRadioCard}"
+                                                     GroupName="Codec" Tag="AV1" Checked="OnAnyControlChanged">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="AV1" FontSize="13" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
+                                                <TextBlock x:Name="LblCodecAv1Desc" Text="Smallest, very slow encoder"
+                                                           FontSize="11" />
+                                            </StackPanel>
+                                        </RadioButton>
+                                    </StackPanel>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <!-- FFmpeg section -->
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblFfmpegSection" Text="FFmpeg"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperCodecVp9Av1"
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <Border x:Name="FfmpegStatusBadge" Grid.Column="1"
+                                                BorderThickness="1" CornerRadius="12" Padding="10,4"
+                                                VerticalAlignment="Center">
+                                            <TextBlock x:Name="FfmpegStatusText"
+                                                       FontSize="11" FontWeight="{StaticResource ClipsyFontWeightStrong}" />
+                                        </Border>
+                                    </Grid>
+
+                                    <StackPanel x:Name="FfmpegProgressRow" Spacing="4" Visibility="Collapsed">
+                                        <ProgressBar x:Name="FfmpegProgressBar"
+                                                     Minimum="0" Maximum="100" Value="0" />
+                                        <TextBlock x:Name="FfmpegProgressText"
+                                                   Style="{StaticResource ClipsyHelper}" />
+                                    </StackPanel>
+
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Button x:Name="BtnInstallFfmpeg"
+                                                Style="{StaticResource ClipsyButtonGhost}"
+                                                Click="OnFfmpegInstall" />
+                                        <Button x:Name="BtnDeleteFfmpeg"
+                                                Style="{StaticResource ClipsyButtonGhost}"
+                                                Click="OnFfmpegDelete"
+                                                Visibility="Collapsed" />
+                                        <Button x:Name="BtnCancelFfmpeg"
+                                                Style="{StaticResource ClipsyButtonGhost}"
+                                                Click="OnFfmpegCancel"
+                                                Visibility="Collapsed" />
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -1085,6 +1026,88 @@
                                                   HorizontalAlignment="Right"
                                                   VerticalAlignment="Center"
                                                   SelectionChanged="OnAnyControlChanged" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- ===== GIF ===== -->
+                        <StackPanel x:Name="PaneGif" Spacing="16" HorizontalAlignment="Stretch" Visibility="Collapsed">
+                            <StackPanel Spacing="4">
+                                <TextBlock x:Name="HdrGif" Text="GIF"
+                                           Style="{StaticResource ClipsySectionTitle}" />
+                                <TextBlock x:Name="SubGif"
+                                           Text="Output settings when exporting recordings as animated GIF."
+                                           Style="{StaticResource ClipsyHelper}" />
+                            </StackPanel>
+
+                            <Border Style="{StaticResource ClipsyGroupCard}">
+                                <StackPanel Spacing="16">
+                                    <StackPanel Spacing="10">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock x:Name="LblGifColors" Text="Color count"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperGifColors"
+                                                       Text="Palette size of the GIF: fewer colors mean a smaller file. Default: 256"
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <Slider x:Name="GifColorSlider" Grid.Column="0" StepFrequency="16"
+                                                    Minimum="16" Maximum="256" Value="128"
+                                                    ValueChanged="OnGifColorChanged" />
+                                            <TextBlock x:Name="GifColorLabel" Grid.Column="1"
+                                                       VerticalAlignment="Center"
+                                                       Style="{StaticResource ClipsyMono}"
+                                                       HorizontalAlignment="Right" />
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <StackPanel Spacing="10">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock x:Name="LblGifFps" Text="Frame rate"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperGifFps"
+                                                       Text="How many frames per second the GIF contains. Default: 12"
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <Slider x:Name="GifFpsSlider" Grid.Column="0" StepFrequency="1"
+                                                    Minimum="1" Maximum="30" Value="12"
+                                                    ValueChanged="OnGifFpsChanged" />
+                                            <TextBlock x:Name="GifFpsLabel" Grid.Column="1"
+                                                       VerticalAlignment="Center"
+                                                       Style="{StaticResource ClipsyMono}"
+                                                       HorizontalAlignment="Right" />
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblGifDither" Text="Dithering" Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperGifDither"
+                                                       Text="Blends palette colors to hide banding; the file gets a bit larger. Default: on."
+                                                       Style="{StaticResource ClipsyHelper}" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="GifDitherSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnAnyToggleChanged"
+                                                      VerticalAlignment="Center" />
                                     </Grid>
                                 </StackPanel>
                             </Border>
