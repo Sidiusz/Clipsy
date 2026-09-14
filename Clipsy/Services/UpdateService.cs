@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Net.Http;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -68,35 +72,123 @@ public static class UpdateService
     }
 
     private const string ApiReleasesUrl = "https://api.github.com/repos/Sidiusz/Clipsy/releases?per_page=100";
+    private const string ReleasesAtomUrl = "https://github.com/Sidiusz/Clipsy/releases.atom";
+    private static readonly string ReleasesCachePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clipsy", "releases-cache.json");
 
     public static async Task<IReadOnlyList<ReleaseNote>> FetchReleasesAsync()
     {
         try
         {
             var json = await _http.GetStringAsync(ApiReleasesUrl);
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array)
-                return Array.Empty<ReleaseNote>();
+            var releases = ParseApiReleases(json);
+            if (releases.Count > 0) SaveReleaseCache(releases);
+            return releases;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("UpdateService.FetchReleases API", ex);
+        }
 
-            var list = new List<ReleaseNote>();
-            foreach (var r in doc.RootElement.EnumerateArray())
-            {
-                if (r.TryGetProperty("draft", out var dr) && dr.GetBoolean()) continue;
-                var tag = r.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
-                if (string.IsNullOrEmpty(tag)) continue;
-                var name = r.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                var body = r.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
-                var url = r.TryGetProperty("html_url", out var u) ? u.GetString() ?? "" : "";
-                DateTime published = r.TryGetProperty("published_at", out var p)
-                    && p.TryGetDateTime(out var dt) ? dt : DateTime.MinValue;
-                list.Add(new ReleaseNote(tag.TrimStart('v', 'V'), name, body, published, url));
-            }
+        var cached = LoadReleaseCache();
+        if (cached.Count > 0) return cached;
+
+        try
+        {
+            var xml = await _http.GetStringAsync(ReleasesAtomUrl);
+            var releases = ParseAtomReleases(xml);
+            if (releases.Count > 0) SaveReleaseCache(releases);
+            return releases;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("UpdateService.FetchReleases Atom", ex);
+            return Array.Empty<ReleaseNote>();
+        }
+    }
+
+    private static IReadOnlyList<ReleaseNote> ParseApiReleases(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<ReleaseNote>();
+        var list = new List<ReleaseNote>();
+        foreach (var r in doc.RootElement.EnumerateArray())
+        {
+            if (r.TryGetProperty("draft", out var dr) && dr.GetBoolean()) continue;
+            var tag = r.TryGetProperty("tag_name", out var t) ? t.GetString() : null;
+            if (string.IsNullOrEmpty(tag)) continue;
+            var name = r.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            var body = r.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
+            var url = r.TryGetProperty("html_url", out var u) ? u.GetString() ?? "" : "";
+            DateTime published = r.TryGetProperty("published_at", out var p)
+                && p.TryGetDateTime(out var dt) ? dt : DateTime.MinValue;
+            list.Add(new ReleaseNote(tag.TrimStart('v', 'V'), name, body, published, url));
+        }
+        list.Sort((a, b) => CompareVersionsDesc(a.Version, b.Version));
+        return list;
+    }
+
+    private static IReadOnlyList<ReleaseNote> ParseAtomReleases(string xml)
+    {
+        var doc = XDocument.Parse(xml);
+        XNamespace atom = "http://www.w3.org/2005/Atom";
+        var list = new List<ReleaseNote>();
+        foreach (var entry in doc.Root?.Elements(atom + "entry") ?? Enumerable.Empty<XElement>())
+        {
+            var title = entry.Element(atom + "title")?.Value ?? "";
+            var href = entry.Elements(atom + "link")
+                .FirstOrDefault(e => string.Equals((string?)e.Attribute("rel"), "alternate", StringComparison.OrdinalIgnoreCase))
+                ?.Attribute("href")?.Value ?? "";
+            const string marker = "/releases/tag/";
+            int tagPos = href.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            var version = tagPos >= 0 ? Uri.UnescapeDataString(href[(tagPos + marker.Length)..]).Trim('/') : title;
+            version = version.TrimStart('v', 'V');
+            if (string.IsNullOrWhiteSpace(version)) continue;
+            DateTime published = DateTime.TryParse(entry.Element(atom + "updated")?.Value, out var dt)
+                ? dt : DateTime.MinValue;
+            var html = entry.Element(atom + "content")?.Value ?? "";
+            var notes = HtmlToPlainText(html);
+            list.Add(new ReleaseNote(version, title, notes, published, href));
+        }
+        list.Sort((a, b) => CompareVersionsDesc(a.Version, b.Version));
+        return list;
+    }
+
+    private static string HtmlToPlainText(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return "";
+        var text = Regex.Replace(html, @"<br\s*/?>", "\n", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"</p\s*>", "\n\n", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"<hr\s*/?>", "\n---\n", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"<[^>]+>", "");
+        text = WebUtility.HtmlDecode(text).Replace("\r", "");
+        return Regex.Replace(text, @"\n{3,}", "\n\n").Trim();
+    }
+
+    private static void SaveReleaseCache(IReadOnlyList<ReleaseNote> releases)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(ReleasesCachePath)!;
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(ReleasesCachePath, JsonSerializer.Serialize(releases));
+        }
+        catch (Exception ex) { Diagnostics.Log("UpdateService.SaveReleaseCache", ex); }
+    }
+
+    private static IReadOnlyList<ReleaseNote> LoadReleaseCache()
+    {
+        try
+        {
+            if (!File.Exists(ReleasesCachePath)) return Array.Empty<ReleaseNote>();
+            var list = JsonSerializer.Deserialize<List<ReleaseNote>>(File.ReadAllText(ReleasesCachePath));
+            if (list == null || list.Count == 0) return Array.Empty<ReleaseNote>();
             list.Sort((a, b) => CompareVersionsDesc(a.Version, b.Version));
             return list;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Fetch releases failed: {ex.Message}");
+            Diagnostics.Log("UpdateService.LoadReleaseCache", ex);
             return Array.Empty<ReleaseNote>();
         }
     }
