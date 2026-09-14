@@ -95,14 +95,14 @@ public static class Strings
 
         // Settings - tabs
         ["TabGeneral"]          = New("General",  "Основные"),
-        ["TabCapture"]          = New("Capture",  "Захват"),
+        ["TabCapture"]          = New("Screenshot", "Снимок экрана"),
         ["TabOcr"]              = New("Recognition and Translation", "Распознавание и перевод"),
-        ["TabVideo"]            = New("Recording", "Запись"),
+        ["TabVideo"]            = New("Screen recording", "Запись экрана"),
         ["TabGif"]              = New("GIF",      "GIF"),
         ["TabHotkeys"]          = New("Hotkeys",  "Горячие клавиши"),
         ["TabNotifications"]    = New("Notifications", "Уведомления"),
         ["TabInfo"]             = New("Info",     "О программе"),
-        ["SubNotifications"]    = New("Pop-ups appear bottom-right and auto-dismiss in 4 s. Choose which events show one.", "Всплывашки появляются снизу справа и закрываются через 4 с. Выберите, какие события их показывают."),
+        ["SubNotifications"]    = New("Choose which events show notifications and how long they stay visible.", "Выберите события для уведомлений и время их отображения."),
         ["LblNotifyVideo"]      = New("Recording saved",  "Запись сохранена"),
         ["LblNotifyClipboard"]  = New("Copied to clipboard", "Скопировано в буфер обмена"),
 
@@ -153,8 +153,8 @@ public static class Strings
         ["LblGifColors"]        = New("Color count",               "Количество цветов"),
         ["LblGifFps"]           = New("Frame rate (fps)",          "Частота кадров"),
         ["LblGifDither"]        = New("Dithering",                 "Дизеринг"),
-        ["LblRegionNote"]       = New("Maximum video height: larger recordings are scaled down to it, smaller ones keep their size. Default: 1080p",
-                                      "Максимальная высота видео: записи крупнее уменьшаются до неё, меньшие остаются как есть. По умолчанию: 1080p"),
+        ["LblRegionNote"]       = New("Sets the maximum output height. Larger captures are scaled down proportionally; smaller captures are not enlarged. Default: 1080p",
+                                      "Задаёт максимальную высоту итогового видео. Более крупный захват уменьшается пропорционально; меньший не увеличивается. По умолчанию: 1080p"),
         ["LblHotkeyHint"]       = New("Click a binding to rebind. Esc is reserved.",
                                       "Кликните на сочетание для переназначения. Esc зарезервирован."),
 
@@ -248,10 +248,10 @@ public static class Strings
         // Settings - subtitles, helpers, info, author
         ["TitleBarSubtitle"]      = New("Settings",                "Настройки"),
         ["SubGeneral"]            = New("Language, theme, files, and app behavior.",       "Язык, тема, файлы и поведение приложения."),
-        ["SubCapture"]            = New("Screenshot output and capture overlay behavior.", "Параметры скриншотов и поведения окна захвата."),
+        ["SubCapture"]            = New("Screenshot format and capture window behavior.", "Формат снимков экрана и поведение окна захвата."),
         ["SubOcr"]                = New("Text recognition engine, language files, and translation service.",
                                         "Движок распознавания текста, языковые файлы и сервис перевода."),
-        ["SubVideo"]              = New("Output, audio, and encoder settings for screen recordings.", "Вывод, звук и кодирование записи экрана."),
+        ["SubVideo"]              = New("Video, audio, and encoding settings for screen recording.", "Видео, звук и параметры кодирования записи экрана."),
         ["SubGif"]                = New("Output settings when exporting recordings as animated GIF.", "Параметры вывода для экспорта в анимированный GIF."),
         ["HelperLanguage"]        = New("Auto-detect follows the system language.",       "Автоопределение использует язык системы."),
         ["HelperTheme"]           = New("Applies instantly, no restart needed.",          "Применяется сразу, без перезапуска."),
@@ -288,7 +288,7 @@ public static class Strings
         ["LblRememberFolder"]     = New("Remember last Save As folder",                   "Запоминать последнюю папку «Сохранить как»"),
         ["HelperRemember"]        = New("New captures go to the folder you saved in last. Default: on.", "Новые захваты сохраняются в последнюю использованную папку. По умолчанию: вкл."),
         ["HelperCodec"]           = New("How the video is compressed. Affects file size, encoding speed and compatibility.",       "Способ сжатия видео. Влияет на размер файла, скорость кодирования и совместимость."),
-        ["HelperBitrate"]         = New("Amount of data per second of video: more means sharper picture and bigger file. The cap depends on resolution. Default: 8 Mbps", "Объём данных на секунду видео: больше — чётче картинка и больше файл. Потолок зависит от разрешения. По умолчанию: 8 Мбит/с"),
+        ["HelperBitrate"]         = New("Bitrate controls video detail and file size. The available range depends on the selected resolution. Default: 8 Mbps", "Битрейт влияет на детализацию видео и размер файла. Доступный диапазон зависит от выбранного разрешения. По умолчанию: 8 Мбит/с"),
         ["HelperGifColors"]       = New("Palette size of the GIF: fewer colors mean a smaller file. Default: 256",  "Размер палитры GIF: меньше цветов — меньше файл. По умолчанию: 256"),
         ["HelperGifFps"]          = New("How many frames per second the GIF contains. Default: 12",   "Сколько кадров в секунду содержит GIF. По умолчанию: 12"),
         ["HelperGifDither"]       = New("Blends palette colors to hide banding; the file gets a bit larger. Default: on.", "Смешивает цвета палитры, скрывая полосы на градиентах; файл немного больше. По умолчанию: вкл."),
@@ -328,14 +328,14 @@ public static class Strings
         ["BtnSaveChanges"]        = New("Save changes",                                    "Сохранить"),
 
         // Hotkey row labels
-        ["HkOpenCapture"]         = New("Open capture overlay",                            "Открыть выделение"),
-        ["HkSaveSilent"]          = New("Save screenshot (silent)",                        "Сохранить скриншот (без диалога)"),
-        ["HkCopy"]                = New("Copy to clipboard",                               "Скопировать в буфер"),
-        ["HkUndo"]                = New("Undo",                                            "Отменить"),
-        ["HkRedo"]                = New("Redo",                                            "Повторить"),
+        ["HkOpenCapture"]         = New("Open screen capture",                            "Открыть захват экрана"),
+        ["HkSaveSilent"]          = New("Quick-save screenshot",                           "Быстрое сохранение"),
+        ["HkCopy"]                = New("Copy to clipboard",                               "Скопировать в буфер обмена"),
+        ["HkUndo"]                = New("Undo action",                                     "Отменить действие"),
+        ["HkRedo"]                = New("Redo action",                                     "Повторить действие"),
         ["HkSelectAll"]           = New("Select all monitors",                             "Выбрать все мониторы"),
-        ["HkSelectMonitor"]       = New("Select monitor under cursor",                      "Выбрать монитор под курсором"),
-        ["HkRecordSave"]          = New("Save recording (silent)",                         "Сохранить запись (без диалога)"),
+        ["HkSelectMonitor"]       = New("Select screen with cursor",                        "Выбрать экран с курсором"),
+        ["HkRecordSave"]          = New("Quick-save video recording",                       "Быстрое сохранение записи видео"),
         ["HkMicToggle"]           = New("Mute / unmute microphone",                        "Выкл/вкл микрофон"),
         ["HkPressKeys"]           = New("Press keys...",                                   "Нажмите клавиши..."),
 
@@ -351,6 +351,9 @@ public static class Strings
 
         // Notification settings labels
         ["LblNotifyMaster"]         = New("Show notifications",                            "Показывать уведомления"),
+        ["LblNotifyDuration"]       = New("Display duration",                              "Время показа"),
+        ["HelperNotifyDuration"]    = New("How long non-persistent notifications stay visible.",   "Сколько времени обычные уведомления остаются на экране."),
+        ["NotifyDurationValue"]     = New("{0} s",                                             "{0} с"),
         ["LblNotifyScreenshot"]     = New("Screenshot saved",                              "Скриншот сохранён"),
         ["LblNotifyErrors"]         = New("Errors",                                        "Ошибки"),
         ["LblNotifyUpdate"]         = New("Update available",                              "Доступно обновление"),

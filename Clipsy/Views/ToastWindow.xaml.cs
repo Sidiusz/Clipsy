@@ -249,7 +249,7 @@ public sealed partial class ToastWindow : Window
         // Persistent toasts (update prompt) stay until the user acts on them.
         if (_persistent) return;
         _dismissTimer?.Stop();
-        _dismissTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_dismissSeconds > 0 ? _dismissSeconds : 4) };
+        _dismissTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Clamp(_dismissSeconds > 0 ? _dismissSeconds : 5, 1, 30)) };
         _dismissTimer.Tick += (_, _) => Dismiss();
         _dismissTimer.Start();
     }

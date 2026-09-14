@@ -74,6 +74,7 @@ public sealed class AppSettings
 
     // Notifications
     public bool NotificationsEnabled { get; set; } = true;
+    public int NotificationDurationSeconds { get; set; } = 5;
     public bool NotifyScreenshotSaved { get; set; } = true;
     public bool NotifyVideoSaved { get; set; } = true;
     public bool NotifyClipboard { get; set; } = true;

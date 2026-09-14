@@ -105,6 +105,7 @@ public sealed partial class SettingsWindow : Window
         ["update-int"] = "general",
         ["auto-dl"] = "general",
         ["notif"] = "notifications",
+        ["notif-duration"] = "notifications",
         ["translate-svc"]  = "ocr",
         ["translate-from"] = "ocr",
         ["translate-to"]   = "ocr",
@@ -446,6 +447,8 @@ public sealed partial class SettingsWindow : Window
         NotifyErrorsSwitch.IsChecked     = _draft.NotifyErrors;
         NotifyUpdateSwitch.IsChecked     = _draft.NotifyUpdateAvailable;
         NotifyHintsSwitch.IsChecked      = _draft.NotifyHints;
+        NotifyDurationSlider.Value = System.Math.Clamp(_draft.NotificationDurationSeconds, 1, 30);
+        UpdateNotifyDurationLabel();
         UpdateNotifySubPanelState();
 
         SelectRadio(_draft.VideoCodec, RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
@@ -522,6 +525,7 @@ public sealed partial class SettingsWindow : Window
         _draft.AutoDownloadUpdates = AutoDownloadSwitch.IsChecked == true;
 
         _draft.NotificationsEnabled   = NotifyMasterSwitch.IsChecked    == true;
+        _draft.NotificationDurationSeconds = (int)System.Math.Round(NotifyDurationSlider.Value);
         _draft.NotifyScreenshotSaved  = NotifyScreenshotSwitch.IsChecked == true;
         _draft.NotifyVideoSaved       = NotifyVideoSwitch.IsChecked     == true;
         _draft.NotifyClipboard        = NotifyClipboardSwitch.IsChecked == true;
@@ -636,13 +640,28 @@ public sealed partial class SettingsWindow : Window
     {
         if (JpgQualityRow == null || ScreenshotFormatBox == null) return;
         var tag = SelectedComboTag(ScreenshotFormatBox);
-        JpgQualityRow.Visibility = tag == "jpg" ? Visibility.Visible : Visibility.Collapsed;
+        var visibility = tag == "jpg" ? Visibility.Visible : Visibility.Collapsed;
+        JpgQualityRow.Visibility = visibility;
+        JpgQualitySeparator.Visibility = visibility;
     }
 
     private void OnJpgQualityChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         if (JpgQualityLabel != null) JpgQualityLabel.Text = ((int)JpgQualitySlider.Value).ToString();
         if (!_loading) MarkChanged();
+    }
+
+    private void OnNotifyDurationChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        UpdateNotifyDurationLabel();
+        if (!_loading) MarkChanged();
+    }
+
+    private void UpdateNotifyDurationLabel()
+    {
+        if (NotifyDurationLabel == null || NotifyDurationSlider == null) return;
+        int seconds = (int)System.Math.Round(NotifyDurationSlider.Value);
+        NotifyDurationLabel.Text = string.Format(Strings.Get("NotifyDurationValue"), seconds);
     }
 
     // ============== Change tracking ==============
@@ -713,6 +732,8 @@ public sealed partial class SettingsWindow : Window
             _draft.NotifyUpdateAvailable != _initial.NotifyUpdateAvailable ||
             _draft.NotifyHints           != _initial.NotifyHints)
             _dirty.Add("notif");
+        if (_draft.NotificationDurationSeconds != _initial.NotificationDurationSeconds)
+            _dirty.Add("notif-duration");
         if (_draft.VideoCodec != _initial.VideoCodec) _dirty.Add("codec");
         if (_draft.VideoResolution != _initial.VideoResolution) _dirty.Add("resolution");
         if (_draft.VideoFramerate != _initial.VideoFramerate) _dirty.Add("framerate");
@@ -759,6 +780,7 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblUpdates, "LblUpdates", _dirty.Contains("update-int"));
         SetLabel(LblAutoDownload, "LblAutoDownload", _dirty.Contains("auto-dl"));
         SetLabel(LblNotifyMaster, "LblNotifyMaster", _dirty.Contains("notif"));
+        SetLabel(LblNotifyDuration, "LblNotifyDuration", _dirty.Contains("notif-duration"));
         SetLabel(LblCodec, "LblCodec", _dirty.Contains("codec"));
         SetLabel(LblResolution, "LblResolution", _dirty.Contains("resolution"));
         SetLabel(LblVideoFps, "LblVideoFps", _dirty.Contains("framerate"));

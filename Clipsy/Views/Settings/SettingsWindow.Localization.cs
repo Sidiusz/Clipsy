@@ -92,6 +92,9 @@ public sealed partial class SettingsWindow
         HelperAutoDownload.Text  = Strings.Get("HelperAutoDownload");
         LblAppManagement.Text    = Strings.Get("LblAppManagement");
         LblNotifyMaster.Text     = Strings.Get("LblNotifyMaster");
+        LblNotifyDuration.Text   = Strings.Get("LblNotifyDuration");
+        HelperNotifyDuration.Text = Strings.Get("HelperNotifyDuration");
+        UpdateNotifyDurationLabel();
         LblNotifyScreenshot.Text = Strings.Get("LblNotifyScreenshot");
         LblNotifyVideo.Text      = Strings.Get("LblNotifyVideo");
         LblNotifyClipboard.Text  = Strings.Get("LblNotifyClipboard");

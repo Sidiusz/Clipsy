@@ -530,7 +530,7 @@
                                             <ComboBoxItem x:Name="FmtWebp" Content="WebP (preview, falls back to PNG)" Tag="webp" />
                                         </ComboBox>
                                     </Grid>
-                                    <Border Style="{StaticResource ClipsyHairline}" />
+                                    <Border x:Name="JpgQualitySeparator" Style="{StaticResource ClipsyHairline}" Visibility="Collapsed" />
                                     <Grid x:Name="JpgQualityRow" ColumnSpacing="10" Visibility="Collapsed">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -1236,6 +1236,22 @@
                                     <Border Style="{StaticResource ClipsyHairline}" />
 
                                     <StackPanel x:Name="NotifySubPanel" Spacing="12">
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                                <TextBlock x:Name="LblNotifyDuration" Text="Display duration" Style="{StaticResource ClipsyBodyStrong}" />
+                                                <TextBlock x:Name="HelperNotifyDuration" Text="How long notifications stay visible." Style="{StaticResource ClipsyHelper}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                                <Slider x:Name="NotifyDurationSlider" Width="180" Minimum="1" Maximum="30" Value="5" StepFrequency="1"
+                                                        ValueChanged="OnNotifyDurationChanged" />
+                                                <TextBlock x:Name="NotifyDurationLabel" Width="42" Style="{StaticResource ClipsyMono}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <Border Style="{StaticResource ClipsyHairline}" />
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />

@@ -25,9 +25,12 @@ public static class NotificationService
         Action? action2             = null,
         bool    action2IsPrimary    = false,
         bool    persistent          = false,
-        int     dismissSeconds      = 4)
+        int     dismissSeconds      = 0)
     {
         Posted?.Invoke(new Notification(level, title, body ?? string.Empty));
+        int duration = dismissSeconds > 0
+            ? Math.Clamp(dismissSeconds, 1, 30)
+            : Math.Clamp(SettingsService.Instance.Settings.NotificationDurationSeconds, 1, 30);
 
         ToastService.Show(new ToastService.ToastOptions
         {
@@ -43,7 +46,7 @@ public static class NotificationService
             Action2Callback = action2,
             Action2IsPrimary = action2IsPrimary,
             Persistent      = persistent,
-            DismissSeconds  = dismissSeconds,
+            DismissSeconds  = duration,
         });
     }
 
