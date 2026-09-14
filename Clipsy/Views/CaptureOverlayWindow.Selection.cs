@@ -145,11 +145,12 @@ public sealed partial class CaptureOverlayWindow
         SelectionLayer.Visibility = Visibility.Visible;
         // Position via render transform, not Margin: Margin invalidates the whole
         // RootGrid layout per pointer move (the main FPS killer on 1440p+).
-        SelectionTranslate.X = _selectionRect.X;
-        SelectionTranslate.Y = _selectionRect.Y;
+        var visualRect = SnapRectToPhysicalPixels(_selectionRect);
+        SelectionTranslate.X = visualRect.X;
+        SelectionTranslate.Y = visualRect.Y;
 
-        SelectionBorder.Width = _selectionRect.Width;
-        SelectionBorder.Height = _selectionRect.Height;
+        SelectionBorder.Width = visualRect.Width;
+        SelectionBorder.Height = visualRect.Height;
 
         PositionHandles();
         UpdateDimGeometry(_selectionRect);
@@ -172,7 +173,7 @@ public sealed partial class CaptureOverlayWindow
             return;
         }
 
-        var r = hole.Value;
+        var r = SnapRectToPhysicalPixels(hole.Value);
         double left = System.Math.Clamp(r.X, 0, w);
         double top = System.Math.Clamp(r.Y, 0, h);
         double right = System.Math.Clamp(r.X + r.Width, 0, w);
@@ -183,6 +184,16 @@ public sealed partial class CaptureOverlayWindow
         SetBand(DimBottom, 0, bottom, w, h - bottom);
         SetBand(DimLeft, 0, top, left, bottom - top);
         SetBand(DimRight, right, top, w - right, bottom - top);
+    }
+
+    private Rect SnapRectToPhysicalPixels(Rect r)
+    {
+        double scale = DpiScale > 0 ? DpiScale : 1.0;
+        double left = System.Math.Round(r.X * scale) / scale;
+        double top = System.Math.Round(r.Y * scale) / scale;
+        double right = System.Math.Round((r.X + r.Width) * scale) / scale;
+        double bottom = System.Math.Round((r.Y + r.Height) * scale) / scale;
+        return new Rect(left, top, System.Math.Max(0, right - left), System.Math.Max(0, bottom - top));
     }
 
     private static void SetBand(Microsoft.UI.Xaml.Shapes.Rectangle band, double x, double y, double w, double h)
