@@ -82,11 +82,18 @@ public static class CliService
     private static CliResult Status()
     {
         bool running = SingleInstanceService.TryPingExisting();
+        if (running && SingleInstanceService.TrySendRequest(
+                SerializeRequest("status", Array.Empty<string>()), out var response, 500))
+        {
+            var live = DeserializeResponse(response);
+            if (live.Ok) return live;
+        }
+
         return new CliResult(0, running ? "running" : "stopped", new
         {
             running,
-            version = UpdateService.CurrentVersion(),
-            executable = Environment.ProcessPath ?? string.Empty,
+            version = running ? null : UpdateService.CurrentVersion(),
+            executable = running ? null : Environment.ProcessPath,
         });
     }
     private static CliResult ExecuteConfig(string[] args)

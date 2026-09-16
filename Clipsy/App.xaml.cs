@@ -178,6 +178,14 @@ public partial class App : Application
     {
         switch (request.Command.ToLowerInvariant())
         {
+            case "status":
+                return new CliResult(0, "running", new
+                {
+                    running = true,
+                    version = UpdateService.CurrentVersion(),
+                    executable = Environment.ProcessPath ?? string.Empty,
+                    pid = Environment.ProcessId,
+                });
             case "capture":
                 OnCaptureRequested();
                 return new CliResult(0, "capture opened", new { opened = true });
