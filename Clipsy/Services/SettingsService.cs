@@ -203,7 +203,7 @@ public sealed class SettingsService
     private static string OneOf(string? value, string fallback, params string[] allowed)
         => allowed.Contains(value ?? string.Empty, StringComparer.OrdinalIgnoreCase) ? value! : fallback;
 
-    public void Save()
+    public bool Save()
     {
         Normalize(Settings);
         Settings.SettingsVersion = CurrentSettingsVersion;
@@ -218,8 +218,13 @@ public sealed class SettingsService
             if (IsReadableJson(_path)) File.Copy(_path, _backupPath, overwrite: true);
             File.Move(_tempPath, _path, overwrite: true);
             SettingsChanged?.Invoke();
+            return true;
         }
-        catch (Exception ex) { Diagnostics.Log("Settings save failed", ex); }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("Settings save failed", ex);
+            return false;
+        }
         finally
         {
             try { if (File.Exists(_tempPath)) File.Delete(_tempPath); } catch { }
@@ -237,16 +242,22 @@ public sealed class SettingsService
         catch { return false; }
     }
 
-    public void Replace(AppSettings updated)
+    public bool Replace(AppSettings updated)
     {
+        var previous = Settings;
         Settings = updated;
-        Save();
+        if (Save()) return true;
+        Settings = previous;
+        return false;
     }
 
-    public void ResetToDefaults()
+    public bool ResetToDefaults()
     {
+        var previous = Settings;
         Settings = new AppSettings();
-        Save();
+        if (Save()) return true;
+        Settings = previous;
+        return false;
     }
 
     public string GetEffectiveScreenshotFolder()

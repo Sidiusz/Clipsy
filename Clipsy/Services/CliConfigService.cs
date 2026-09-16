@@ -103,7 +103,8 @@ internal static class CliConfigService
 
         var updated = SettingsService.Instance.Settings.Clone();
         GetProperty(entry).SetValue(updated, value);
-        SettingsService.Instance.Replace(updated);
+        if (!SettingsService.Instance.Replace(updated))
+            return new CliResult(4, "Failed to save setting.");
         var stored = GetProperty(entry).GetValue(SettingsService.Instance.Settings);
         return new CliResult(0, $"{key}={FormatValue(stored)}", new { key, value = stored });
     }

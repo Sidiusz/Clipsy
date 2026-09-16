@@ -969,7 +969,11 @@ public sealed partial class SettingsWindow : Window
         try
         {
             Collect();
-            SettingsService.Instance.Replace(_draft);
+            if (!SettingsService.Instance.Replace(_draft))
+            {
+                ShowNotification("NotifySaveFailed", "error");
+                return;
+            }
             bool wantAutostart = AutostartSwitch.IsChecked == true;
             if (wantAutostart != _initialAutostart)
             {
@@ -1003,8 +1007,13 @@ public sealed partial class SettingsWindow : Window
     {
         if (!await ConfirmReset()) return;
         // Persist defaults immediately, not just the UI draft.
-        _draft = new AppSettings();
-        SettingsService.Instance.Replace(_draft);
+        var defaults = new AppSettings();
+        if (!SettingsService.Instance.Replace(defaults))
+        {
+            ShowNotification("NotifySaveFailed", "error");
+            return;
+        }
+        _draft = defaults;
         // Autostart isn't part of AppSettings; default = off.
         AutostartService.SetEnabled(false);
         Load();
