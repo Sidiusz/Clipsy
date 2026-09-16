@@ -64,11 +64,11 @@ Name: "{autodesktop}\{#ClipsyName}"; Filename: "{app}\{#ClipsyExeName}"; Tasks: 
 ; next to debug.log so a silent vanish always leaves post-mortem evidence.
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\{#ClipsyExeName}"; \
     ValueType: expandsz; ValueName: "DumpFolder"; ValueData: "%LOCALAPPDATA%\Clipsy\CrashDumps"; \
-    Flags: uninsdeletekey
+    Flags: uninsdeletekey; Check: IsAdminInstallMode
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\{#ClipsyExeName}"; \
-    ValueType: dword; ValueName: "DumpType"; ValueData: "$00000002"
+    ValueType: dword; ValueName: "DumpType"; ValueData: "$00000002"; Check: IsAdminInstallMode
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\{#ClipsyExeName}"; \
-    ValueType: dword; ValueName: "DumpCount"; ValueData: "$00000005"
+    ValueType: dword; ValueName: "DumpCount"; ValueData: "$00000005"; Check: IsAdminInstallMode
 
 [Run]
 Filename: "{app}\{#ClipsyExeName}"; Description: "{cm:LaunchProgram,{#ClipsyName}}"; \
