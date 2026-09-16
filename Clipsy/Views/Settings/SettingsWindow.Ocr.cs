@@ -141,26 +141,37 @@ public sealed partial class SettingsWindow
 
         try
         {
-            var p = new Progress<int>(v => DispatcherQueue.TryEnqueue(() => progressBar.Value = v));
+            var p = new Progress<int>(v =>
+            {
+                if (!_windowClosed) DispatcherQueue.TryEnqueue(() => progressBar.Value = v);
+            });
             await TessdataService.DownloadAsync(lang.Code, p, cts.Token);
 
-            _tessSelectedCodes.Add(lang.Code);
-            MarkChanged();
+            if (!_windowClosed)
+            {
+                _tessSelectedCodes.Add(lang.Code);
+                MarkChanged();
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Tessdata download failed: {ex.Message}");
-            NotificationService.Error("ErrTessDownload");
+            if (!_windowClosed) NotificationService.Error("ErrTessDownload");
         }
         finally
         {
-            _tessDownloadCts.Remove(lang.Code);
-            DispatcherQueue.TryEnqueue(() =>
+            if (_tessDownloadCts.TryGetValue(lang.Code, out var current) && ReferenceEquals(current, cts))
+                _tessDownloadCts.Remove(lang.Code);
+            cts.Dispose();
+            if (!_windowClosed)
             {
-                var idx = TessLangList.Children.IndexOf(row);
-                if (idx >= 0) TessLangList.Children[idx] = CreateTessLangRow(lang);
-            });
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    var idx = TessLangList.Children.IndexOf(row);
+                    if (idx >= 0) TessLangList.Children[idx] = CreateTessLangRow(lang);
+                });
+            }
         }
     }
 

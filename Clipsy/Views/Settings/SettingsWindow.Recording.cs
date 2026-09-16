@@ -125,18 +125,28 @@ public sealed partial class SettingsWindow
         FfmpegProgressText.Text      = Strings.Get("FfmpegDownloading");
 
         var progress = new Progress<(int Percent, string Message)>(p =>
+        {
+            if (_windowClosed) return;
             DispatcherQueue.TryEnqueue(() =>
             {
                 FfmpegProgressBar.Value = p.Percent;
                 FfmpegProgressText.Text = p.Message;
-            }));
+            });
+        });
 
-        bool ok = await FFmpegService.Instance.DownloadAsync(progress, cts.Token);
-
-        if (!cts.IsCancellationRequested)
-            ShowNotification(ok ? "FfmpegDone" : "ErrFfmpegFailed", ok ? "success" : "error");
-
-        UpdateFfmpegSection();
+        try
+        {
+            bool ok = await FFmpegService.Instance.DownloadAsync(progress, cts.Token);
+            if (_windowClosed) return;
+            if (!cts.IsCancellationRequested)
+                ShowNotification(ok ? "FfmpegDone" : "ErrFfmpegFailed", ok ? "success" : "error");
+            UpdateFfmpegSection();
+        }
+        finally
+        {
+            if (ReferenceEquals(_ffmpegCts, cts)) _ffmpegCts = null;
+            cts.Dispose();
+        }
     }
 
     private void OnFfmpegDelete(object sender, RoutedEventArgs e)
@@ -148,7 +158,6 @@ public sealed partial class SettingsWindow
     private void OnFfmpegCancel(object sender, RoutedEventArgs e)
     {
         _ffmpegCts?.Cancel();
-        _ffmpegCts = null;
         UpdateFfmpegSection();
     }
 

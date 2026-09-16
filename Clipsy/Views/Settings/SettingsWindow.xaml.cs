@@ -39,6 +39,9 @@ public sealed partial class SettingsWindow : Window
     // True until Load() applies the initial draft, so handlers firing during
     // InitializeComponent don't MarkChanged() before the tree is populated.
     private bool _loading = true;
+    private bool _allowClose;
+    private bool _closePromptActive;
+    private bool _windowClosed;
 
     // Tessdata language management
     private readonly HashSet<string> _tessSelectedCodes = new();
@@ -146,6 +149,7 @@ public sealed partial class SettingsWindow : Window
 
         // Tool-window so the off-screen warm render never flashes a taskbar button.
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
+        _appWindow.Closing += OnAppWindowClosing;
         try
         {
             int ex = GetWindowLong(_hwnd, GWL_EXSTYLE);
@@ -155,9 +159,15 @@ public sealed partial class SettingsWindow : Window
 
         Closed += (_, _) =>
         {
+            _windowClosed = true;
+            _appWindow.Closing -= OnAppWindowClosing;
             _tipTimer?.Stop();
+            _notifyTimer?.Stop();
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRevealFrame;
             _revealFallback?.Stop();
+            foreach (var cts in _tessDownloadCts.Values) cts.Cancel();
+            _tessDownloadCts.Clear();
+            _ffmpegCts?.Cancel();
             SettingsService.Instance.SettingsChanged -= OnGlobalSettingsChanged;
             UpdateManager.StateChanged -= RenderUpdateStatus;
             if (_open == this) _open = null;
@@ -1000,7 +1010,29 @@ public sealed partial class SettingsWindow : Window
     private async void OnClose(object sender, RoutedEventArgs e)
     {
         if (_dirty.Count > 0 && !await ConfirmDiscardChanges()) return;
+        _allowClose = true;
         Close();
+    }
+
+    private async void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs e)
+    {
+        if (_allowClose || _windowClosed || _dirty.Count == 0) return;
+        e.Cancel = true;
+        if (_closePromptActive) return;
+        _closePromptActive = true;
+        try
+        {
+            if (await ConfirmDiscardChanges())
+            {
+                _allowClose = true;
+                Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("SettingsWindow.OnAppWindowClosing", ex);
+        }
+        finally { _closePromptActive = false; }
     }
 
     private async void OnReset(object sender, RoutedEventArgs e)
