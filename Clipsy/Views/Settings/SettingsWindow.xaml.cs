@@ -99,6 +99,7 @@ public sealed partial class SettingsWindow : Window
         ["ss-format"] = "capture",
         ["jpg-q"] = "capture",
         ["ss-cursor"] = "capture",
+        ["modern-capture"] = "capture",
         ["dyn-islands"] = "capture",
         ["eyedropper-mod"] = "capture",
         ["eyedropper-copy"] = "capture",
@@ -725,6 +726,7 @@ public sealed partial class SettingsWindow : Window
         if ((AutostartSwitch.IsChecked == true) != _initialAutostart) _dirty.Add("autostart");
         if (_draft.ScreenshotFormat != _initial.ScreenshotFormat) _dirty.Add("ss-format");
         if (_draft.CaptureScreenshotCursor != _initial.CaptureScreenshotCursor) _dirty.Add("ss-cursor");
+        if (_draft.ExperimentalModernScreenshotCapture != _initial.ExperimentalModernScreenshotCapture) _dirty.Add("modern-capture");
         if (_draft.DynamicToolbarIslands != _initial.DynamicToolbarIslands) _dirty.Add("dyn-islands");
         if (_draft.VideoFormat != _initial.VideoFormat) _dirty.Add("vid-format");
         if (_draft.CaptureVideoCursor != _initial.CaptureVideoCursor) _dirty.Add("vid-cursor");
@@ -781,6 +783,7 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblAutostart, "LblAutostart", _dirty.Contains("autostart"));
         SetLabel(LblScreenshotFormat, "LblScreenshotFormat", _dirty.Contains("ss-format"));
         SetLabel(LblScreenshotCursor, "LblScreenshotCursor", _dirty.Contains("ss-cursor"));
+        SetLabel(LblModernCapture, "LblModernCapture", _dirty.Contains("modern-capture"));
         SetLabel(LblDynamicIslands, "LblDynamicIslands", _dirty.Contains("dyn-islands"));
         SetLabel(LblEyedropperMod, "LblEyedropperMod", _dirty.Contains("eyedropper-mod"));
         SetLabel(LblEyedropperCopyHex, "LblEyedropperCopyHex", _dirty.Contains("eyedropper-copy"));
