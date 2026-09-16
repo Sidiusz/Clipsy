@@ -27,6 +27,8 @@ public sealed partial class ColorPickerPanel : UserControl
     private bool _syncing;
     private bool _previewQueued;
     private bool _spectrumDragging;
+    private bool _spectrumFrameQueued;
+    private Windows.Foundation.Point _pendingSpectrumPoint;
     private Color _currentColor = Microsoft.UI.Colors.Red;
     private double _hue;
     private double _saturation = 1.0;
@@ -114,13 +116,14 @@ public sealed partial class ColorPickerPanel : UserControl
     private void OnSpectrumPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (!_spectrumDragging) return;
-        UpdateSpectrumFromPoint(e.GetCurrentPoint(SpectrumSurface).Position);
+        QueueSpectrumUpdate(e.GetCurrentPoint(SpectrumSurface).Position);
         e.Handled = true;
     }
 
     private void OnSpectrumPointerReleased(object sender, PointerRoutedEventArgs e)
     {
         if (!_spectrumDragging) return;
+        CancelSpectrumFrame();
         UpdateSpectrumFromPoint(e.GetCurrentPoint(SpectrumSurface).Position);
         _spectrumDragging = false;
         SpectrumSurface.ReleasePointerCapture(e.Pointer);
@@ -131,8 +134,36 @@ public sealed partial class ColorPickerPanel : UserControl
     private void OnSpectrumPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
         if (!_spectrumDragging) return;
+        if (_spectrumFrameQueued)
+        {
+            var pending = _pendingSpectrumPoint;
+            CancelSpectrumFrame();
+            UpdateSpectrumFromPoint(pending);
+        }
         _spectrumDragging = false;
         UpdateHexText();
+    }
+
+    private void QueueSpectrumUpdate(Windows.Foundation.Point point)
+    {
+        _pendingSpectrumPoint = point;
+        if (_spectrumFrameQueued) return;
+        _spectrumFrameQueued = true;
+        CompositionTarget.Rendering += OnSpectrumRendering;
+    }
+
+    private void OnSpectrumRendering(object? sender, object e)
+    {
+        CompositionTarget.Rendering -= OnSpectrumRendering;
+        _spectrumFrameQueued = false;
+        UpdateSpectrumFromPoint(_pendingSpectrumPoint);
+    }
+
+    private void CancelSpectrumFrame()
+    {
+        if (!_spectrumFrameQueued) return;
+        CompositionTarget.Rendering -= OnSpectrumRendering;
+        _spectrumFrameQueued = false;
     }
 
     private void UpdateSpectrumFromPoint(Windows.Foundation.Point point)
@@ -234,6 +265,7 @@ public sealed partial class ColorPickerPanel : UserControl
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        CancelSpectrumFrame();
         if (!_previewQueued) return;
         CompositionTarget.Rendering -= OnPreviewRendering;
         _previewQueued = false;
