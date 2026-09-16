@@ -151,7 +151,7 @@ public sealed partial class CaptureOverlayWindow
 
         if (_eyedropperActive)
         {
-            UpdateMagnifier(pos);
+            QueueMagnifierUpdate(pos);
             return;
         }
         var local = new Point(pos.X - _selectionRect.X, pos.Y - _selectionRect.Y);

@@ -72,6 +72,9 @@ public sealed partial class CaptureOverlayWindow
     private int     _eyedropperStride;
     private int     _eyeW, _eyeH;
     private Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap? _magBitmap;
+    private byte[]? _magPixels;
+    private bool _magnifierFrameQueued;
+    private Point _pendingMagnifierPoint;
 
     private void OnEyedropperRequested()
     {
@@ -102,6 +105,11 @@ public sealed partial class CaptureOverlayWindow
     private void ExitEyedropperMode()
     {
         _eyedropperActive = false;
+        if (_magnifierFrameQueued)
+        {
+            CompositionTarget.Rendering -= OnMagnifierRendering;
+            _magnifierFrameQueued = false;
+        }
         EyedropperMagnifier.Visibility = Visibility.Collapsed;
     }
 
@@ -120,6 +128,21 @@ public sealed partial class CaptureOverlayWindow
         {
             Diagnostics.Log("Eyedropper bitmap decode", ex);
         }
+    }
+
+    private void QueueMagnifierUpdate(Point point)
+    {
+        _pendingMagnifierPoint = point;
+        if (_magnifierFrameQueued) return;
+        _magnifierFrameQueued = true;
+        CompositionTarget.Rendering += OnMagnifierRendering;
+    }
+
+    private void OnMagnifierRendering(object? sender, object e)
+    {
+        CompositionTarget.Rendering -= OnMagnifierRendering;
+        _magnifierFrameQueued = false;
+        if (_eyedropperActive) UpdateMagnifier(_pendingMagnifierPoint);
     }
 
     private void UpdateMagnifier(Point cursorDip)
@@ -151,7 +174,7 @@ public sealed partial class CaptureOverlayWindow
         int stride = _eyedropperStride;
         int half   = srcSize / 2;
 
-        var dst = new byte[magPx * magPx * 4];
+        var dst = _magPixels ??= new byte[magPx * magPx * 4];
         int di = 0;
         for (int dy = 0; dy < magPx; dy++)
         {
