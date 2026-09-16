@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 
 namespace Clipsy.Views;
@@ -17,17 +18,18 @@ public sealed partial class ColorPickerPanel : UserControl
     public event Action? EyedropperRequested;
 
     private bool _syncing;
-    private bool _valueDragging;
+    private bool _previewQueued;
     private Color _currentColor = Microsoft.UI.Colors.Red;
+    private double _hue;
+    private double _saturation = 1.0;
+    private double _value = 1.0;
 
     public ColorPickerPanel()
     {
         InitializeComponent();
-        ValueSlider.AddHandler(UIElement.PointerPressedEvent,
-            new PointerEventHandler(OnValueSliderPointerPressed), true);
         ValueSlider.AddHandler(UIElement.PointerReleasedEvent,
             new PointerEventHandler(OnValueSliderPointerReleased), true);
-        ValueSlider.PointerCaptureLost += OnValueSliderCaptureLost;
+        Unloaded += OnUnloaded;
         SetColor(Microsoft.UI.Colors.Red);
         ApplyLocalization();
     }
@@ -56,12 +58,15 @@ public sealed partial class ColorPickerPanel : UserControl
         var opaque = Opaque(color);
         var hsv = RgbToHsv(opaque);
         _currentColor = opaque;
+        _hue = hsv.H;
+        _saturation = hsv.S;
+        _value = hsv.V;
         _syncing = true;
         try
         {
             ColorPickerCtl.Color = opaque;
             ValueSlider.Value = hsv.V * 100.0;
-            UpdateValueGradient(hsv);
+            UpdateValueGradient(hsv.H, hsv.S);
         }
         finally { _syncing = false; }
     }
@@ -71,49 +76,67 @@ public sealed partial class ColorPickerPanel : UserControl
         if (_syncing) return;
         _currentColor = Opaque(args.NewColor);
         var hsv = RgbToHsv(_currentColor);
+        _hue = hsv.H;
+        _saturation = hsv.S;
+        _value = hsv.V;
         _syncing = true;
         try { ValueSlider.Value = hsv.V * 100.0; }
         finally { _syncing = false; }
-        UpdateValueGradient(hsv);
-        ColorPreviewChanged?.Invoke(_currentColor);
+        UpdateValueGradient(hsv.H, hsv.S);
+        QueuePreview();
     }
-
     private void OnValueSliderChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
         if (_syncing) return;
-        var hsv = RgbToHsv(ColorPickerCtl.Color);
-        _currentColor = HsvToRgb(hsv.H, hsv.S, e.NewValue / 100.0);
-        ColorPreviewChanged?.Invoke(_currentColor);
-        if (!_valueDragging) CommitValueSlider();
+        _value = Math.Clamp(e.NewValue / 100.0, 0, 1);
+        _currentColor = HsvToRgb(_hue, _saturation, _value);
+        QueuePreview();
     }
-
-    private void OnValueSliderPointerPressed(object sender, PointerRoutedEventArgs e)
-        => _valueDragging = true;
 
     private void OnValueSliderPointerReleased(object sender, PointerRoutedEventArgs e)
-    {
-        if (!_valueDragging) return;
-        _valueDragging = false;
-        CommitValueSlider();
-    }
+        => SyncPickerColor();
 
-    private void OnValueSliderCaptureLost(object sender, PointerRoutedEventArgs e)
-    {
-        if (!_valueDragging) return;
-        _valueDragging = false;
-        CommitValueSlider();
-    }
+    private void OnValueSliderKeyUp(object sender, KeyRoutedEventArgs e)
+        => SyncPickerColor();
 
-    private void CommitValueSlider()
+    private void OnValueSliderLostFocus(object sender, RoutedEventArgs e)
+        => SyncPickerColor();
+
+    private void SyncPickerColor()
     {
+        var pickerColor = Opaque(ColorPickerCtl.Color);
+        if (pickerColor.R == _currentColor.R && pickerColor.G == _currentColor.G &&
+            pickerColor.B == _currentColor.B)
+            return;
+
         _syncing = true;
         try { ColorPickerCtl.Color = _currentColor; }
         finally { _syncing = false; }
-        UpdateValueGradient(RgbToHsv(_currentColor));
     }
 
-    private void UpdateValueGradient(Hsv hsv)
-        => ValueGradientStop.Color = HsvToRgb(hsv.H, hsv.S, 1.0);
+    private void QueuePreview()
+    {
+        if (_previewQueued) return;
+        _previewQueued = true;
+        CompositionTarget.Rendering += OnPreviewRendering;
+    }
+
+    private void OnPreviewRendering(object? sender, object e)
+    {
+        CompositionTarget.Rendering -= OnPreviewRendering;
+        _previewQueued = false;
+        ColorPreviewChanged?.Invoke(_currentColor);
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (!_previewQueued) return;
+        CompositionTarget.Rendering -= OnPreviewRendering;
+        _previewQueued = false;
+    }
+
+    private void UpdateValueGradient(double hue, double saturation)
+        => ValueGradientStop.Color = HsvToRgb(hue, saturation, 1.0);
 
     private void OnConfirmClick(object sender, RoutedEventArgs e)
         => ColorConfirmed?.Invoke(_currentColor);
@@ -127,7 +150,6 @@ public sealed partial class ColorPickerPanel : UserControl
     private static Color Opaque(Color c) => Color.FromArgb(0xFF, c.R, c.G, c.B);
 
     private readonly record struct Hsv(double H, double S, double V);
-
     private static Hsv RgbToHsv(Color c)
     {
         double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;

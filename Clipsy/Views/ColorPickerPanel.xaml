@@ -30,7 +30,9 @@
             </Border>
             <Slider x:Name="ValueSlider" Minimum="0" Maximum="100" Value="100"
                     StepFrequency="1" IsThumbToolTipEnabled="False"
-                    ValueChanged="OnValueSliderChanged">
+                    ValueChanged="OnValueSliderChanged"
+                    KeyUp="OnValueSliderKeyUp"
+                    LostFocus="OnValueSliderLostFocus">
                 <Slider.Resources>
                     <SolidColorBrush x:Key="SliderTrackFill" Color="Transparent" />
                     <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="Transparent" />
