@@ -217,8 +217,6 @@ public sealed class SettingsService
             }
             if (IsReadableJson(_path)) File.Copy(_path, _backupPath, overwrite: true);
             File.Move(_tempPath, _path, overwrite: true);
-            SettingsChanged?.Invoke();
-            return true;
         }
         catch (Exception ex)
         {
@@ -229,6 +227,10 @@ public sealed class SettingsService
         {
             try { if (File.Exists(_tempPath)) File.Delete(_tempPath); } catch { }
         }
+
+        try { SettingsChanged?.Invoke(); }
+        catch (Exception ex) { Diagnostics.Log("SettingsChanged subscriber failed", ex); }
+        return true;
     }
 
     private static bool IsReadableJson(string path)
