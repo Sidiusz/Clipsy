@@ -18,6 +18,10 @@ public sealed partial class CaptureOverlayWindow
     private long _lastClickTick;
     private Point _lastClickPos;
     private bool _selectionFromFallback;
+    private string? _textPreviewMeasureFont;
+    private double _textPreviewMeasureSize = -1;
+    private double _textPreviewMeasureWidth;
+    private double _textPreviewMeasureHeight;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetDoubleClickTime();
@@ -166,14 +170,9 @@ public sealed partial class CaptureOverlayWindow
         {
             _pencilPreview.Visibility = Visibility.Collapsed;
             _textPreview.Visibility = Visibility.Visible;
-            _textPreview.FontSize = _drawing.Settings.TextSize;
-            // Mirror the font and center the glyph on the cursor, matching
-            // StartTextEntry's anchor so the preview lands where the text will.
-            try { _textPreview.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(_drawing.Settings.TextFont); }
-            catch { /* fallback to inherited font */ }
-            var (pw, ph) = MeasureGlyph(_textPreview.Text, _textPreview.FontSize, _textPreview.FontFamily);
-            Canvas.SetLeft(_textPreview, local.X - pw / 2);
-            Canvas.SetTop(_textPreview,  local.Y - ph / 2);
+            EnsureTextPreviewMetrics();
+            Canvas.SetLeft(_textPreview, local.X - _textPreviewMeasureWidth / 2);
+            Canvas.SetTop(_textPreview, local.Y - _textPreviewMeasureHeight / 2);
         }
         else
         {
@@ -243,6 +242,24 @@ public sealed partial class CaptureOverlayWindow
                 _moveLastPos = pos;
                 break;
         }
+    }
+
+    private void EnsureTextPreviewMetrics()
+    {
+        string font = _drawing.Settings.TextFont;
+        double size = _drawing.Settings.TextSize;
+        if (string.Equals(_textPreviewMeasureFont, font, System.StringComparison.Ordinal) &&
+            _textPreviewMeasureSize == size)
+            return;
+
+        _textPreview.FontSize = size;
+        try { _textPreview.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(font); }
+        catch { /* keep the current family */ }
+
+        (_textPreviewMeasureWidth, _textPreviewMeasureHeight) =
+            MeasureGlyph(_textPreview.Text, size, _textPreview.FontFamily);
+        _textPreviewMeasureFont = font;
+        _textPreviewMeasureSize = size;
     }
 
     // ---------- Move committed text (double-click) ----------
