@@ -21,7 +21,7 @@ $ErrorActionPreference = "Stop"
 $full = "$Version.0"
 
 $rootVersionFile = Join-Path $Root 'version'
-Set-Content -LiteralPath $rootVersionFile -Value ($Version + [Environment]::NewLine) -Encoding utf8
+Set-Content -LiteralPath $rootVersionFile -Value $Version -Encoding ascii
 
 function Update-File {
     param(
