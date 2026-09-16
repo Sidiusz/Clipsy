@@ -33,8 +33,8 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
-ArchitecturesInstallIn64BitMode=x64
-ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64compatible
 WizardStyle=modern
 ; In-app updater downloads the new setup and exits Clipsy before running it;
 ; CloseApplications covers the case where the app is still holding files.
