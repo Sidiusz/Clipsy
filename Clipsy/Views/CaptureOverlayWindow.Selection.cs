@@ -149,8 +149,13 @@ public sealed partial class CaptureOverlayWindow
         SelectionTranslate.X = visualRect.X;
         SelectionTranslate.Y = visualRect.Y;
 
-        SelectionBorder.Width = visualRect.Width;
-        SelectionBorder.Height = visualRect.Height;
+        double pixel = 1.0 / (DpiScale > 0 ? DpiScale : 1.0);
+        double halfPixel = pixel / 2.0;
+        SelectionBorder.StrokeThickness = pixel;
+        Canvas.SetLeft(SelectionBorder, halfPixel);
+        Canvas.SetTop(SelectionBorder, halfPixel);
+        SelectionBorder.Width = System.Math.Max(0, visualRect.Width - pixel);
+        SelectionBorder.Height = System.Math.Max(0, visualRect.Height - pixel);
 
         PositionHandles();
         UpdateDimGeometry(_selectionRect);
@@ -164,9 +169,10 @@ public sealed partial class CaptureOverlayWindow
         if (w <= 0) w = _frame.PixelWidth / DpiScale;
         if (h <= 0) h = _frame.PixelHeight / DpiScale;
 
+        double pixel = 1.0 / (DpiScale > 0 ? DpiScale : 1.0);
         if (!(hole.HasValue && hole.Value.Width > 0 && hole.Value.Height > 0))
         {
-            SetBand(DimTop, 0, 0, w, h);
+            SetBand(DimTop, -pixel, -pixel, w + 2 * pixel, h + 2 * pixel);
             SetBand(DimBottom, 0, 0, 0, 0);
             SetBand(DimLeft, 0, 0, 0, 0);
             SetBand(DimRight, 0, 0, 0, 0);
@@ -179,11 +185,11 @@ public sealed partial class CaptureOverlayWindow
         double right = System.Math.Clamp(r.X + r.Width, 0, w);
         double bottom = System.Math.Clamp(r.Y + r.Height, 0, h);
 
-        // Four disjoint bands tile the whole area minus the hole.
-        SetBand(DimTop, 0, 0, w, top);
-        SetBand(DimBottom, 0, bottom, w, h - bottom);
-        SetBand(DimLeft, 0, top, left, bottom - top);
-        SetBand(DimRight, right, top, w - right, bottom - top);
+        // Overscan only the outer viewport edges by one physical pixel.
+        SetBand(DimTop, -pixel, -pixel, w + 2 * pixel, top + pixel);
+        SetBand(DimBottom, -pixel, bottom, w + 2 * pixel, h - bottom + pixel);
+        SetBand(DimLeft, -pixel, top, left + pixel, bottom - top);
+        SetBand(DimRight, right, top, w - right + pixel, bottom - top);
     }
 
     private Rect SnapRectToPhysicalPixels(Rect r)
