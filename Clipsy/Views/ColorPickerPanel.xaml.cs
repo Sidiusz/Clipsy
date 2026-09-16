@@ -1,17 +1,24 @@
 using System;
+using System.Globalization;
+using System.IO;
+using System.Runtime.InteropServices.WindowsRuntime;
 using Clipsy.Localization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.UI;
 
 namespace Clipsy.Views;
 
-/// <summary>Shared screenshot/recording color picker.</summary>
+/// <summary>Shared lightweight HSV picker for screenshot and recording tools.</summary>
 public sealed partial class ColorPickerPanel : UserControl
 {
+    private const int SpectrumPixelWidth = 312;
+    private const int SpectrumPixelHeight = 196;
+
     public event Action<Color>? ColorPreviewChanged;
     public event Action<Color>? ColorConfirmed;
     public event Action? ColorCanceled;
@@ -19,6 +26,7 @@ public sealed partial class ColorPickerPanel : UserControl
 
     private bool _syncing;
     private bool _previewQueued;
+    private bool _spectrumDragging;
     private Color _currentColor = Microsoft.UI.Colors.Red;
     private double _hue;
     private double _saturation = 1.0;
@@ -30,6 +38,7 @@ public sealed partial class ColorPickerPanel : UserControl
         ValueSlider.AddHandler(UIElement.PointerReleasedEvent,
             new PointerEventHandler(OnValueSliderPointerReleased), true);
         Unloaded += OnUnloaded;
+        CreateSpectrumBitmap();
         SetColor(Microsoft.UI.Colors.Red);
         ApplyLocalization();
     }
@@ -46,7 +55,6 @@ public sealed partial class ColorPickerPanel : UserControl
         get => _currentColor;
         set => SetColor(value);
     }
-
     public bool ShowEyedropper
     {
         get => EyedropperBtn.Visibility == Visibility.Visible;
@@ -61,30 +69,96 @@ public sealed partial class ColorPickerPanel : UserControl
         _hue = hsv.H;
         _saturation = hsv.S;
         _value = hsv.V;
-        _syncing = true;
-        try
-        {
-            ColorPickerCtl.Color = opaque;
-            ValueSlider.Value = hsv.V * 100.0;
-            UpdateValueGradient(hsv.H, hsv.S);
-        }
-        finally { _syncing = false; }
-    }
 
-    private void OnColorChanged(ColorPicker sender, ColorChangedEventArgs args)
-    {
-        if (_syncing) return;
-        _currentColor = Opaque(args.NewColor);
-        var hsv = RgbToHsv(_currentColor);
-        _hue = hsv.H;
-        _saturation = hsv.S;
-        _value = hsv.V;
         _syncing = true;
         try { ValueSlider.Value = hsv.V * 100.0; }
         finally { _syncing = false; }
-        UpdateValueGradient(hsv.H, hsv.S);
+
+        UpdateValueGradient();
+        UpdateSpectrumIndicator();
+        UpdateHexText();
+    }
+
+    private void CreateSpectrumBitmap()
+    {
+        var bitmap = new WriteableBitmap(SpectrumPixelWidth, SpectrumPixelHeight);
+        var pixels = new byte[SpectrumPixelWidth * SpectrumPixelHeight * 4];
+        int i = 0;
+        for (int y = 0; y < SpectrumPixelHeight; y++)
+        {
+            double saturation = y / (double)(SpectrumPixelHeight - 1);
+            for (int x = 0; x < SpectrumPixelWidth; x++)
+            {
+                double hue = x / (double)(SpectrumPixelWidth - 1) * 359.999;
+                var color = HsvToRgb(hue, saturation, 1.0);
+                pixels[i++] = color.B;
+                pixels[i++] = color.G;
+                pixels[i++] = color.R;
+                pixels[i++] = 0xFF;
+            }
+        }
+
+        using var stream = bitmap.PixelBuffer.AsStream();
+        stream.Write(pixels, 0, pixels.Length);
+        bitmap.Invalidate();
+        SpectrumImage.Source = bitmap;
+    }
+
+    private void OnSpectrumPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _spectrumDragging = true;
+        SpectrumSurface.CapturePointer(e.Pointer);
+        UpdateSpectrumFromPoint(e.GetCurrentPoint(SpectrumSurface).Position);
+        e.Handled = true;
+    }
+    private void OnSpectrumPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_spectrumDragging) return;
+        UpdateSpectrumFromPoint(e.GetCurrentPoint(SpectrumSurface).Position);
+        e.Handled = true;
+    }
+
+    private void OnSpectrumPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_spectrumDragging) return;
+        UpdateSpectrumFromPoint(e.GetCurrentPoint(SpectrumSurface).Position);
+        _spectrumDragging = false;
+        SpectrumSurface.ReleasePointerCapture(e.Pointer);
+        UpdateHexText();
+        e.Handled = true;
+    }
+
+    private void OnSpectrumPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_spectrumDragging) return;
+        _spectrumDragging = false;
+        UpdateHexText();
+    }
+
+    private void UpdateSpectrumFromPoint(Windows.Foundation.Point point)
+    {
+        double width = Math.Max(2.0, SpectrumSurface.ActualWidth);
+        double height = Math.Max(2.0, SpectrumSurface.ActualHeight);
+        _hue = Math.Clamp(point.X / (width - 1.0), 0, 1) * 359.999;
+        _saturation = Math.Clamp(point.Y / (height - 1.0), 0, 1);
+        _currentColor = HsvToRgb(_hue, _saturation, _value);
+        UpdateSpectrumIndicator();
+        UpdateValueGradient();
         QueuePreview();
     }
+
+    private void UpdateSpectrumIndicator()
+    {
+        double width = SpectrumSurface.ActualWidth > 1
+            ? SpectrumSurface.ActualWidth : SpectrumPixelWidth;
+        double height = SpectrumSurface.ActualHeight > 1
+            ? SpectrumSurface.ActualHeight : SpectrumPixelHeight;
+        double x = _hue / 359.999 * (width - 1.0);
+        double y = _saturation * (height - 1.0);
+        Canvas.SetLeft(SpectrumIndicator, x - SpectrumIndicator.Width / 2.0);
+        Canvas.SetTop(SpectrumIndicator, y - SpectrumIndicator.Height / 2.0);
+    }
+
     private void OnValueSliderChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
         if (_syncing) return;
@@ -94,24 +168,54 @@ public sealed partial class ColorPickerPanel : UserControl
     }
 
     private void OnValueSliderPointerReleased(object sender, PointerRoutedEventArgs e)
-        => SyncPickerColor();
-
+        => UpdateHexText();
     private void OnValueSliderKeyUp(object sender, KeyRoutedEventArgs e)
-        => SyncPickerColor();
+        => UpdateHexText();
 
     private void OnValueSliderLostFocus(object sender, RoutedEventArgs e)
-        => SyncPickerColor();
+        => UpdateHexText();
 
-    private void SyncPickerColor()
+    private void OnHexKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        var pickerColor = Opaque(ColorPickerCtl.Color);
-        if (pickerColor.R == _currentColor.R && pickerColor.G == _currentColor.G &&
-            pickerColor.B == _currentColor.B)
-            return;
+        if (e.Key != Windows.System.VirtualKey.Enter) return;
+        ApplyHexText();
+        e.Handled = true;
+    }
 
-        _syncing = true;
-        try { ColorPickerCtl.Color = _currentColor; }
-        finally { _syncing = false; }
+    private void OnHexLostFocus(object sender, RoutedEventArgs e)
+        => ApplyHexText();
+
+    private void ApplyHexText()
+    {
+        if (!TryParseHex(HexBox.Text, out var color))
+        {
+            UpdateHexText();
+            return;
+        }
+        SetColor(color);
+        QueuePreview();
+    }
+
+    private void UpdateHexText()
+        => HexBox.Text = $"#{_currentColor.R:X2}{_currentColor.G:X2}{_currentColor.B:X2}";
+    private static bool TryParseHex(string? text, out Color color)
+    {
+        color = Microsoft.UI.Colors.Red;
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        string value = text.Trim().TrimStart('#');
+        if (value.Length == 8) value = value[2..];
+        if (value.Length != 6) return false;
+
+        if (!byte.TryParse(value.AsSpan(0, 2), NumberStyles.HexNumber,
+                CultureInfo.InvariantCulture, out byte r) ||
+            !byte.TryParse(value.AsSpan(2, 2), NumberStyles.HexNumber,
+                CultureInfo.InvariantCulture, out byte g) ||
+            !byte.TryParse(value.AsSpan(4, 2), NumberStyles.HexNumber,
+                CultureInfo.InvariantCulture, out byte b))
+            return false;
+
+        color = Color.FromArgb(0xFF, r, g, b);
+        return true;
     }
 
     private void QueuePreview()
@@ -135,11 +239,14 @@ public sealed partial class ColorPickerPanel : UserControl
         _previewQueued = false;
     }
 
-    private void UpdateValueGradient(double hue, double saturation)
-        => ValueGradientStop.Color = HsvToRgb(hue, saturation, 1.0);
+    private void UpdateValueGradient()
+        => ValueGradientStop.Color = HsvToRgb(_hue, _saturation, 1.0);
 
     private void OnConfirmClick(object sender, RoutedEventArgs e)
-        => ColorConfirmed?.Invoke(_currentColor);
+    {
+        ApplyHexText();
+        ColorConfirmed?.Invoke(_currentColor);
+    }
 
     private void OnCancelClick(object sender, RoutedEventArgs e)
         => ColorCanceled?.Invoke();
