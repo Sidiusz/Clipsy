@@ -26,12 +26,14 @@ public sealed partial class EyedropperOverlayWindow : Window
     private readonly Action?       _onCanceled;
 
     // ── Decoded bitmap + pixel cache ──────────────────────────────────
-    private System.Drawing.Bitmap? _bitmap;
-    private byte[]?                _pixels;
-    private int                    _stride;
+    private byte[]? _pixels;
+    private int     _stride;
 
     // ── Magnifier (identical logic to CaptureOverlayWindow) ───────────
     private WriteableBitmap? _magBitmap;
+    private byte[]? _magPixels;
+    private bool _magFrameQueued;
+    private Point _pendingMagCursor;
     private const double MagSize = 128;
     private const double MagGap  = 12;
     private Point  _magCursor;
@@ -97,7 +99,7 @@ public sealed partial class EyedropperOverlayWindow : Window
             EyedropperMagnifier.Visibility = Visibility.Visible;
         }
 
-        UpdateMagnifier(pos);
+        QueueMagnifierUpdate(pos);
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -126,23 +128,45 @@ public sealed partial class EyedropperOverlayWindow : Window
 
     // ─── Magnifier (logic shared with CaptureOverlayWindow) ───
 
+    private void QueueMagnifierUpdate(Point cursorDip)
+    {
+        _pendingMagCursor = cursorDip;
+        if (_magFrameQueued) return;
+        _magFrameQueued = true;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnMagnifierFrame;
+    }
+
+    private void OnMagnifierFrame(object? sender, object e)
+    {
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnMagnifierFrame;
+        _magFrameQueued = false;
+        if (!_closed) UpdateMagnifier(_pendingMagCursor);
+    }
+
+    private void StopMagnifierFrame()
+    {
+        if (!_magFrameQueued) return;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnMagnifierFrame;
+        _magFrameQueued = false;
+    }
+
     private void UpdateMagnifier(Point cursorDip)
     {
         _magCursor = cursorDip;
         UpdateMagnifierSide();
         ApplyMagnifierPos();
 
-        if (_pixels == null || _magBitmap == null || _bitmap == null) return;
+        if (_pixels == null || _magBitmap == null) return;
 
         const int magPx = 128;
         double scale = DpiScale;
         int srcSize = Math.Max(1, (int)Math.Round(magPx * scale / 10.0));
         int cx = (int)(cursorDip.X * scale);
         int cy = (int)(cursorDip.Y * scale);
-        int srcW = _bitmap.Width, srcH = _bitmap.Height, stride = _stride;
+        int srcW = _frame.PixelWidth, srcH = _frame.PixelHeight, stride = _stride;
         int half = srcSize / 2;
 
-        var dst = new byte[magPx * magPx * 4];
+        var dst = _magPixels ??= new byte[magPx * magPx * 4];
         int di = 0;
         for (int dy = 0; dy < magPx; dy++)
         {
@@ -219,12 +243,12 @@ public sealed partial class EyedropperOverlayWindow : Window
 
     private Color SamplePixel(Point dipPos)
     {
-        if (_bitmap == null) return Microsoft.UI.Colors.Black;
+        if (_pixels == null) return Microsoft.UI.Colors.Black;
         double scale = DpiScale;
-        int px = Math.Clamp((int)(dipPos.X * scale), 0, _bitmap.Width  - 1);
-        int py = Math.Clamp((int)(dipPos.Y * scale), 0, _bitmap.Height - 1);
-        var c = _bitmap.GetPixel(px, py);
-        return Color.FromArgb(0xFF, c.R, c.G, c.B);
+        int px = Math.Clamp((int)(dipPos.X * scale), 0, _frame.PixelWidth - 1);
+        int py = Math.Clamp((int)(dipPos.Y * scale), 0, _frame.PixelHeight - 1);
+        int i = py * _stride + px * 4;
+        return Color.FromArgb(0xFF, _pixels[i + 2], _pixels[i + 1], _pixels[i]);
     }
 
     private double DpiScale => Content?.XamlRoot?.RasterizationScale ?? (GetDpiForWindow(_hwnd) / 96.0);
@@ -263,8 +287,8 @@ public sealed partial class EyedropperOverlayWindow : Window
 
     private void SetupFrameImage()
     {
-        if (_bitmap == null || _pixels == null) return;
-        var wb = new WriteableBitmap(_bitmap.Width, _bitmap.Height);
+        if (_pixels == null) return;
+        var wb = new WriteableBitmap(_frame.PixelWidth, _frame.PixelHeight);
         using var stream = wb.PixelBuffer.AsStream();
         stream.Write(_pixels, 0, _pixels.Length);
         wb.Invalidate();
@@ -273,31 +297,23 @@ public sealed partial class EyedropperOverlayWindow : Window
 
     private void DecodeFrame()
     {
-        try
-        {
-            // Frame carries opaque BGRA (stride = width*4); alias it and rebuild
-            // a GDI bitmap only for GetPixel/size.
-            _bitmap = ScreenFreezeService.CreateBitmap(_frame);
-            _stride = _frame.PixelWidth * 4;
-            _pixels = _frame.PixelBytes;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log("EyedropperOverlayWindow.DecodeFrame", ex);
-        }
+        _stride = _frame.PixelWidth * 4;
+        _pixels = _frame.PixelBytes;
     }
 
     private void FreeBitmap()
     {
-        _bitmap?.Dispose();
-        _bitmap = null;
+        StopMagnifierFrame();
+        StopMagTween();
         _pixels = null;
+        _magPixels = null;
     }
 
     private void DoClose()
     {
         if (_closed) return;
         _closed = true;
+        StopMagnifierFrame();
         StopMagTween();
         try { _appWindow.Hide(); } catch { }
         try { Close(); } catch { }
