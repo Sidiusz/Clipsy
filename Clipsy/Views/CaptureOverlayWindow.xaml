@@ -317,10 +317,11 @@
                                  Fill="{ThemeResource ClipsyDangerBrush}"
                                  Stroke="White" StrokeThickness="1.5" />
                         <Button.Flyout>
-                            <Flyout x:Name="ColorFlyout" Placement="Left"
+                            <Flyout x:Name="ColorFlyout" Placement="Auto"
                                     Opened="OnColorFlyoutOpened">
-                                <StackPanel Spacing="8" Width="240">
+                                <StackPanel Spacing="8" Width="240" MaxWidth="240">
                                     <ColorPicker x:Name="ColorPickerCtl"
+                                                 Width="240" MinWidth="0" MaxWidth="240" HorizontalAlignment="Stretch"
                                                  ColorSpectrumShape="Box"
                                                  IsColorChannelTextInputVisible="False"
                                                  IsHexInputVisible="True"

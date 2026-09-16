@@ -10,8 +10,9 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <StackPanel Spacing="8" Width="240">
+    <StackPanel Spacing="8" Width="240" MaxWidth="240">
         <ColorPicker x:Name="ColorPickerCtl"
+                     Width="240" MinWidth="0" MaxWidth="240" HorizontalAlignment="Stretch"
                      ColorSpectrumShape="Box"
                      IsAlphaEnabled="False"
                      IsColorSliderVisible="True"

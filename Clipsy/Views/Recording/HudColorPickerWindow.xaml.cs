@@ -81,8 +81,10 @@ public sealed partial class HudColorPickerWindow : Window
         var work = mi.rcWork;
 
         if (y < work.top) y = _anchorY + _anchorH + AnchorGap;
-        if (x + w > work.right)  x = work.right  - w;
-        if (x < work.left)       x = work.left;
+        if (y + h > work.bottom) y = work.bottom - h;
+        if (y < work.top) y = work.top;
+        if (x + w > work.right) x = work.right - w;
+        if (x < work.left) x = work.left;
 
         _repositioning = true;
         _appWindow.MoveAndResize(new RectInt32(x, y, w, h));
