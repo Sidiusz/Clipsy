@@ -117,6 +117,15 @@ function Install-InnoSetup {
     }
     if (-not (Test-Path $tempExe)) { throw "Inno Setup download failed." }
 
+    $signature = Get-AuthenticodeSignature -FilePath $tempExe
+    $signer = $signature.SignerCertificate.Subject
+    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid -or
+        [string]::IsNullOrWhiteSpace($signer) -or
+        $signer -notmatch '(^|,\s*)O=Pyrsys B\.V\.(,|$)|CN=Pyrsys B\.V\.') {
+        Remove-Item $tempExe -Force -ErrorAction SilentlyContinue
+        throw "Downloaded Inno Setup installer has an invalid or unexpected Authenticode signature."
+    }
+
     Write-Host "Running Inno Setup installer silently (UAC may prompt)..." -ForegroundColor Cyan
     $proc = Start-Process -FilePath $tempExe `
         -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-" `
