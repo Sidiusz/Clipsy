@@ -63,6 +63,7 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         Strings.Initialize();
+        AutostartService.MigrateLegacyScheduledTask();
         HostWindow = new MainWindow();
         HostWindow.CaptureRequested += OnCaptureRequested;
         HostWindow.MenuRequested    += OnMenuRequested;
