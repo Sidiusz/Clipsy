@@ -20,6 +20,9 @@ param(
 $ErrorActionPreference = "Stop"
 $full = "$Version.0"
 
+$rootVersionFile = Join-Path $Root 'version'
+Set-Content -LiteralPath $rootVersionFile -Value ($Version + [Environment]::NewLine) -Encoding utf8
+
 function Update-File {
     param(
         [Parameter(Mandatory = $true)]
