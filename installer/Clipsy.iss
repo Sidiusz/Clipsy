@@ -1,4 +1,4 @@
-﻿; Compile with: ISCC.exe installer\Clipsy.iss
+; Compile with: ISCC.exe installer\Clipsy.iss
 ; Expects publish output at: Clipsy\bin\publish\win-x64
 
 #define ClipsyName "Clipsy"
@@ -57,8 +57,7 @@ Name: "{group}\Uninstall {#ClipsyName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#ClipsyName}"; Filename: "{app}\{#ClipsyExeName}"; Tasks: desktopicon
 
 [Registry]
-; Autostart is a highest-privilege scheduled task (see [Code]); a Run-key entry
-; can't auto-elevate the app at login.
+; Autostart uses the current user Run key; no elevation is required.
 
 ; WER LocalDumps: capture a full minidump even on native __fastfail
 ; (0xc0000409) crashes that bypass the in-app exception filter. Dumps land
@@ -73,34 +72,27 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDum
 
 [Run]
 Filename: "{app}\{#ClipsyExeName}"; Description: "{cm:LaunchProgram,{#ClipsyName}}"; \
-    Flags: nowait postinstall skipifsilent runascurrentuser
+    Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{localappdata}\Clipsy"
 
 [Code]
 const
-  AutostartTaskName = 'ClipsyAutostart';
+  LegacyAutostartTaskName = 'ClipsyAutostart';
+  RunSubkey = 'Software\Microsoft\Windows\CurrentVersion\Run';
 
-procedure CreateAutostartTask;
-var
-  ExePath, Params: string;
-  ResultCode: Integer;
+procedure CreateAutostart;
 begin
-  ExePath := ExpandConstant('{app}\{#ClipsyExeName}');
-  // Inner-quote the /TR path or schtasks truncates it at the first space.
-  Params := '/Create /TN "' + AutostartTaskName + '" /TR "\"' + ExePath + '\"" ' +
-            '/SC ONLOGON /RU "' + ExpandConstant('{username}') + '" /RL HIGHEST /F';
-  Exec(ExpandConstant('{sys}\schtasks.exe'), Params, '', SW_HIDE,
-       ewWaitUntilTerminated, ResultCode);
+  RegWriteStringValue(HKCU, RunSubkey, 'Clipsy', '"' + ExpandConstant('{app}\{#ClipsyExeName}') + '"');
 end;
 
-procedure DeleteAutostartTask;
+procedure DeleteAutostart;
 var
   ResultCode: Integer;
 begin
-  Exec(ExpandConstant('{sys}\schtasks.exe'),
-       '/Delete /TN "' + AutostartTaskName + '" /F', '', SW_HIDE,
+  RegDeleteValue(HKCU, RunSubkey, 'Clipsy');
+  Exec(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN "' + LegacyAutostartTaskName + '" /F', '', SW_HIDE,
        ewWaitUntilTerminated, ResultCode);
 end;
 
@@ -114,12 +106,15 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if (CurStep = ssPostInstall) and not AutostartOptedOut then
-    CreateAutostartTask;
+  if CurStep = ssPostInstall then
+    begin
+      DeleteAutostart;
+      if not AutostartOptedOut then CreateAutostart;
+    end;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
-    DeleteAutostartTask;
+    DeleteAutostart;
 end;

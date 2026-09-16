@@ -623,7 +623,7 @@ public sealed partial class SettingsWindow : Window
 
     private System.Threading.Tasks.Task<string?> PickFolderAsync(string initialDir)
     {
-        // Win32 picker (runs elevated, unlike the broker-hosted WinRT FolderPicker).
+        // Use the Win32 picker so ownership and initial-folder behavior stay consistent.
         return SaveDialogService.PickFolderAsync(_hwnd);
     }
 
