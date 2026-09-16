@@ -33,8 +33,14 @@ public static class Program
             if (SingleInstanceService.TryPingExisting())
                 return 0;
             SingleInstanceService.KillStaleInstances();
-            try { mutex.WaitOne(TimeSpan.FromSeconds(3)); }
-            catch (AbandonedMutexException) { /* previous owner died — now ours */ }
+            bool acquired;
+            try { acquired = mutex.WaitOne(TimeSpan.FromSeconds(3)); }
+            catch (AbandonedMutexException) { acquired = true; }
+            if (!acquired)
+            {
+                Diagnostics.Log("Single-instance mutex was not released after stale-instance cleanup.");
+                return 0;
+            }
         }
 
         ProcessWatchdog.StartForCurrentProcess();
