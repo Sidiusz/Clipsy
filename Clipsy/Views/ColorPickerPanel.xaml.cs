@@ -2,62 +2,169 @@ using System;
 using Clipsy.Localization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Windows.UI;
 
 namespace Clipsy.Views;
 
-/// <summary>Shared color-picker panel (spectrum, hex, Cancel/Confirm, optional
-/// eyedropper) used by the capture overlay and the recording HUD.</summary>
+/// <summary>Shared screenshot/recording color picker.</summary>
 public sealed partial class ColorPickerPanel : UserControl
 {
-    /// Fired on every ColorPicker drag — live preview only, don't commit yet.
     public event Action<Color>? ColorPreviewChanged;
-    /// Fired when the user clicks Confirm.
     public event Action<Color>? ColorConfirmed;
-    /// Fired when the user clicks Cancel.
     public event Action? ColorCanceled;
-    /// Fired when the eyedropper button is clicked (only visible when ShowEyedropper=true).
     public event Action? EyedropperRequested;
+
+    private bool _syncing;
+    private bool _valueDragging;
+    private Color _currentColor = Microsoft.UI.Colors.Red;
 
     public ColorPickerPanel()
     {
         InitializeComponent();
-        // Set initial color in code — assigning ColorPicker.Color via XAML markup throws
-        // XamlParseException (0x802B000A) on Windows App SDK 1.6 at runtime.
-        try { ColorPickerCtl.Color = Microsoft.UI.Colors.Red; } catch { }
+        ValueSlider.AddHandler(UIElement.PointerPressedEvent,
+            new PointerEventHandler(OnValueSliderPointerPressed), true);
+        ValueSlider.AddHandler(UIElement.PointerReleasedEvent,
+            new PointerEventHandler(OnValueSliderPointerReleased), true);
+        ValueSlider.PointerCaptureLost += OnValueSliderCaptureLost;
+        SetColor(Microsoft.UI.Colors.Red);
         ApplyLocalization();
     }
 
     private void ApplyLocalization()
     {
         ToolTipService.SetToolTip(EyedropperBtn, Strings.Get("TipEyedropper"));
-        ToolTipService.SetToolTip(CancelBtn,     Strings.Get("TipColorCancel"));
-        ToolTipService.SetToolTip(ConfirmBtn,    Strings.Get("TipColorApply"));
+        ToolTipService.SetToolTip(CancelBtn, Strings.Get("TipColorCancel"));
+        ToolTipService.SetToolTip(ConfirmBtn, Strings.Get("TipColorApply"));
     }
 
-    /// Current color shown in the picker.
     public Color Color
     {
-        get => ColorPickerCtl.Color;
-        set => ColorPickerCtl.Color = value;
+        get => _currentColor;
+        set => SetColor(value);
     }
 
-    /// Shows/hides the eyedropper button. Default: hidden (for recording HUD).
     public bool ShowEyedropper
     {
         get => EyedropperBtn.Visibility == Visibility.Visible;
         set => EyedropperBtn.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private void SetColor(Color color)
+    {
+        var opaque = Opaque(color);
+        var hsv = RgbToHsv(opaque);
+        _currentColor = opaque;
+        _syncing = true;
+        try
+        {
+            ColorPickerCtl.Color = opaque;
+            ValueSlider.Value = hsv.V * 100.0;
+            UpdateValueGradient(hsv);
+        }
+        finally { _syncing = false; }
+    }
+
     private void OnColorChanged(ColorPicker sender, ColorChangedEventArgs args)
-        => ColorPreviewChanged?.Invoke(args.NewColor);
+    {
+        if (_syncing) return;
+        _currentColor = Opaque(args.NewColor);
+        var hsv = RgbToHsv(_currentColor);
+        _syncing = true;
+        try { ValueSlider.Value = hsv.V * 100.0; }
+        finally { _syncing = false; }
+        UpdateValueGradient(hsv);
+        ColorPreviewChanged?.Invoke(_currentColor);
+    }
+
+    private void OnValueSliderChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_syncing) return;
+        var hsv = RgbToHsv(ColorPickerCtl.Color);
+        _currentColor = HsvToRgb(hsv.H, hsv.S, e.NewValue / 100.0);
+        ColorPreviewChanged?.Invoke(_currentColor);
+        if (!_valueDragging) CommitValueSlider();
+    }
+
+    private void OnValueSliderPointerPressed(object sender, PointerRoutedEventArgs e)
+        => _valueDragging = true;
+
+    private void OnValueSliderPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_valueDragging) return;
+        _valueDragging = false;
+        CommitValueSlider();
+    }
+
+    private void OnValueSliderCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_valueDragging) return;
+        _valueDragging = false;
+        CommitValueSlider();
+    }
+
+    private void CommitValueSlider()
+    {
+        _syncing = true;
+        try { ColorPickerCtl.Color = _currentColor; }
+        finally { _syncing = false; }
+        UpdateValueGradient(RgbToHsv(_currentColor));
+    }
+
+    private void UpdateValueGradient(Hsv hsv)
+        => ValueGradientStop.Color = HsvToRgb(hsv.H, hsv.S, 1.0);
 
     private void OnConfirmClick(object sender, RoutedEventArgs e)
-        => ColorConfirmed?.Invoke(ColorPickerCtl.Color);
+        => ColorConfirmed?.Invoke(_currentColor);
 
     private void OnCancelClick(object sender, RoutedEventArgs e)
         => ColorCanceled?.Invoke();
 
     private void OnEyedropperClick(object sender, RoutedEventArgs e)
         => EyedropperRequested?.Invoke();
+
+    private static Color Opaque(Color c) => Color.FromArgb(0xFF, c.R, c.G, c.B);
+
+    private readonly record struct Hsv(double H, double S, double V);
+
+    private static Hsv RgbToHsv(Color c)
+    {
+        double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
+        double max = Math.Max(r, Math.Max(g, b));
+        double min = Math.Min(r, Math.Min(g, b));
+        double delta = max - min;
+        double h = 0;
+        if (delta > 0)
+        {
+            if (max == r) h = 60.0 * (((g - b) / delta) % 6.0);
+            else if (max == g) h = 60.0 * (((b - r) / delta) + 2.0);
+            else h = 60.0 * (((r - g) / delta) + 4.0);
+            if (h < 0) h += 360.0;
+        }
+        return new Hsv(h, max <= 0 ? 0 : delta / max, max);
+    }
+
+    private static Color HsvToRgb(double h, double s, double v)
+    {
+        h = ((h % 360.0) + 360.0) % 360.0;
+        s = Math.Clamp(s, 0, 1);
+        v = Math.Clamp(v, 0, 1);
+        double chroma = v * s;
+        double x = chroma * (1 - Math.Abs((h / 60.0) % 2 - 1));
+        double m = v - chroma;
+        (double r, double g, double b) = h switch
+        {
+            < 60 => (chroma, x, 0.0),
+            < 120 => (x, chroma, 0.0),
+            < 180 => (0.0, chroma, x),
+            < 240 => (0.0, x, chroma),
+            < 300 => (x, 0.0, chroma),
+            _ => (chroma, 0.0, x),
+        };
+        return Color.FromArgb(0xFF,
+            (byte)Math.Round((r + m) * 255),
+            (byte)Math.Round((g + m) * 255),
+            (byte)Math.Round((b + m) * 255));
+    }
 }

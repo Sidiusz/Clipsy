@@ -12,7 +12,8 @@
     x:Class="Clipsy.Views.CaptureOverlayWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml">
+    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
+    xmlns:views="using:Clipsy.Views">
 
     <Grid x:Name="RootGrid"
           Background="Transparent"
@@ -317,46 +318,9 @@
                                  Fill="{ThemeResource ClipsyDangerBrush}"
                                  Stroke="White" StrokeThickness="1.5" />
                         <Button.Flyout>
-                            <Flyout x:Name="ColorFlyout" Placement="Auto"
+                            <Flyout x:Name="ColorFlyout" Placement="Left"
                                     Opened="OnColorFlyoutOpened">
-                                <StackPanel Spacing="8" Width="240" MaxWidth="240">
-                                    <ColorPicker x:Name="ColorPickerCtl"
-                                                 Width="240" MinWidth="0" MaxWidth="240" HorizontalAlignment="Stretch"
-                                                 ColorSpectrumShape="Box"
-                                                 IsColorChannelTextInputVisible="False"
-                                                 IsHexInputVisible="True"
-                                                 IsAlphaEnabled="False"
-                                                 IsMoreButtonVisible="False"
-                                                 ColorChanged="OnColorPickerChanged" />
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Button x:Name="EyedropperBtn" Grid.Column="0"
-                                                Click="OnEyedropperBtnClick"
-                                                Style="{StaticResource ClipsyIconButton}"
-                                                ToolTipService.ToolTip="Pick color from screen">
-                                            <FontIcon Glyph="&#xEF3C;" FontSize="14" />
-                                        </Button>
-                                        <Button x:Name="ColorCancelBtn" Grid.Column="2"
-                                                Click="OnColorCancelClick"
-                                                Style="{StaticResource ClipsyIconButton}"
-                                                Margin="0,0,6,0"
-                                                ToolTipService.ToolTip="Cancel">
-                                            <FontIcon Glyph="&#xE711;" FontSize="14" />
-                                        </Button>
-                                        <Button x:Name="ColorConfirmBtn" Grid.Column="3"
-                                                Click="OnColorConfirmClick"
-                                                Style="{StaticResource ClipsyIconButton}"
-                                                Background="{ThemeResource ClipsyAccentBrush}"
-                                                ToolTipService.ToolTip="Apply">
-                                            <FontIcon Glyph="&#xE73E;" FontSize="14" Foreground="Black" />
-                                        </Button>
-                                    </Grid>
-                                </StackPanel>
+                                <views:ColorPickerPanel x:Name="ColorPickerCtl" />
                             </Flyout>
                         </Button.Flyout>
                     </Button>

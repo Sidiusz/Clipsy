@@ -84,9 +84,7 @@ public sealed partial class CaptureOverlayWindow : Window
         _frame = frame;
         InitializeComponent();
 
-        // Set picker colour in code: XAML markup assignment throws
-        // XamlParseException (0x802B000A) on Windows App SDK 1.6.
-        try { ColorPickerCtl.Color = Microsoft.UI.Colors.Red; } catch { }
+        InitializeColorPicker();
 
         this.SystemBackdrop = null;
 
@@ -273,11 +271,6 @@ public sealed partial class CaptureOverlayWindow : Window
         ToolTipService.SetToolTip(CancelBtn,     Strings.Get("TipCancel"));
 
         ToolTipService.SetToolTip(ColorBtn, Strings.Get("TipColor"));
-        // Flyout-hosted buttons may be null at ctor time; guard so a failed
-        // SetToolTip doesn't kill the overlay ctor.
-        if (EyedropperBtn   != null) ToolTipService.SetToolTip(EyedropperBtn,   Strings.Get("TipEyedropper"));
-        if (ColorCancelBtn  != null) ToolTipService.SetToolTip(ColorCancelBtn,  Strings.Get("TipColorCancel"));
-        if (ColorConfirmBtn != null) ToolTipService.SetToolTip(ColorConfirmBtn, Strings.Get("TipColorApply"));
         ToolTipService.SetToolTip(PencilBtn, Strings.Get("TipPencil"));
         ToolTipService.SetToolTip(EllipseBtn, Strings.Get("TipEllipse"));
         ToolTipService.SetToolTip(LineBtn,    Strings.Get("TipLine"));

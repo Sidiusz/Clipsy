@@ -20,32 +20,34 @@ public sealed partial class CaptureOverlayWindow
     private SolidColorBrush? _swatchBrush;
     private Color _colorBeforeFlyout;
 
+    private void InitializeColorPicker()
+    {
+        ColorPickerCtl.ShowEyedropper = true;
+        ColorPickerCtl.ColorPreviewChanged += OnColorPickerPreviewChanged;
+        ColorPickerCtl.ColorConfirmed += OnColorConfirmed;
+        ColorPickerCtl.ColorCanceled += OnColorCanceled;
+        ColorPickerCtl.EyedropperRequested += OnEyedropperRequested;
+        ColorPickerCtl.Color = Microsoft.UI.Colors.Red;
+    }
+
     private void OnColorFlyoutOpened(object sender, object e)
     {
-        // Snapshot current color so Cancel can revert.
         _colorBeforeFlyout = _drawing.Settings.Color;
         ColorPickerCtl.Color = _colorBeforeFlyout;
         EnsureSwatchBrush().Color = _colorBeforeFlyout;
     }
 
-    private void OnColorPickerChanged(ColorPicker sender, ColorChangedEventArgs args)
-    {
-        // Live preview only (defer Settings.Color until Confirm); mutate the
-        // cached brush to avoid the GC churn that caused drag lag.
-        var c = Color.FromArgb(0xFF, args.NewColor.R, args.NewColor.G, args.NewColor.B);
-        EnsureSwatchBrush().Color = c;
-    }
+    private void OnColorPickerPreviewChanged(Color color)
+        => EnsureSwatchBrush().Color = Color.FromArgb(0xFF, color.R, color.G, color.B);
 
-    private void OnColorConfirmClick(object sender, RoutedEventArgs e)
+    private void OnColorConfirmed(Color color)
     {
-        var c = ColorPickerCtl.Color;
-        _drawing.Settings.Color = Color.FromArgb(0xFF, c.R, c.G, c.B);
+        _drawing.Settings.Color = Color.FromArgb(0xFF, color.R, color.G, color.B);
         ColorFlyout?.Hide();
     }
 
-    private void OnColorCancelClick(object sender, RoutedEventArgs e)
+    private void OnColorCanceled()
     {
-        // Revert swatch to original color; do not touch _drawing.Settings.Color.
         EnsureSwatchBrush().Color = _colorBeforeFlyout;
         ColorPickerCtl.Color = _colorBeforeFlyout;
         ColorFlyout?.Hide();
@@ -71,7 +73,7 @@ public sealed partial class CaptureOverlayWindow
     private int     _eyeW, _eyeH;
     private Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap? _magBitmap;
 
-    private void OnEyedropperBtnClick(object sender, RoutedEventArgs e)
+    private void OnEyedropperRequested()
     {
         ColorFlyout?.Hide();
         EnsureEyedropperBitmap();

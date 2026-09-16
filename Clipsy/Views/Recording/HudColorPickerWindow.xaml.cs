@@ -14,9 +14,9 @@ namespace Clipsy.Views.Recording;
 /// HUD's layered window can't clip it); excluded from capture.</summary>
 public sealed partial class HudColorPickerWindow : Window
 {
-    // Width = 240 + 2×12 padding; height measured via Root.SizeChanged (appears
-    // off-screen first, then repositions once the ColorPicker is laid out).
-    private const int LogicalW  = 268;
+    // Width covers WinUI ColorPicker min width (312) + border/padding; height is measured
+    // after layout; the window is parked off-screen until then.
+    private const int LogicalW  = 340;
     private const int LogicalMaxH = 700; // generous off-screen height; trimmed by SizeChanged
     private const int AnchorGap = 6;
 
