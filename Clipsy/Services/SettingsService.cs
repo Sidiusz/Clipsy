@@ -119,10 +119,14 @@ public sealed class SettingsService
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Clipsy", "Video");
 
     private SettingsService()
+        : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clipsy"))
     {
-        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clipsy");
-        Directory.CreateDirectory(dir);
-        _path = Path.Combine(dir, "settings.json");
+    }
+
+    internal SettingsService(string directory)
+    {
+        Directory.CreateDirectory(directory);
+        _path = Path.Combine(directory, "settings.json");
         _backupPath = _path + ".bak";
         _tempPath = _path + ".tmp";
         Settings = Load();
@@ -189,7 +193,7 @@ public sealed class SettingsService
         s.AfterSaveAction = OneOf(s.AfterSaveAction, "nothing", "open-file", "open-folder", "nothing");
         s.JpgQuality = Math.Clamp(s.JpgQuality, 50, 100);
         s.VideoFramerate = s.VideoFramerate == 0 ? 0 : Math.Clamp(s.VideoFramerate, 10, 240);
-        s.VideoBitrateMbps = Math.Clamp(s.VideoBitrateMbps, 1, 200);
+        s.VideoBitrateMbps = Math.Clamp(s.VideoBitrateMbps, 1, 50);
         s.GifColors = Math.Clamp(s.GifColors, 16, 256);
         s.GifFps = Math.Clamp(s.GifFps, 5, 30);
         s.NotificationDurationSeconds = Math.Clamp(s.NotificationDurationSeconds, 1, 30);
