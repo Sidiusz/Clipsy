@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -13,7 +14,7 @@ namespace Clipsy.Services;
 
 /// <param name="InstallerUrl">browser_download_url of the .exe installer asset,
 /// or null when the release has no installer attached.</param>
-public sealed record UpdateInfo(string Version, string Url, string Notes, string? InstallerUrl, string? InstallerName);
+public sealed record UpdateInfo(string Version, string Url, string Notes, string? InstallerUrl, string? InstallerName, string? InstallerDigest = null);
 
 /// <summary>Outcome of a release check, distinct from "an update exists".</summary>
 public enum UpdateCheckStatus
@@ -211,6 +212,7 @@ public static class UpdateService
         // asset with "setup" in its name; fall back to any .exe.
         string? installerUrl = null;
         string? installerName = null;
+        string? installerDigest = null;
         if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
         {
             foreach (var asset in assets.EnumerateArray())
@@ -223,12 +225,13 @@ public static class UpdateService
                 {
                     installerUrl = dlUrl;
                     installerName = name;
+                    installerDigest = asset.TryGetProperty("digest", out var dg) ? dg.GetString() : null;
                     if (isSetup) break;
                 }
             }
         }
 
-        return new UpdateInfo(tag.TrimStart('v', 'V'), url, notes, installerUrl, installerName);
+        return new UpdateInfo(tag.TrimStart('v', 'V'), url, notes, installerUrl, installerName, installerDigest);
     }
 
     private static async Task<UpdateCheckResult> CheckViaWebRedirectAsync()
@@ -322,7 +325,14 @@ public static class UpdateService
             }
 
             var fi = new FileInfo(path);
-            return (fi.Exists && fi.Length >= 1024) ? path : null;
+            if (!fi.Exists || fi.Length < 1024) return null;
+            if (!VerifyInstallerDigest(path, info.InstallerDigest))
+            {
+                Diagnostics.Log($"Update digest mismatch for {info.InstallerName ?? Path.GetFileName(path)}");
+                try { File.Delete(path); } catch { }
+                return null;
+            }
+            return path;
         }
         catch (Exception ex)
         {
@@ -330,6 +340,18 @@ public static class UpdateService
             Diagnostics.Log("UpdateService.DownloadInstaller", ex);
             return null;
         }
+    }
+
+
+    private static bool VerifyInstallerDigest(string path, string? digest)
+    {
+        if (string.IsNullOrWhiteSpace(digest) || !digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var expected = digest[7..].Trim();
+        if (expected.Length != 64) return false;
+        using var stream = File.OpenRead(path);
+        var actual = Convert.ToHexString(SHA256.HashData(stream));
+        return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Launches a downloaded installer; the caller must exit so the exe
