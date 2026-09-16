@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Runtime.InteropServices;
 using Clipsy.Services;
@@ -17,6 +17,9 @@ public static class Program
     {
         if (ProcessWatchdog.TryRunWatchdog(args, out int watchdogExitCode))
             return watchdogExitCode;
+
+        if (CliService.TryRun(args, out int cliExitCode))
+            return cliExitCode;
 
         TryEnablePerMonitorV2();
         bool createdNew;

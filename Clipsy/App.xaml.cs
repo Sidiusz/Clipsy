@@ -85,7 +85,7 @@ public partial class App : Application
         UpdateManager.Init(HostWindow.DispatcherQueue);
         ThemeService.Register(HostWindow.Content as Microsoft.UI.Xaml.FrameworkElement);
 
-        SingleInstanceService.StartServer();
+        SingleInstanceService.StartServer(HandleCliRequest);
 
         Hotkey = new HotkeyService(HostWindow.DispatcherQueue);
         RegisterHotkeys();
@@ -154,6 +154,42 @@ public partial class App : Application
 
     public Task CheckUpdatesIfDueAsync(bool force = false) => UpdateManager.CheckAsync(force);
 
+    private string HandleCliRequest(string requestJson)
+    {
+        if (!CliService.TryParseRequest(requestJson, out var request) || request == null)
+            return CliService.SerializeResult(new CliResult(2, "Invalid command request."));
+        var dq = HostWindow?.DispatcherQueue;
+        if (dq == null) return CliService.SerializeResult(new CliResult(3, "UI is not ready."));
+
+        var tcs = new TaskCompletionSource<CliResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!dq.TryEnqueue(() =>
+        {
+            try { tcs.TrySetResult(ExecuteCliCommand(request)); }
+            catch (Exception ex) { tcs.TrySetResult(new CliResult(4, ex.Message)); }
+        }))
+            return CliService.SerializeResult(new CliResult(3, "Could not queue command on UI thread."));
+
+        if (!tcs.Task.Wait(TimeSpan.FromSeconds(5)))
+            return CliService.SerializeResult(new CliResult(3, "Command timed out."));
+        return CliService.SerializeResult(tcs.Task.Result);
+    }
+
+    private CliResult ExecuteCliCommand(CliIpcRequest request)
+    {
+        switch (request.Command.ToLowerInvariant())
+        {
+            case "capture":
+                OnCaptureRequested();
+                return new CliResult(0, "capture opened", new { opened = true });
+            case "open-settings":
+                OnSettingsRequested();
+                return new CliResult(0, "settings opened", new { opened = true });
+            case "config":
+                return CliConfigService.Execute(request.Args);
+            default:
+                return new CliResult(2, $"Unsupported live command: {request.Command}");
+        }
+    }
     private void OnMenuRequested()
     {
         _trayMenu?.ShowAtCursor();

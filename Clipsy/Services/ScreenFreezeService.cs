@@ -22,11 +22,11 @@ public sealed class ScreenFreezeService
         public required IReadOnlyList<MonitorInfo> Monitors { get; init; }
     }
 
-    public FrozenFrame Capture()
+    public FrozenFrame Capture(bool? includeCursor = null)
     {
         IntPtr previousDpi = IntPtr.Zero;
         try { previousDpi = SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { }
-        try { return CaptureSelectedBackend(); }
+        try { return CaptureSelectedBackend(includeCursor); }
         finally
         {
             if (previousDpi != IntPtr.Zero)
@@ -34,24 +34,25 @@ public sealed class ScreenFreezeService
         }
     }
 
-    private FrozenFrame CaptureSelectedBackend()
+    private FrozenFrame CaptureSelectedBackend(bool? includeCursor)
     {
         var settings = SettingsService.Instance.Settings;
+        bool captureCursor = includeCursor ?? settings.CaptureScreenshotCursor;
         if (settings.ExperimentalModernScreenshotCapture && ModernScreenCaptureService.IsSupported)
         {
             try
             {
-                return ModernScreenCaptureService.Capture(settings.CaptureScreenshotCursor);
+                return ModernScreenCaptureService.Capture(captureCursor);
             }
             catch (Exception ex)
             {
                 Diagnostics.Log("Modern screenshot capture failed; using GDI fallback", ex);
             }
         }
-        return CaptureCore();
+        return CaptureCore(captureCursor);
     }
 
-    private FrozenFrame CaptureCore()
+    private FrozenFrame CaptureCore(bool includeCursor)
     {
         var bounds = GetVirtualScreenBounds();
         var monitors = EnumerateMonitors();
@@ -66,7 +67,7 @@ public sealed class ScreenFreezeService
 
             g.CopyFromScreen(bounds.X, bounds.Y, 0, 0, bmp.Size, CopyPixelOperation.SourceCopy);
 
-            if (SettingsService.Instance.Settings.CaptureScreenshotCursor)
+            if (includeCursor)
                 DrawCursorOnto(g, bounds.X, bounds.Y);
         }
 

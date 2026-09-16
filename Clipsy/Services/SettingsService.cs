@@ -205,6 +205,7 @@ public sealed class SettingsService
 
     public void Save()
     {
+        Normalize(Settings);
         Settings.SettingsVersion = CurrentSettingsVersion;
         try
         {

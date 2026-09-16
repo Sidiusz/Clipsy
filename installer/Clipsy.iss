@@ -72,15 +72,44 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDum
 
 [Run]
 Filename: "{app}\{#ClipsyExeName}"; Description: "{cm:LaunchProgram,{#ClipsyName}}"; \
-    Flags: nowait postinstall skipifsilent
+    Flags: nowait postinstall skipifsilent; Check: ShouldLaunchAfterInstall
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{localappdata}\Clipsy"
+Type: filesandordirs; Name: "{localappdata}\Clipsy"; Check: ShouldDeleteUserData
 
 [Code]
 const
   LegacyAutostartTaskName = 'ClipsyAutostart';
   RunSubkey = 'Software\Microsoft\Windows\CurrentVersion\Run';
+
+function HasSwitch(const Name: String): Boolean;
+var
+  I: Integer;
+  Arg, SlashArg, DashArg: String;
+begin
+  Result := False;
+  SlashArg := '/' + UpperCase(Name);
+  DashArg := '--' + UpperCase(Name);
+  for I := 1 to ParamCount do
+    begin
+      Arg := UpperCase(ParamStr(I));
+      if (Arg = SlashArg) or (Arg = DashArg) then
+        begin
+          Result := True;
+          Exit;
+        end;
+    end;
+end;
+
+function ShouldLaunchAfterInstall(): Boolean;
+begin
+  Result := not HasSwitch('NOLAUNCH');
+end;
+
+function ShouldDeleteUserData(): Boolean;
+begin
+  Result := not HasSwitch('KEEPDATA');
+end;
 
 procedure CreateAutostart;
 begin
@@ -109,7 +138,10 @@ begin
   if CurStep = ssPostInstall then
     begin
       DeleteAutostart;
-      if not AutostartOptedOut then CreateAutostart;
+      if HasSwitch('NOAUTOSTART') then
+        RegWriteDWordValue(HKCU, 'Software\Clipsy', 'AutostartOptOut', 1)
+      else if not AutostartOptedOut then
+        CreateAutostart;
     end;
 end;
 

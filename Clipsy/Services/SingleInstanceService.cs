@@ -2,19 +2,21 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Text;
 using System.Threading;
 
 namespace Clipsy.Services;
 
-/// <summary>Named-pipe liveness handshake so a second launch can tell a healthy
-/// running instance (hand off, exit) from a hung one (kill it, take over).</summary>
+/// <summary>Named-pipe liveness and command channel for the current user session.</summary>
 public static class SingleInstanceService
 {
     private const string PipeName = "Clipsy.SingleInstance.Pipe.v1";
     private static volatile bool _running;
+    private static Func<string, string>? _requestHandler;
 
-    public static void StartServer()
+    public static void StartServer(Func<string, string>? requestHandler = null)
     {
+        _requestHandler = requestHandler;
         if (_running) return;
         _running = true;
         new Thread(ServerLoop) { IsBackground = true, Name = "Clipsy.SingleInstancePipe" }.Start();
@@ -24,40 +26,54 @@ public static class SingleInstanceService
     {
         while (_running)
         {
-            try
-            {
+            try            {
                 using var server = new NamedPipeServerStream(PipeName, PipeDirection.InOut, 1,
-                    PipeTransmissionMode.Byte, PipeOptions.None);
+                    PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly);
                 server.WaitForConnection();
-                using var reader = new StreamReader(server);
-                using var writer = new StreamWriter(server) { AutoFlush = true };
-                if (reader.ReadLine() == "PING") writer.WriteLine("PONG");
+                using var reader = new StreamReader(server, Encoding.UTF8, true, 1024, leaveOpen: true);
+                using var writer = new StreamWriter(server, new UTF8Encoding(false), 1024, leaveOpen: true)
+                {
+                    AutoFlush = true,
+                };
+                var request = reader.ReadLine();
+                if (request == "PING")
+                {
+                    writer.WriteLine("PONG");
+                }
+                else if (!string.IsNullOrWhiteSpace(request) && _requestHandler != null)
+                {
+                    writer.WriteLine(_requestHandler(request));
+                }
             }
-            catch { /* recycle the server on any error */ }
+            catch { }
         }
     }
 
-    /// <summary>True if an existing instance answered — caller should exit.</summary>
     public static bool TryPingExisting()
-    {
-        // Two attempts to avoid a false negative during the server's recycle gap.
+        => TrySendRequest("PING", out var response) && response == "PONG";
+
+    public static bool TrySendRequest(string request, out string response, int timeoutMs = 1500)
+    {        response = string.Empty;
         for (int i = 0; i < 2; i++)
         {
             try
             {
                 using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut);
-                client.Connect(1500);
-                using var writer = new StreamWriter(client) { AutoFlush = true };
-                using var reader = new StreamReader(client);
-                writer.WriteLine("PING");
-                if (reader.ReadLine() == "PONG") return true;
+                client.Connect(timeoutMs);
+                using var writer = new StreamWriter(client, new UTF8Encoding(false), 1024, leaveOpen: true)
+                {
+                    AutoFlush = true,
+                };
+                using var reader = new StreamReader(client, Encoding.UTF8, true, 1024, leaveOpen: true);
+                writer.WriteLine(request);
+                response = reader.ReadLine() ?? string.Empty;
+                return response.Length > 0;
             }
-            catch { /* no server / timeout → try again, then treat as hung */ }
+            catch { }
         }
         return false;
     }
 
-    /// <summary>Kill stale Clipsy processes from the same image (not us).</summary>
     public static void KillStaleInstances()
     {
         try
@@ -65,8 +81,7 @@ public static class SingleInstanceService
             using var me = Process.GetCurrentProcess();
             string? myPath = me.MainModule?.FileName;
             foreach (var p in Process.GetProcessesByName("Clipsy"))
-            {
-                try
+            {                try
                 {
                     if (p.Id == me.Id) continue;
                     if (myPath != null && !string.Equals(p.MainModule?.FileName, myPath,
@@ -74,10 +89,10 @@ public static class SingleInstanceService
                     p.Kill(entireProcessTree: true);
                     p.WaitForExit(3000);
                 }
-                catch { /* already gone or access denied */ }
+                catch { }
                 finally { p.Dispose(); }
             }
         }
-        catch { /* best effort */ }
+        catch { }
     }
 }

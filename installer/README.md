@@ -66,11 +66,37 @@ you can install Inno Setup manually and re-run.
   appropriate per-user folder if admin is declined
 - Creates a Start Menu entry for Clipsy + uninstaller
 - Optional desktop shortcut (tasks page, unchecked by default)
-- Optional "run at sign-in" registry entry under HKCU\…\Run (unchecked)
+- Run-at-sign-in registry entry under HKCU\…\Run by default, unless the user has opted out or `/NOAUTOSTART` is supplied
 - Registers an Add/Remove Programs entry that points the uninstaller at
   the installed directory
 - Uninstall removes the install folder plus `%LOCALAPPDATA%\Clipsy`
   (settings.json, cached state)
+
+## Command-line install and uninstall
+
+The setup executable keeps the normal Inno Setup UI when launched without switches. For automation, use native Inno switches:
+
+```text
+Clipsy-Setup-1.0.5.exe /SILENT /SUPPRESSMSGBOXES /NORESTART /SP-
+Clipsy-Setup-1.0.5.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-
+Clipsy-Setup-1.0.5.exe /DIR="D:\Apps\Clipsy" /TASKS=desktopicon
+Clipsy-Setup-1.0.5.exe /NOAUTOSTART /NOLAUNCH
+Clipsy-Setup-1.0.5.exe /LOG="D:\logs\clipsy-install.log"
+```
+
+`/NOAUTOSTART` also records the user's autostart opt-out, so a later Clipsy launch does not silently recreate the Run entry. `/NOLAUNCH` suppresses the post-install launch. Both switches also accept `--no-autostart` / `--no-launch` aliases.
+
+The generated `unins000.exe` supports the same `/SILENT`, `/VERYSILENT`, `/SUPPRESSMSGBOXES`, `/NORESTART`, `/SP-`, and `/LOG=...` switches. Add `/KEEPDATA` (or `--keep-data`) to preserve `%LOCALAPPDATA%\Clipsy`.
+
+The app provides friendlier wrappers for shells and agents:
+
+```text
+Clipsy.exe install Clipsy-Setup-1.0.5.exe --silent --no-autostart --no-launch --json
+Clipsy.exe install Clipsy-Setup-1.0.5.exe --very-silent --dir "D:\Apps\Clipsy" --log install.log
+Clipsy.exe uninstall --silent --keep-data --json
+```
+
+The wrappers return `0` once the setup/uninstaller process was launched, `2` for invalid arguments, `3` when the uninstaller cannot be found, and `4` when launch fails. They intentionally detach because setup/uninstall may replace or remove the calling `Clipsy.exe`. For the final Inno Setup process exit code, invoke the setup or `unins000.exe` directly.
 
 ## Publish settings
 
