@@ -568,6 +568,24 @@
                                                       Click="OnAnyToggleChanged"
                                                       VerticalAlignment="Center" />
                                     </Grid>
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock x:Name="LblModernCapture" Text="Modern capture backend" Style="{StaticResource ClipsyBodyStrong}" />
+                                                <controls:ExperimentalBadge />
+                                            </StackPanel>
+                                            <TextBlock x:Name="HelperModernCapture" Text="Use Windows Graphics Capture for screenshots (Windows 10 2004+). Falls back to the standard capture method if it fails. Default: off."
+                                                       Style="{StaticResource ClipsyHelper}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="ModernCaptureSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}" Click="OnAnyToggleChanged"
+                                                      VerticalAlignment="Center" />
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 

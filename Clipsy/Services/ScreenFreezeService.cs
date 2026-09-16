@@ -26,12 +26,29 @@ public sealed class ScreenFreezeService
     {
         IntPtr previousDpi = IntPtr.Zero;
         try { previousDpi = SetThreadDpiAwarenessContext(new IntPtr(-4)); } catch { }
-        try { return CaptureCore(); }
+        try { return CaptureSelectedBackend(); }
         finally
         {
             if (previousDpi != IntPtr.Zero)
                 try { SetThreadDpiAwarenessContext(previousDpi); } catch { }
         }
+    }
+
+    private FrozenFrame CaptureSelectedBackend()
+    {
+        var settings = SettingsService.Instance.Settings;
+        if (settings.ExperimentalModernScreenshotCapture && ModernScreenCaptureService.IsSupported)
+        {
+            try
+            {
+                return ModernScreenCaptureService.Capture(settings.CaptureScreenshotCursor);
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log("Modern screenshot capture failed; using GDI fallback", ex);
+            }
+        }
+        return CaptureCore();
     }
 
     private FrozenFrame CaptureCore()

@@ -376,6 +376,8 @@ public sealed partial class SettingsWindow : Window
         RememberFolderSwitch.IsChecked   = _draft.RememberLastFolder;
         AutostartSwitch.IsChecked        = _initialAutostart;
         ScreenshotCursorSwitch.IsChecked = _draft.CaptureScreenshotCursor;
+        ModernCaptureSwitch.IsChecked    = _draft.ExperimentalModernScreenshotCapture;
+        ModernCaptureSwitch.IsEnabled    = ModernScreenCaptureService.IsSupported;
         DynamicIslandsSwitch.IsChecked   = _draft.DynamicToolbarIslands;
         EyedropperCopyHexSwitch.IsChecked = _draft.CopyEyedropperHexToClipboard;
         VideoCursorSwitch.IsChecked      = _draft.CaptureVideoCursor;
@@ -427,6 +429,7 @@ public sealed partial class SettingsWindow : Window
 
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
         ScreenshotCursorSwitch.IsChecked = _draft.CaptureScreenshotCursor;
+        ModernCaptureSwitch.IsChecked    = _draft.ExperimentalModernScreenshotCapture;
         DynamicIslandsSwitch.IsChecked   = _draft.DynamicToolbarIslands;
         EyedropperCopyHexSwitch.IsChecked = _draft.CopyEyedropperHexToClipboard;
         SelectComboByTag(VideoFormatBox, _draft.VideoFormat);
@@ -518,6 +521,7 @@ public sealed partial class SettingsWindow : Window
         _draft.RememberLastFolder = RememberFolderSwitch.IsChecked == true;
         _draft.ScreenshotFormat = SelectedComboTag(ScreenshotFormatBox);
         _draft.CaptureScreenshotCursor = ScreenshotCursorSwitch.IsChecked == true;
+        _draft.ExperimentalModernScreenshotCapture = ModernCaptureSwitch.IsChecked == true;
         _draft.DynamicToolbarIslands = DynamicIslandsSwitch.IsChecked == true;
         _draft.VideoFormat = SelectedComboTag(VideoFormatBox);
         _draft.CaptureVideoCursor = VideoCursorSwitch.IsChecked == true;
