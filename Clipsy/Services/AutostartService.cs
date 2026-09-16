@@ -49,6 +49,39 @@ public static class AutostartService
         catch (Exception ex) { Diagnostics.Log("AutostartService.MigrateLegacyScheduledTask", ex); }
     }
 
+    public static bool ApplyInstallerPreference(bool disabled, bool removeOnly = false)
+    {
+        try
+        {
+            if (removeOnly)
+            {
+                DeleteRunEntry();
+                return !HasRunEntry();
+            }
+            if (disabled)
+            {
+                DeleteRunEntry();
+                SetOptOut(true);
+                return !HasRunEntry();
+            }
+            if (IsOptedOut())
+            {
+                DeleteRunEntry();
+                return true;
+            }
+            var path = GetExePath();
+            if (string.IsNullOrEmpty(path)) return false;
+            SetRunEntry(path);
+            SetOptOut(false);
+            return HasRunEntry();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("AutostartService.ApplyInstallerPreference", ex);
+            return false;
+        }
+    }
+
     public static void SetEnabled(bool enabled)
     {
         try

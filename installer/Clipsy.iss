@@ -71,8 +71,12 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDum
     ValueType: dword; ValueName: "DumpCount"; ValueData: "$00000005"; Check: IsAdminInstallMode
 
 [Run]
+Filename: "{app}\{#ClipsyExeName}"; Parameters: "{code:AutostartInitParameters}"; Flags: runhidden runasoriginaluser
 Filename: "{app}\{#ClipsyExeName}"; Description: "{cm:LaunchProgram,{#ClipsyName}}"; \
     Flags: nowait postinstall skipifsilent; Check: ShouldLaunchAfterInstall
+
+[UninstallRun]
+Filename: "{app}\{#ClipsyExeName}"; Parameters: "autostart-init --remove"; Flags: runhidden; RunOnceId: "ClipsyAutostartCleanup"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{localappdata}\Clipsy"; Check: ShouldDeleteUserData
@@ -80,7 +84,6 @@ Type: filesandordirs; Name: "{localappdata}\Clipsy"; Check: ShouldDeleteUserData
 [Code]
 const
   LegacyAutostartTaskName = 'ClipsyAutostart';
-  RunSubkey = 'Software\Microsoft\Windows\CurrentVersion\Run';
 
 function HasSwitch(const Name: String): Boolean;
 var
@@ -111,42 +114,29 @@ begin
   Result := not HasSwitch('KEEPDATA');
 end;
 
-procedure CreateAutostart;
-begin
-  RegWriteStringValue(HKCU, RunSubkey, 'Clipsy', '"' + ExpandConstant('{app}\{#ClipsyExeName}') + '"');
+function AutostartInitParameters(Param: String): String;
+ begin
+  Result := 'autostart-init';
+  if HasSwitch('NOAUTOSTART') then
+    Result := Result + ' --disabled';
 end;
 
-procedure DeleteAutostart;
+procedure DeleteLegacyAutostartTask;
 var
   ResultCode: Integer;
 begin
-  RegDeleteValue(HKCU, RunSubkey, 'Clipsy');
   Exec(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN "' + LegacyAutostartTaskName + '" /F', '', SW_HIDE,
        ewWaitUntilTerminated, ResultCode);
-end;
-
-function AutostartOptedOut: Boolean;
-var
-  v: Cardinal;
-begin
-  // App sets this when the user disables autostart; absent = enable by default.
-  Result := RegQueryDWordValue(HKCU, 'Software\Clipsy', 'AutostartOptOut', v) and (v = 1);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
-    begin
-      DeleteAutostart;
-      if HasSwitch('NOAUTOSTART') then
-        RegWriteDWordValue(HKCU, 'Software\Clipsy', 'AutostartOptOut', 1)
-      else if not AutostartOptedOut then
-        CreateAutostart;
-    end;
+    DeleteLegacyAutostartTask;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
-    DeleteAutostart;
+    DeleteLegacyAutostartTask;
 end;

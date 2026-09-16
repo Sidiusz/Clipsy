@@ -52,7 +52,7 @@ public static class CliService
     private static readonly HashSet<string> KnownCommands = new(StringComparer.OrdinalIgnoreCase)
     {
         "help", "--help", "-h", "version", "status", "capture", "open-settings",
-        "screenshot", "config", "install", "uninstall",
+        "screenshot", "config", "install", "uninstall", "autostart-init",
     };
     private static CliResult Execute(string command, string[] args)
     {
@@ -69,6 +69,7 @@ public static class CliService
                 "config" => ExecuteConfig(args),
                 "install" => CliInstallerService.Install(args),
                 "uninstall" => CliInstallerService.Uninstall(args),
+                "autostart-init" => ExecuteAutostartInit(args),
                 _ => new CliResult(2, $"Unknown command: {command}"),
             };
         }
@@ -77,6 +78,17 @@ public static class CliService
             Diagnostics.Log($"CLI command '{command}' failed", ex);
             return new CliResult(4, ex.Message);
         }
+    }
+
+    private static CliResult ExecuteAutostartInit(string[] args)
+    {
+        bool disabled = args.Length == 1 && string.Equals(args[0], "--disabled", StringComparison.OrdinalIgnoreCase);
+        bool removeOnly = args.Length == 1 && string.Equals(args[0], "--remove", StringComparison.OrdinalIgnoreCase);
+        if (args.Length > 1 || (args.Length == 1 && !disabled && !removeOnly))
+            return new CliResult(2, "Usage: autostart-init [--disabled|--remove]");
+        bool ok = AutostartService.ApplyInstallerPreference(disabled, removeOnly);
+        string message = removeOnly ? "autostart entry removed" : disabled ? "autostart disabled" : "autostart initialized";
+        return ok ? new CliResult(0, message) : new CliResult(4, "Failed to update autostart.");
     }
 
     private static CliResult Status()
