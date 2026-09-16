@@ -1,11 +1,14 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 
 namespace Clipsy.Services;
 
 public sealed class AppSettings
 {
+    public int SettingsVersion { get; set; } = SettingsService.CurrentSettingsVersion;
+
     // General
     public string Language { get; set; } = "auto";          // auto / en / ru
     public string Theme { get; set; } = "auto";             // auto / dark / light
@@ -97,10 +100,13 @@ public sealed class AppSettings
 
 public sealed class SettingsService
 {
+    public const int CurrentSettingsVersion = 1;
     private static readonly Lazy<SettingsService> _instance = new(() => new SettingsService());
     public static SettingsService Instance => _instance.Value;
 
     private readonly string _path;
+    private readonly string _backupPath;
+    private readonly string _tempPath;
     private readonly JsonSerializerOptions _json = new() { WriteIndented = true };
     public AppSettings Settings { get; private set; }
 
@@ -117,38 +123,112 @@ public sealed class SettingsService
         var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clipsy");
         Directory.CreateDirectory(dir);
         _path = Path.Combine(dir, "settings.json");
+        _backupPath = _path + ".bak";
+        _tempPath = _path + ".tmp";
         Settings = Load();
     }
 
     private AppSettings Load()
     {
-        try
+        if (TryLoadFile(_path, out var settings, out var version))
+            return PrepareLoaded(settings!, version);
+        if (TryLoadFile(_backupPath, out settings, out version))
         {
-            if (File.Exists(_path))
-            {
-                var json = File.ReadAllText(_path);
-                var s = JsonSerializer.Deserialize<AppSettings>(json);
-                if (s != null) return s;
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Settings load failed: {ex.Message}");
+            Diagnostics.Log("Settings primary invalid; loaded backup.");
+            return PrepareLoaded(settings!, version);
         }
         return new AppSettings();
     }
 
-    public void Save()
+    private bool TryLoadFile(string path, out AppSettings? settings, out int version)
     {
+        settings = null;
+        version = 0;
         try
         {
-            File.WriteAllText(_path, JsonSerializer.Serialize(Settings, _json));
-            SettingsChanged?.Invoke();
+            if (!File.Exists(path)) return false;
+            var json = File.ReadAllText(path);
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty(nameof(AppSettings.SettingsVersion), out var v))
+                v.TryGetInt32(out version);
+            if (version > CurrentSettingsVersion) return false;
+            settings = JsonSerializer.Deserialize<AppSettings>(json, _json);
+            return settings != null;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Settings save failed: {ex.Message}");
+            Diagnostics.Log($"Settings load failed for '{Path.GetFileName(path)}'", ex);
+            return false;
         }
+    }
+
+    private static AppSettings PrepareLoaded(AppSettings s, int version)
+    {
+        while (version < CurrentSettingsVersion)
+        {
+            switch (version)
+            {
+                case 0: version = 1; break;
+                default: version = CurrentSettingsVersion; break;
+            }
+        }
+        s.SettingsVersion = CurrentSettingsVersion;
+        Normalize(s);
+        return s;
+    }
+
+    private static void Normalize(AppSettings s)
+    {
+        s.Language = OneOf(s.Language, "auto", "auto", "en", "ru");
+        s.Theme = OneOf(s.Theme, "auto", "auto", "dark", "light");
+        s.ScreenshotFormat = OneOf(s.ScreenshotFormat, "png", "png", "jpg", "webp");
+        s.VideoFormat = OneOf(s.VideoFormat, "mp4", "mp4", "avi", "mkv", "gif");
+        s.VideoCodec = OneOf(s.VideoCodec, "H.264", "H.264", "H.265", "VP9", "AV1");
+        s.VideoResolution = OneOf(s.VideoResolution, "1080p", "480p", "720p", "1080p", "1440p", "Original");
+        s.UpdateInterval = OneOf(s.UpdateInterval, "daily", "hourly", "daily", "weekly", "monthly", "never");
+        s.AfterSaveAction = OneOf(s.AfterSaveAction, "nothing", "open-file", "open-folder", "nothing");
+        s.JpgQuality = Math.Clamp(s.JpgQuality, 50, 100);
+        s.VideoFramerate = s.VideoFramerate == 0 ? 0 : Math.Clamp(s.VideoFramerate, 10, 240);
+        s.VideoBitrateMbps = Math.Clamp(s.VideoBitrateMbps, 1, 200);
+        s.GifColors = Math.Clamp(s.GifColors, 16, 256);
+        s.GifFps = Math.Clamp(s.GifFps, 5, 30);
+        s.NotificationDurationSeconds = Math.Clamp(s.NotificationDurationSeconds, 1, 30);
+    }
+
+    private static string OneOf(string? value, string fallback, params string[] allowed)
+        => allowed.Contains(value ?? string.Empty, StringComparer.OrdinalIgnoreCase) ? value! : fallback;
+
+    public void Save()
+    {
+        Settings.SettingsVersion = CurrentSettingsVersion;
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(Settings, _json));
+            using (var fs = new FileStream(_tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+            {
+                fs.Write(bytes, 0, bytes.Length);
+                fs.Flush(flushToDisk: true);
+            }
+            if (IsReadableJson(_path)) File.Copy(_path, _backupPath, overwrite: true);
+            File.Move(_tempPath, _path, overwrite: true);
+            SettingsChanged?.Invoke();
+        }
+        catch (Exception ex) { Diagnostics.Log("Settings save failed", ex); }
+        finally
+        {
+            try { if (File.Exists(_tempPath)) File.Delete(_tempPath); } catch { }
+        }
+    }
+
+    private static bool IsReadableJson(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return false;
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.ValueKind == JsonValueKind.Object;
+        }
+        catch { return false; }
     }
 
     public void Replace(AppSettings updated)
