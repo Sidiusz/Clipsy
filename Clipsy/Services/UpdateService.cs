@@ -301,10 +301,10 @@ public static class UpdateService
     public static async Task<string?> DownloadInstallerAsync(UpdateInfo info, IProgress<double>? progress = null)
     {
         if (string.IsNullOrEmpty(info.InstallerUrl)) return null;
+        var fileName = $"ClipsySetup-{info.Version}.exe";
+        var path = Path.Combine(Path.GetTempPath(), fileName);
         try
         {
-            var fileName = $"ClipsySetup-{info.Version}.exe";
-            var path = Path.Combine(Path.GetTempPath(), fileName);
 
             using (var response = await _http.GetAsync(info.InstallerUrl, HttpCompletionOption.ResponseHeadersRead))
             {
@@ -325,23 +325,32 @@ public static class UpdateService
             }
 
             var fi = new FileInfo(path);
-            if (!fi.Exists || fi.Length < 1024) return null;
+            if (!fi.Exists || fi.Length < 1024)
+            {
+                TryDeleteDownloadedInstaller(path);
+                return null;
+            }
             if (!VerifyInstallerDigest(path, info.InstallerDigest))
             {
                 Diagnostics.Log($"Update digest mismatch for {info.InstallerName ?? Path.GetFileName(path)}");
-                try { File.Delete(path); } catch { }
+                TryDeleteDownloadedInstaller(path);
                 return null;
             }
             return path;
         }
         catch (Exception ex)
         {
+            TryDeleteDownloadedInstaller(path);
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Update download failed: {ex.Message}");
             Diagnostics.Log("UpdateService.DownloadInstaller", ex);
             return null;
         }
     }
 
+    private static void TryDeleteDownloadedInstaller(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); } catch { }
+    }
 
     private static bool VerifyInstallerDigest(string path, string? digest)
     {
