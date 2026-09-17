@@ -58,7 +58,7 @@ public sealed partial class SettingsWindow
         foreach (var existing in _hotkeyRows) existing.PropertyChanged -= OnHotkeyRowChanged;
         _hotkeyRows.Clear();
         AddHotkeyRow("capture", "HkOpenCapture", _draft.HotkeyCapture, "HkGroupGeneral");
-        AddHotkeyRow("undo", "HkUndo", _draft.HotkeyUndo);
+        AddHotkeyRow("undo", "HkUndo", _draft.HotkeyUndo, "HkGroupEditing");
         AddHotkeyRow("redo", "HkRedo", _draft.HotkeyRedo);
         AddHotkeyRow("save-silent", "HkSaveSilent", _draft.HotkeyScreenshotSilent, "HkGroupScreenshot");
         AddHotkeyRow("copy", "HkCopy", _draft.HotkeyCopy);
