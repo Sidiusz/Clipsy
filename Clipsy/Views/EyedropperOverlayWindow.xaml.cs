@@ -278,6 +278,9 @@ public sealed partial class EyedropperOverlayWindow : Window
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
+        int borderColor = unchecked((int)DWMWA_COLOR_NONE);
+        DwmSetWindowAttribute(_hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
+
         // Exclude from screen recording so the loupe doesn't appear in the video.
         SetWindowDisplayAffinity(_hwnd, WDA_EXCLUDEFROMCAPTURE);
 
@@ -336,10 +339,13 @@ public sealed partial class EyedropperOverlayWindow : Window
     private const uint SWP_NOACTIVATE  = 0x0010;
     private const uint SWP_FRAMECHANGED = 0x0020;
     private const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
+    private const int DWMWA_BORDER_COLOR = 34;
+    private const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
 
     [DllImport("user32.dll")] private static extern int  GetWindowLong(IntPtr h, int n);
     [DllImport("user32.dll")] private static extern int  SetWindowLong(IntPtr h, int n, int v);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr h);
     [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int value, int size);
 }

@@ -65,6 +65,8 @@ public sealed partial class RegionBorderWindow : Window
             DwmSetWindowAttribute(_hwnd, 33, ref donotround, sizeof(int));
             int ncDisabled = 1;
             DwmSetWindowAttribute(_hwnd, 2, ref ncDisabled, sizeof(int));
+            int borderColor = unchecked((int)DWMWA_COLOR_NONE);
+            DwmSetWindowAttribute(_hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
         }
         catch (Exception ex)
         {
@@ -299,6 +301,8 @@ public sealed partial class RegionBorderWindow : Window
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int LWA_ALPHA = 0x00000002;
+    private const int DWMWA_BORDER_COLOR = 34;
+    private const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
 
     [DllImport("user32.dll", SetLastError = true)] static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll", SetLastError = true)] static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);

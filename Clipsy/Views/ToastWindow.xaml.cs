@@ -201,6 +201,8 @@ public sealed partial class ToastWindow : Window
 
         int round = 2; // DWMWCP_ROUND
         DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
+        int borderColor = unchecked((int)DWMWA_COLOR_NONE);
+        DwmSetWindowAttribute(_hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
     }
 
     private void ApplyOptions(ToastService.ToastOptions opts)
@@ -312,6 +314,8 @@ public sealed partial class ToastWindow : Window
     private const int SWP_ASYNCWINDOWPOS = 0x4000;
 
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWA_BORDER_COLOR = 34;
+    private const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
     private const int MONITOR_DEFAULTTOPRIMARY       = 1;
 
     [StructLayout(LayoutKind.Sequential)]
