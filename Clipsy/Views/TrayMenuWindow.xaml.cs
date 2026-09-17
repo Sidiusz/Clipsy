@@ -292,7 +292,7 @@ public sealed partial class TrayMenuWindow : Window
         _parts[CaptureRow]          = new(CaptureIcon,          CaptureTxt,          CaptureShortcut);
         _parts[ScreenshotsFolderRow]= new(ScreenshotsFolderIcon,ScreenshotsFolderTxt,null);
         _parts[VideoFolderRow]      = new(VideoFolderIcon,      VideoFolderTxt,      null);
-        _parts[SettingsRow]         = new(SettingsIcon,         SettingsTxt,         SettingsShortcut);
+        _parts[SettingsRow]         = new(SettingsIcon,         SettingsTxt,         null);
         _parts[ExitRow]             = new(ExitIcon,             ExitTxt,             null);
     }
 

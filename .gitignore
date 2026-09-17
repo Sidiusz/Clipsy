@@ -72,3 +72,7 @@ tools/
 _trash/
 DESIGN SCREENSHOTS/
 checkpoint.md
+
+# Local release notes / agent workspace
+RELEASING.md
+.aider-desk/

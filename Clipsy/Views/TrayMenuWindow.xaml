@@ -130,7 +130,6 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="36"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <FontIcon x:Name="SettingsIcon" Glyph="&#xE713;" FontSize="15"
                           Foreground="{ThemeResource ClipsyText2Brush}"
@@ -139,10 +138,6 @@
                            FontSize="13" Foreground="{ThemeResource ClipsyTextBrush}"
                            FontFamily="{StaticResource ClipsyFontFamily}"
                            VerticalAlignment="Center"/>
-                <TextBlock x:Name="SettingsShortcut" Grid.Column="2" Text="Ctrl ,"
-                           FontSize="11" Foreground="{ThemeResource ClipsyText3Brush}"
-                           FontFamily="{StaticResource ClipsyFontFamily}"
-                           VerticalAlignment="Center" Margin="0,0,10,0"/>
             </Grid>
 
             <!-- ── Separator 3 ── -->
