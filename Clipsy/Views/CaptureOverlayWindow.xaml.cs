@@ -104,6 +104,11 @@ public sealed partial class CaptureOverlayWindow : Window
         catch { }
         ConfigureAsOverlay();
         DisableDwmDecorations();
+        // Presenter/style changes can leave a 1px non-client inset. Re-fit the
+        // actual client surface after the final WS_POPUP/SWP_FRAMECHANGED state.
+        var initialBounds = _frame.VirtualBounds;
+        SetOverlayClientBounds(OffscreenX, OffscreenY,
+            initialBounds.Width, initialBounds.Height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
         // Load the frozen frame synchronously so the first composed frame
         // already shows the snapshot, not black-then-desktop.
         TryLoadFrozenImage();
@@ -342,7 +347,7 @@ public sealed partial class CaptureOverlayWindow : Window
         // First present is off-screen (-32000) so the black erase is unseen;
         // Uncloak() moves it into place. These APIs take physical pixels.
         _appWindow.MoveAndResize(new RectInt32(OffscreenX, OffscreenY, b.Width, b.Height));
-        SetWindowPos(_hwnd, HWND_TOPMOST, OffscreenX, OffscreenY, b.Width, b.Height,
+        SetOverlayClientBounds(OffscreenX, OffscreenY, b.Width, b.Height,
             SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
         // XAML element sizes are in DIPs, so divide by DPI scale.
@@ -353,6 +358,33 @@ public sealed partial class CaptureOverlayWindow : Window
         RootGrid.Height = b.Height / dpiScale;
 
         UpdateDimGeometry(null);
+    }
+
+    private void SetOverlayClientBounds(int clientX, int clientY, int clientWidth, int clientHeight, uint flags)
+    {
+        int outerX = clientX, outerY = clientY;
+        int outerWidth = clientWidth, outerHeight = clientHeight;
+        for (int pass = 0; pass < 2; pass++)
+        {
+            SetWindowPos(_hwnd, HWND_TOPMOST, outerX, outerY, outerWidth, outerHeight, flags);
+            if (!GetClientRect(_hwnd, out var client)) return;
+            var origin = new WIN32POINT();
+            if (!ClientToScreen(_hwnd, ref origin)) return;
+
+            int width = client.right - client.left;
+            int height = client.bottom - client.top;
+            int dx = clientX - origin.X;
+            int dy = clientY - origin.Y;
+            int dw = clientWidth - width;
+            int dh = clientHeight - height;
+            if (dx == 0 && dy == 0 && dw == 0 && dh == 0) return;
+
+            outerX += dx;
+            outerY += dy;
+            outerWidth += dw;
+            outerHeight += dh;
+        }
+        SetWindowPos(_hwnd, HWND_TOPMOST, outerX, outerY, outerWidth, outerHeight, flags);
     }
 
     private void DisableDwmDecorations()
@@ -410,7 +442,7 @@ public sealed partial class CaptureOverlayWindow : Window
         // Move into place but stay cloaked: the move makes DWM repaint the
         // redirection surface black until the next present. Reveal a few ticks later.
         var b = _frame.VirtualBounds;
-        SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
+        SetOverlayClientBounds(b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
         int ticksAfterMove = 0;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnPostMoveTick;
         void OnPostMoveTick(object? s, object e)
@@ -464,7 +496,7 @@ public sealed partial class CaptureOverlayWindow : Window
             if (_revealed || _closed) return;
             _cloaked = false;
             var b = _frame.VirtualBounds;
-            SetWindowPos(_hwnd, HWND_TOPMOST, b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
+            SetOverlayClientBounds(b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
             CompleteReveal();
         };
         wd.Start();
@@ -613,8 +645,20 @@ public sealed partial class CaptureOverlayWindow : Window
 
     // ---------- Win32 interop ----------
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CLIENTRECT { public int left, top, right, bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WIN32POINT { public int X, Y; }
+
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int pvAttribute, int cbAttribute);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetClientRect(IntPtr hWnd, out CLIENTRECT lpRect);
+
+    [DllImport("user32.dll")]
+    private static extern bool ClientToScreen(IntPtr hWnd, ref WIN32POINT lpPoint);
 
     [DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, uint dwNewLong);
