@@ -129,7 +129,7 @@ public static class Strings
         ["LblJpgQuality"]       = New("JPEG quality",              "Качество JPEG"),
         ["LblScreenshotCursor"] = New("Include cursor",            "Включить курсор"),
         ["HelperScreenshotCursor"] = New("Show the mouse pointer in screenshots. Default: off.", "Показывать указатель мыши на скриншотах. По умолчанию: выкл."),
-        ["LblModernCapture"]    = New("Modern capture backend", "Современный движок захвата"),
+        ["LblModernCapture"]    = New("Modern capture backend (WGC)", "Современный движок захвата (WGC)"),
         ["HelperModernCapture"] = New("Use Windows Graphics Capture for screenshots (Windows 10 2004+). Falls back to the standard capture method if it fails. Default: off.", "Использовать Windows Graphics Capture для снимков экрана (Windows 10 2004+). При ошибке автоматически используется обычный способ захвата. По умолчанию: выкл."),
         ["LblDynamicIslands"]   = New("Dynamic tool islands",      "Динамичные острова инструментов"),
         ["HelperDynamicIslands"] = New("Toolbars dock to the corner where the selection drag ends.", "Панели прикрепляются к углу, в котором завершено выделение."),
