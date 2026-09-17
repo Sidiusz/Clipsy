@@ -1397,10 +1397,9 @@
                         <!-- ===== Info ===== -->
                         <StackPanel x:Name="PaneInfo" Spacing="16" HorizontalAlignment="Stretch" Visibility="Collapsed">
                             <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
-                                <Border Width="64" Height="64" CornerRadius="14"
-                                        Background="{ThemeResource ClipsyAccentBrush}">
-                                    <FontIcon Glyph="&#xE722;" FontSize="28" Foreground="White" />
-                                </Border>
+                                <Image Width="64" Height="64"
+                                       Source="ms-appx:///Assets/Icons/clipsy-64.png"
+                                       Stretch="Uniform" />
                                 <StackPanel Spacing="6" VerticalAlignment="Center">
                                     <TextBlock Text="Clipsy" FontSize="26" FontWeight="{StaticResource ClipsyFontWeightTitle}"
                                                Foreground="{ThemeResource ClipsyTextBrush}" />
