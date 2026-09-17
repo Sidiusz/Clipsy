@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build release artifacts
+        shell: powershell
+        run: .\installer\build.ps1 -Version $env:GITHUB_REF_NAME
+
+      - name: Publish GitHub release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME
+          $installer = "installer/output/Clipsy-Setup-$version.exe"
+          $portable = "installer/output/Clipsy-$version-win-x64.zip"
+          $notes = ".github/release-notes/$version.md"
+          gh release create $version $installer $portable --title $version --notes-file $notes
