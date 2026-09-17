@@ -402,8 +402,8 @@ public sealed partial class CaptureOverlayWindow : Window
             int ncDisabled = 1;
             DwmSetWindowAttribute(_hwnd, 2, ref ncDisabled, sizeof(int));
 
-            int borderless = 1;
-            DwmSetWindowAttribute(_hwnd, 20, ref borderless, sizeof(int));
+            int borderColor = unchecked((int)DWMWA_COLOR_NONE);
+            DwmSetWindowAttribute(_hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
 
             // Set window style to remove all borders. Keep WS_EX_LAYERED —
             // it is what suppresses the black first-frame erase.
@@ -434,6 +434,8 @@ public sealed partial class CaptureOverlayWindow : Window
     private bool _revealed;
     private bool _closed;
     private const int DWMWA_CLOAK = 13;
+    private const int DWMWA_BORDER_COLOR = 34;
+    private const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
 
     private void Uncloak()
     {
