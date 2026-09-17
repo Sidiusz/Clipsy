@@ -31,10 +31,12 @@ public sealed partial class ChangelogWindow : Window
         ThemeService.Register(Content as FrameworkElement);
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
+        ConfigureTitleBar();
         SetCloak(true);
         _appWindow.Title = Strings.Get("ChangelogTitle");
         _appWindow.Resize(new SizeInt32(560, 680));
 
+        TitleBarLabel.Text = Strings.Get("ChangelogTitle");
         TitleLabel.Text = Strings.Get("ChangelogTitle");
         HeaderLabel.Text = Strings.Get("ChangelogLoading");
 
@@ -46,6 +48,30 @@ public sealed partial class ChangelogWindow : Window
             if (_open == this) _open = null;
         };
         if (Content is FrameworkElement fe) fe.Loaded += (_, _) => _ = LoadAsync();
+    }
+
+    private void ConfigureTitleBar()
+    {
+        try
+        {
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(AppTitleBar);
+            var tb = _appWindow.TitleBar;
+            var transparent = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+            var fg = Windows.UI.Color.FromArgb(0xFF, 0xB5, 0xBA, 0xC1);
+            var fgHover = Windows.UI.Color.FromArgb(0xFF, 0xF2, 0xF3, 0xF5);
+            var hover = Windows.UI.Color.FromArgb(0xFF, 0x35, 0x37, 0x3C);
+            var pressed = Windows.UI.Color.FromArgb(0xFF, 0x40, 0x42, 0x49);
+            tb.ButtonBackgroundColor = transparent;
+            tb.ButtonInactiveBackgroundColor = transparent;
+            tb.ButtonForegroundColor = fg;
+            tb.ButtonInactiveForegroundColor = Windows.UI.Color.FromArgb(0xFF, 0x80, 0x84, 0x8E);
+            tb.ButtonHoverBackgroundColor = hover;
+            tb.ButtonHoverForegroundColor = fgHover;
+            tb.ButtonPressedBackgroundColor = pressed;
+            tb.ButtonPressedForegroundColor = fgHover;
+        }
+        catch (Exception ex) { Diagnostics.Log("ChangelogWindow.TitleBar", ex); }
     }
 
     public static void ShowWindow()
