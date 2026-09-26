@@ -1001,19 +1001,29 @@ public sealed class PpOcrV5Engine : IOcrEngine
         string scaffoldText,
         string chosen)
     {
-        if (wordIndex <= 0 ||
-            CompactForCompare(scaffoldText).Length < 4 ||
+        if (CompactForCompare(scaffoldText).Length < 4 ||
             !string.Equals(
                 NormalizeWhitespace(chosen),
                 NormalizeWhitespace(scaffoldText),
                 StringComparison.OrdinalIgnoreCase))
             return chosen;
 
-        var previousWord = scaffoldWords[wordIndex - 1];
-        var previous = previousWord.BoundsPixels;
         var current = scaffoldWords[wordIndex].BoundsPixels;
-        if (!IsSameScaffoldLine(previous, current))
+        OcrWord? previousWord = scaffoldWords
+            .Select((word, index) => (word, index))
+            .Where(x =>
+                x.index != wordIndex &&
+                IsSameScaffoldLine(x.word.BoundsPixels, current) &&
+                x.word.BoundsPixels.X + x.word.BoundsPixels.Width <= current.X + 1)
+            .OrderByDescending(x =>
+                x.word.BoundsPixels.X + x.word.BoundsPixels.Width)
+            .Select(x => x.word)
+            .FirstOrDefault();
+
+        if (previousWord == null)
             return chosen;
+
+        var previous = previousWord.BoundsPixels;
 
         if (DetectDominantScript(scaffoldText) == "ascii" &&
             NormalizeWhitespace(previousWord.Text).Count(char.IsLetterOrDigit) <= 2)
