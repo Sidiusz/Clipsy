@@ -25,8 +25,9 @@ public sealed partial class ToastWindow : Window
     private const int MinH        = 50;
     private const int ToastGap    = 8;
     private const int ToastMargin = 16;
-    private const int FadeInMs    = 220;
-    private const int FadeOutMs   = 160;
+    private const int FadeInMs     = 220;
+    private const int FadeOutMs    = 160;
+    private const int RepositionMs = 180;
 
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
@@ -41,7 +42,7 @@ public sealed partial class ToastWindow : Window
     private bool _awaitingFirstPaint;
     private bool _fadeInDone;
     private bool _isFadingOut;
-    private int _targetX, _targetY, _w, _h, _offscreenX;
+    private int _targetX, _targetY, _currentX, _currentY, _w, _h, _offscreenX;
 
     public ToastWindow(ToastService.ToastOptions opts)
     {
@@ -93,15 +94,22 @@ public sealed partial class ToastWindow : Window
             // Compose offscreen while cloaked, then reveal only after XAML
             // has painted. This prevents the bare HWND black first frame.
             Cloak(true);
-            _appWindow.MoveAndResize(new RectInt32(_offscreenX, _targetY, _w, _h));
+            _currentX = _offscreenX;
+            _currentY = _targetY;
+            _appWindow.MoveAndResize(new RectInt32(_currentX, _currentY, _w, _h));
             Activate();
             SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             RevealAfterFirstPaint();
         }
-        else
+        else if (_awaitingFirstPaint)
         {
-            // Re-stack snap when another toast closes — no animation.
-            SetWindowPos(_hwnd, HWND_TOPMOST, _targetX, _targetY, _w, _h, SWP_NOACTIVATE);
+            _currentX = _offscreenX;
+            _currentY = _targetY;
+            SetWindowPos(_hwnd, HWND_TOPMOST, _currentX, _currentY, _w, _h, SWP_NOACTIVATE);
+        }
+        else if (!_isFadingOut)
+        {
+            AnimateTo(_targetX, _targetY, RepositionMs, EaseOutCubic);
         }
     }
 
@@ -161,7 +169,7 @@ public sealed partial class ToastWindow : Window
 
     private void BeginFadeIn()
     {
-        AnimateX(_offscreenX, _targetX, FadeInMs, EaseOutCubic);
+        AnimateTo(_targetX, _targetY, FadeInMs, EaseOutCubic);
     }
 
     private void BeginFadeOut()
@@ -170,16 +178,23 @@ public sealed partial class ToastWindow : Window
         _isFadingOut = true;
         _dismissTimer?.Stop();
         _dismissTimer = null;
-        AnimateX(_targetX, _offscreenX, FadeOutMs, EaseInQuad, onComplete: () =>
+        AnimateTo(_offscreenX, _currentY, FadeOutMs, EaseInQuad, onComplete: () =>
         {
             try { Close(); } catch { }
         });
     }
 
-    private void AnimateX(int from, int to, int durationMs, Func<double, double> easing, Action? onComplete = null)
+    private void AnimateTo(
+        int toX,
+        int toY,
+        int durationMs,
+        Func<double, double> easing,
+        Action? onComplete = null)
     {
         StopRenderHandler();
 
+        int fromX = _currentX;
+        int fromY = _currentY;
         var startTime = DateTime.UtcNow;
         const int flags = SWP_NOACTIVATE | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS;
 
@@ -188,10 +203,13 @@ public sealed partial class ToastWindow : Window
             double elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
             double t = Math.Min(elapsed / durationMs, 1.0);
             double eased = easing(t);
-            int x = (int)(from + (to - from) * eased);
-            SetWindowPos(_hwnd, HWND_TOPMOST, x, _targetY, _w, _h, flags);
+            _currentX = (int)Math.Round(fromX + (toX - fromX) * eased);
+            _currentY = (int)Math.Round(fromY + (toY - fromY) * eased);
+            SetWindowPos(_hwnd, HWND_TOPMOST, _currentX, _currentY, _w, _h, flags);
             if (t >= 1.0)
             {
+                _currentX = toX;
+                _currentY = toY;
                 StopRenderHandler();
                 onComplete?.Invoke();
             }

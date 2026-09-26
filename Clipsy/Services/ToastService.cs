@@ -30,8 +30,7 @@ public static class ToastService
     }
 
     private const int MaxVisibleToasts = 4;
-    private const int MaxQueuedToasts = 12;
-    private const int MaxIncomingToasts = 32;
+    private const int MaxIncomingToasts = 16;
 
     private sealed record ToastKey(
         ToastCategory Category,
@@ -40,7 +39,6 @@ public static class ToastService
         string Body);
 
     private sealed record ActiveToast(ToastWindow Window, ToastKey Key);
-    private sealed record QueuedToast(ToastOptions Options, ToastKey Key);
 
     private static readonly object _incomingGate = new();
     private static readonly Queue<ToastOptions> _incoming = new();
@@ -49,7 +47,6 @@ public static class ToastService
 
     // Mutated on UI thread only.
     private static readonly List<ActiveToast> _active = new();
-    private static readonly Queue<QueuedToast> _pending = new();
     private static readonly HashSet<ToastKey> _known = new();
 
     public static void Show(ToastOptions opts)
@@ -124,14 +121,7 @@ public static class ToastService
             return;
 
         if (_active.Count >= MaxVisibleToasts)
-        {
-            if (_pending.Count >= MaxQueuedToasts)
-                return;
-
-            _known.Add(key);
-            _pending.Enqueue(new QueuedToast(opts, key));
             return;
-        }
 
         _known.Add(key);
         ShowNow(opts, key);
@@ -171,16 +161,6 @@ public static class ToastService
         }
 
         RepositionAll();
-        DrainPending();
-    }
-
-    private static void DrainPending()
-    {
-        while (_active.Count < MaxVisibleToasts && _pending.Count > 0)
-        {
-            var item = _pending.Dequeue();
-            ShowNow(item.Options, item.Key);
-        }
     }
 
     internal static void RepositionAll()
