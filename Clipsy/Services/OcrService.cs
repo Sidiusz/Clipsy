@@ -216,7 +216,8 @@ public sealed class PpOcrV5Engine : IOcrEngine
     private sealed record HintLine(int[] WordIndices, Rect Bounds);
     private sealed record RecoveryRegion(
         Rect Bounds,
-        IReadOnlyList<PpOcrV5RecognizerSpec> Models);
+        IReadOnlyList<PpOcrV5RecognizerSpec> Models,
+        bool PrefixRepairOnly = false);
 
     public static void Reset()
     {
@@ -549,6 +550,15 @@ public sealed class PpOcrV5Engine : IOcrEngine
                             int alphanumeric = bestText.Count(char.IsLetterOrDigit);
                             if (usableHints.Length > 0 && alphanumeric < 2)
                                 continue;
+
+                            if (recovery.PrefixRepairOnly)
+                            {
+                                TryRecoverMissingPrefixes(
+                                    bestText,
+                                    recovery.Bounds,
+                                    words);
+                                continue;
+                            }
 
                             var recoveredWords = SplitByStrongVisualGaps(
                                 image,
@@ -1452,8 +1462,10 @@ public sealed class PpOcrV5Engine : IOcrEngine
                     candidate,
                     hints.Select(h => h.BoundsPixels));
 
-                if (coveredWidth >= 0.68)
+                if (coveredWidth >= 0.82)
                     continue;
+
+                bool prefixRepairOnly = coveredWidth >= 0.68;
 
                 var lineHints = hints
                     .Where(h => SameVisualLine(candidate, h.BoundsPixels))
@@ -1466,7 +1478,10 @@ public sealed class PpOcrV5Engine : IOcrEngine
                 if (models.Count == 0)
                     models = globalModels.Count > 0 ? globalModels : installed;
 
-                regions.Add(new RecoveryRegion(candidate, models));
+                regions.Add(new RecoveryRegion(
+                    candidate,
+                    models,
+                    prefixRepairOnly));
             }
         }
 
@@ -1535,6 +1550,175 @@ public sealed class PpOcrV5Engine : IOcrEngine
         }
 
         return result;
+    }
+
+    private static bool TryRecoverMissingPrefixes(
+        string recognizedText,
+        Rect recoveryBounds,
+        List<OcrWord> words)
+    {
+        string compact = RemoveWhitespace(
+            NormalizeWhitespace(recognizedText));
+        if (compact.Length < 3 || words.Count < 2)
+            return false;
+
+        var candidates = Enumerable.Range(0, words.Count)
+            .Where(i =>
+            {
+                var bounds = words[i].BoundsPixels;
+                double horizontalOverlap =
+                    Math.Min(
+                        recoveryBounds.X + recoveryBounds.Width,
+                        bounds.X + bounds.Width) -
+                    Math.Max(recoveryBounds.X, bounds.X);
+
+                return horizontalOverlap > 0 &&
+                    VerticalOverlapRatio(recoveryBounds, bounds) >= 0.50;
+            })
+            .OrderBy(i => words[i].BoundsPixels.X)
+            .ToArray();
+
+        if (candidates.Length < 2)
+            return false;
+
+        var matches =
+            new List<(int WordIndex, int Start, int End)>();
+        int searchStart = 0;
+
+        foreach (int wordIndex in candidates)
+        {
+            string token = RemoveWhitespace(
+                NormalizeWhitespace(words[wordIndex].Text));
+            if (token.Length == 0)
+                continue;
+
+            int start = compact.IndexOf(
+                token,
+                searchStart,
+                StringComparison.OrdinalIgnoreCase);
+            if (start < 0)
+                continue;
+
+            matches.Add((
+                wordIndex,
+                start,
+                start + token.Length));
+            searchStart = start + token.Length;
+        }
+
+        if (matches.Count < 2 ||
+            matches[0].Start != 0 ||
+            matches[^1].End != compact.Length)
+        {
+            return false;
+        }
+
+        int gapMatchIndex = -1;
+        string prefix = string.Empty;
+
+        for (int i = 1; i < matches.Count; i++)
+        {
+            int gapLength = matches[i].Start - matches[i - 1].End;
+            if (gapLength < 0)
+                return false;
+            if (gapLength == 0)
+                continue;
+            if (gapMatchIndex >= 0)
+                return false;
+
+            gapMatchIndex = i;
+            prefix = compact.Substring(
+                matches[i - 1].End,
+                gapLength);
+        }
+
+        if (gapMatchIndex != matches.Count - 1 ||
+            prefix.Length == 0 ||
+            prefix.Any(ch => !char.IsLetterOrDigit(ch)))
+        {
+            return false;
+        }
+
+        var previousMatch = matches[gapMatchIndex - 1];
+        var targetMatch = matches[gapMatchIndex];
+        var previous = words[previousMatch.WordIndex];
+        var target = words[targetMatch.WordIndex];
+
+        string prefixCore = AlphanumericCore(prefix);
+        string targetCore = AlphanumericCore(target.Text);
+        if (prefixCore.Length == 0 ||
+            targetCore.Length < 2 ||
+            prefixCore.Length > targetCore.Length)
+        {
+            return false;
+        }
+
+        var prefixScripts = CollectScripts([prefix]);
+        var targetScripts = CollectScripts([target.Text]);
+        if (prefixScripts.Count > 0 &&
+            targetScripts.Count > 0 &&
+            !prefixScripts.Overlaps(targetScripts))
+        {
+            return false;
+        }
+
+        var previousBounds = previous.BoundsPixels;
+        var targetBounds = target.BoundsPixels;
+        double height = Math.Max(
+            previousBounds.Height,
+            targetBounds.Height);
+        double gapPixels =
+            targetBounds.X -
+            (previousBounds.X + previousBounds.Width);
+        double characterWidth =
+            targetBounds.Width / Math.Max(1, targetCore.Length);
+        double expectedPrefixWidth =
+            characterWidth * prefixCore.Length;
+
+        if (gapPixels < -height * 0.15 ||
+            gapPixels >
+                expectedPrefixWidth * 1.55 +
+                height * 0.60)
+        {
+            return false;
+        }
+
+        double projectedX =
+            recoveryBounds.X +
+            recoveryBounds.Width *
+            previousMatch.End /
+            (double)compact.Length;
+        double projectedPrefixWidth =
+            targetBounds.X - projectedX;
+
+        if (projectedPrefixWidth <
+                Math.Max(1, expectedPrefixWidth * 0.35) ||
+            projectedPrefixWidth >
+                expectedPrefixWidth * 1.80 +
+                height * 0.50)
+        {
+            return false;
+        }
+
+        double previousRight =
+            previousBounds.X + previousBounds.Width;
+        double newX = Math.Max(
+            previousRight,
+            Math.Min(targetBounds.X, projectedX));
+        double targetRight =
+            targetBounds.X + targetBounds.Width;
+
+        if (targetRight <= newX)
+            return false;
+
+        words[targetMatch.WordIndex] = new OcrWord(
+            prefix + target.Text,
+            new Rect(
+                newX,
+                targetBounds.Y,
+                targetRight - newX,
+                targetBounds.Height));
+        return true;
     }
 
     private static IReadOnlyList<OcrWord> SplitByStrongVisualGaps(
