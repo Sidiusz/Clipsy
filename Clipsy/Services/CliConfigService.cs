@@ -13,7 +13,7 @@ internal static class CliConfigService
     {
         ["language"] = new(nameof(AppSettings.Language), ["auto", "en", "ru"]),
         ["theme"] = new(nameof(AppSettings.Theme), ["auto", "dark", "light"]),
-        ["ocr.engine"] = new(nameof(AppSettings.OcrEngine), ["WinRT", "Tesseract"]),
+        ["ocr.engine"] = new(nameof(AppSettings.OcrEngine), ["WinRT", "Tesseract", "PPOCRv5"]),
         ["ocr.languages"] = new(nameof(AppSettings.TesseractLanguages)),
         ["paths.screenshot"] = new(nameof(AppSettings.ScreenshotFolder)),
         ["paths.video"] = new(nameof(AppSettings.VideoFolder)),

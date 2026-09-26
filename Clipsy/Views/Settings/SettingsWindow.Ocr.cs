@@ -5,6 +5,7 @@ using Clipsy.Localization;
 using Clipsy.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace Clipsy.Views.Settings;
 
@@ -12,15 +13,19 @@ public sealed partial class SettingsWindow
 {
     private void OnOcrEngineChanged(object sender, SelectionChangedEventArgs e)
     {
-        UpdateTessLangSectionVisibility();
+        UpdateOcrEngineSections();
         MarkChanged();
     }
 
-    private void UpdateTessLangSectionVisibility()
+    private void UpdateOcrEngineSections()
     {
-        if (TessLangSection == null) return;
-        var isTesseract = string.Equals(SelectedComboTag(OcrEngineBox), "Tesseract", StringComparison.OrdinalIgnoreCase);
-        TessLangSection.Visibility = isTesseract ? Visibility.Visible : Visibility.Collapsed;
+        var selected = SelectedComboTag(OcrEngineBox);
+        if (TessLangSection != null)
+            TessLangSection.Visibility = string.Equals(selected, "Tesseract", StringComparison.OrdinalIgnoreCase)
+                ? Visibility.Visible : Visibility.Collapsed;
+        if (PpOcrModelSection != null)
+            PpOcrModelSection.Visibility = string.Equals(selected, "PPOCRv5", StringComparison.OrdinalIgnoreCase)
+                ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void BuildTessLangRows()
@@ -170,6 +175,147 @@ public sealed partial class SettingsWindow
                 {
                     var idx = TessLangList.Children.IndexOf(row);
                     if (idx >= 0) TessLangList.Children[idx] = CreateTessLangRow(lang);
+                });
+            }
+        }
+    }
+
+    private void BuildPpOcrModelRows()
+    {
+        if (PpOcrModelList == null) return;
+
+        LblPpOcrModels.Text = Strings.Get("LblPpOcrModels");
+        HelperPpOcrModels.Text = Strings.Get("HelperPpOcrModels");
+
+        PpOcrModelList.Children.Clear();
+        foreach (var model in PpOcrV5Service.RecognizerModels)
+            PpOcrModelList.Children.Add(CreatePpOcrModelRow(model));
+    }
+
+    private UIElement CreatePpOcrModelRow(PpOcrV5RecognizerSpec model)
+    {
+        bool installed = PpOcrV5Service.IsModelInstalled(model.Key);
+
+        var grid = new Grid { Margin = new Thickness(0, 2, 0, 2), ColumnSpacing = 8 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72, GridUnitType.Pixel) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(92, GridUnitType.Pixel) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(128, GridUnitType.Pixel) });
+
+        var nameBlock = new TextBlock
+        {
+            Text = model.DisplayName,
+            VerticalAlignment = VerticalAlignment.Center,
+            Style = (Style)Application.Current.Resources["ClipsyBody"],
+            Opacity = installed ? 1.0 : 0.7,
+        };
+        Grid.SetColumn(nameBlock, 0);
+
+        var sizeBlock = new TextBlock
+        {
+            Text = model.ApproxSize,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Style = (Style)Application.Current.Resources["ClipsyHelper"],
+        };
+        Grid.SetColumn(sizeBlock, 1);
+
+        var progress = new ProgressBar
+        {
+            Minimum = 0, Maximum = 100, Value = 0,
+            Width = 84,
+            Visibility = Visibility.Collapsed,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        Grid.SetColumn(progress, 2);
+
+        var btn = new Button
+        {
+            Content = installed ? CreateTessDeleteContent() : Strings.Get("BtnInstall"),
+            Style = (Style)Application.Current.Resources["ClipsyButtonGhost"],
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+        };
+        Grid.SetColumn(btn, 3);
+
+        grid.Children.Add(nameBlock);
+        grid.Children.Add(sizeBlock);
+        grid.Children.Add(progress);
+        grid.Children.Add(btn);
+
+        btn.Click += (_, _) =>
+        {
+            if (PpOcrV5Service.IsModelInstalled(model.Key))
+            {
+                PpOcrV5Service.DeleteModel(model.Key);
+                var idx = PpOcrModelList.Children.IndexOf(grid);
+                if (idx >= 0)
+                    PpOcrModelList.Children[idx] = CreatePpOcrModelRow(model);
+            }
+            else
+            {
+                _ = DownloadPpOcrModelAsync(model, grid, btn, progress);
+            }
+        };
+
+        return grid;
+    }
+
+    private async Task DownloadPpOcrModelAsync(
+        PpOcrV5RecognizerSpec model,
+        Grid row,
+        Button btn,
+        ProgressBar progressBar)
+    {
+        if (_ppOcrDownloadCts.TryGetValue(model.Key, out var existing))
+        {
+            existing.Cancel();
+            _ppOcrDownloadCts.Remove(model.Key);
+        }
+
+        var cts = new CancellationTokenSource();
+        _ppOcrDownloadCts[model.Key] = cts;
+
+        btn.IsEnabled = false;
+        btn.Content = Strings.Get("TessInstalling");
+        progressBar.Visibility = Visibility.Visible;
+        progressBar.Value = 0;
+
+        try
+        {
+            var progress = new Progress<int>(value =>
+            {
+                if (!_windowClosed)
+                    DispatcherQueue.TryEnqueue(() => progressBar.Value = value);
+            });
+
+            await PpOcrV5Service.DownloadModelAsync(model.Key, progress, cts.Token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Clipsy] PP-OCRv5 model '{model.Key}' download failed: {ex.Message}");
+            if (!_windowClosed)
+                NotificationService.Error("ErrPpOcrDownload");
+        }
+        finally
+        {
+            if (_ppOcrDownloadCts.TryGetValue(model.Key, out var current) &&
+                ReferenceEquals(current, cts))
+                _ppOcrDownloadCts.Remove(model.Key);
+
+            cts.Dispose();
+
+            if (!_windowClosed)
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    var idx = PpOcrModelList.Children.IndexOf(row);
+                    if (idx >= 0)
+                        PpOcrModelList.Children[idx] = CreatePpOcrModelRow(model);
                 });
             }
         }

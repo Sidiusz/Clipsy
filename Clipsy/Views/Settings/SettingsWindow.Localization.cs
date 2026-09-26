@@ -123,6 +123,8 @@ public sealed partial class SettingsWindow
         ThemeBtnLightLabel.Text = Strings.Get("OptLight");
         var defaultSuffix = " " + Strings.Get("SuffixDefault");
         OcrTesseract.Content = Strings.Get("OptTesseract");
+        OcrPpOcrV5.Content = Strings.Get("OptPpOcrV5");
+        BuildPpOcrModelRows();
         // WinRT is the OCR engine default — append a localized "(default)" hint.
         OcrWinRt.Content   = Strings.Get("OptWinRtOcr") + defaultSuffix;
         TrSvcMyMemory.Content = Strings.Get("OptMyMemory");

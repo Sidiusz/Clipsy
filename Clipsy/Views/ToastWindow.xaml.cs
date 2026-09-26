@@ -35,8 +35,10 @@ public sealed partial class ToastWindow : Window
     private readonly bool _persistent;
     private readonly int _dismissSeconds;
     private DispatcherTimer? _dismissTimer;
+    private DispatcherTimer? _firstPaintFallback;
     private EventHandler<object>? _renderHandler;
     private bool _isHovered;
+    private bool _awaitingFirstPaint;
     private bool _fadeInDone;
     private bool _isFadingOut;
     private int _targetX, _targetY, _w, _h, _offscreenX;
@@ -54,7 +56,18 @@ public sealed partial class ToastWindow : Window
         ConfigureWindow();
         ApplyOptions(opts);
         ThemeService.Register(Content as FrameworkElement);
+        Closed += OnWindowClosed;
         StartDismissTimer();
+    }
+
+    private void OnWindowClosed(object? sender, WindowEventArgs e)
+    {
+        _dismissTimer?.Stop();
+        _dismissTimer = null;
+        _firstPaintFallback?.Stop();
+        _firstPaintFallback = null;
+        _awaitingFirstPaint = false;
+        StopRenderHandler();
     }
 
     // ── Public API ──────────────────────────────────────────────
@@ -77,11 +90,13 @@ public sealed partial class ToastWindow : Window
         if (!_fadeInDone)
         {
             _fadeInDone = true;
-            // Show offscreen to the right, then animate left into place.
+            // Compose offscreen while cloaked, then reveal only after XAML
+            // has painted. This prevents the bare HWND black first frame.
+            Cloak(true);
             _appWindow.MoveAndResize(new RectInt32(_offscreenX, _targetY, _w, _h));
-            _appWindow.Show(false);
+            Activate();
             SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            BeginFadeIn();
+            RevealAfterFirstPaint();
         }
         else
         {
@@ -106,6 +121,43 @@ public sealed partial class ToastWindow : Window
     }
 
     // ── Animation (animates the WINDOW position via Win32) ──────
+
+    private void RevealAfterFirstPaint()
+    {
+        StopRenderHandler();
+        _awaitingFirstPaint = true;
+        int frames = 0;
+
+        _renderHandler = (_, _) =>
+        {
+            if (++frames < 2)
+                return;
+
+            CompleteFirstPaintReveal();
+        };
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += _renderHandler;
+
+        _firstPaintFallback?.Stop();
+        _firstPaintFallback = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(180),
+        };
+        _firstPaintFallback.Tick += (_, _) => CompleteFirstPaintReveal();
+        _firstPaintFallback.Start();
+    }
+
+    private void CompleteFirstPaintReveal()
+    {
+        if (!_awaitingFirstPaint)
+            return;
+
+        _awaitingFirstPaint = false;
+        StopRenderHandler();
+        _firstPaintFallback?.Stop();
+        _firstPaintFallback = null;
+        Cloak(false);
+        BeginFadeIn();
+    }
 
     private void BeginFadeIn()
     {
@@ -193,8 +245,9 @@ public sealed partial class ToastWindow : Window
         SetWindowLong(_hwnd, GWL_STYLE, unchecked((int)style));
 
         int exStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
-        exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+        exStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED;
         SetWindowLong(_hwnd, GWL_EXSTYLE, exStyle);
+        SetLayeredWindowAttributes(_hwnd, 0, 255, LWA_ALPHA);
 
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
@@ -281,6 +334,12 @@ public sealed partial class ToastWindow : Window
 
     // ── Helpers ──────────────────────────────────────────────────
 
+    private void Cloak(bool on)
+    {
+        int value = on ? 1 : 0;
+        DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref value, sizeof(int));
+    }
+
     private double DpiScale()
     {
         uint dpi = GetDpiForWindow(_hwnd);
@@ -303,7 +362,9 @@ public sealed partial class ToastWindow : Window
     private const uint WS_SYSMENU     = 0x00080000;
 
     private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const int WS_EX_LAYERED    = 0x00080000;
     private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const uint LWA_ALPHA       = 0x00000002;
 
     private const int SWP_NOMOVE         = 0x0002;
     private const int SWP_NOSIZE         = 0x0001;
@@ -313,6 +374,7 @@ public sealed partial class ToastWindow : Window
     private const int SWP_NOSENDCHANGING = 0x0400;
     private const int SWP_ASYNCWINDOWPOS = 0x4000;
 
+    private const int DWMWA_CLOAK = 13;
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int DWMWA_BORDER_COLOR = 34;
     private const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
@@ -332,6 +394,7 @@ public sealed partial class ToastWindow : Window
 
     [DllImport("user32.dll")] private static extern int    GetWindowLong(IntPtr h, int n);
     [DllImport("user32.dll")] private static extern int    SetWindowLong(IntPtr h, int n, int v);
+    [DllImport("user32.dll")] private static extern bool   SetLayeredWindowAttributes(IntPtr h, uint key, byte alpha, uint flags);
     [DllImport("user32.dll")] private static extern bool   SetWindowPos(IntPtr h, IntPtr z, int x, int y, int cx, int cy, int flags);
     [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr h, int flags);
     [DllImport("user32.dll")] private static extern bool   GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);

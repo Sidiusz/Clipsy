@@ -46,6 +46,7 @@ public sealed partial class SettingsWindow : Window
     // Tessdata language management
     private readonly HashSet<string> _tessSelectedCodes = new();
     private readonly Dictionary<string, CancellationTokenSource> _tessDownloadCts = new();
+    private readonly Dictionary<string, CancellationTokenSource> _ppOcrDownloadCts = new();
 
     // FFmpeg download
     private CancellationTokenSource? _ffmpegCts;
@@ -167,6 +168,8 @@ public sealed partial class SettingsWindow : Window
             _revealFallback?.Stop();
             foreach (var cts in _tessDownloadCts.Values) cts.Cancel();
             _tessDownloadCts.Clear();
+            foreach (var cts in _ppOcrDownloadCts.Values) cts.Cancel();
+            _ppOcrDownloadCts.Clear();
             _ffmpegCts?.Cancel();
             SettingsService.Instance.SettingsChanged -= OnGlobalSettingsChanged;
             UpdateManager.StateChanged -= RenderUpdateStatus;
@@ -419,7 +422,8 @@ public sealed partial class SettingsWindow : Window
             if (TessdataService.IsInstalled(lang.Code))
                 _tessSelectedCodes.Add(lang.Code);
         BuildTessLangRows();
-        UpdateTessLangSectionVisibility();
+        BuildPpOcrModelRows();
+        UpdateOcrEngineSections();
         BuildTranslateLangDropdowns();
         SelectComboByTag(TranslateServiceBox, _draft.TranslateService);
         SelectComboByTag(TranslateFromBox,    _draft.TranslateFrom);

@@ -29,8 +29,28 @@ public static class ToastService
         public int     DismissSeconds  { get; init; } = 5;
     }
 
+    private const int MaxVisibleToasts = 4;
+    private const int MaxQueuedToasts = 12;
+    private const int MaxIncomingToasts = 32;
+
+    private sealed record ToastKey(
+        ToastCategory Category,
+        NotificationLevel Level,
+        string Title,
+        string Body);
+
+    private sealed record ActiveToast(ToastWindow Window, ToastKey Key);
+    private sealed record QueuedToast(ToastOptions Options, ToastKey Key);
+
+    private static readonly object _incomingGate = new();
+    private static readonly Queue<ToastOptions> _incoming = new();
+    private static readonly HashSet<ToastKey> _incomingKeys = new();
+    private static bool _incomingScheduled;
+
     // Mutated on UI thread only.
-    private static readonly List<ToastWindow> _active = new();
+    private static readonly List<ActiveToast> _active = new();
+    private static readonly Queue<QueuedToast> _pending = new();
+    private static readonly HashSet<ToastKey> _known = new();
 
     public static void Show(ToastOptions opts)
     {
@@ -45,37 +65,127 @@ public static class ToastService
 
         var dq = App.Current?.HostWindow?.DispatcherQueue;
         if (dq == null) return;
-        dq.TryEnqueue(() => ShowOnUiThread(opts));
+
+        var key = KeyOf(opts);
+        bool scheduleDrain = false;
+
+        lock (_incomingGate)
+        {
+            if (_incomingKeys.Contains(key))
+                return;
+            if (_incoming.Count >= MaxIncomingToasts)
+                return;
+
+            _incoming.Enqueue(opts);
+            _incomingKeys.Add(key);
+
+            if (!_incomingScheduled)
+            {
+                _incomingScheduled = true;
+                scheduleDrain = true;
+            }
+        }
+
+        if (scheduleDrain && !dq.TryEnqueue(DrainIncomingOnUiThread))
+        {
+            lock (_incomingGate)
+            {
+                _incomingScheduled = false;
+                _incoming.Clear();
+                _incomingKeys.Clear();
+            }
+        }
+    }
+
+    private static ToastKey KeyOf(ToastOptions opts) =>
+        new(opts.Category, opts.Level, opts.Title, opts.Body ?? string.Empty);
+
+    private static void DrainIncomingOnUiThread()
+    {
+        List<ToastOptions> batch = new();
+
+        lock (_incomingGate)
+        {
+            while (_incoming.Count > 0)
+                batch.Add(_incoming.Dequeue());
+
+            _incomingKeys.Clear();
+            _incomingScheduled = false;
+        }
+
+        foreach (var opts in batch)
+            ShowOnUiThread(opts);
     }
 
     private static void ShowOnUiThread(ToastOptions opts)
+    {
+        var key = KeyOf(opts);
+        if (_known.Contains(key))
+            return;
+
+        if (_active.Count >= MaxVisibleToasts)
+        {
+            if (_pending.Count >= MaxQueuedToasts)
+                return;
+
+            _known.Add(key);
+            _pending.Enqueue(new QueuedToast(opts, key));
+            return;
+        }
+
+        _known.Add(key);
+        ShowNow(opts, key);
+    }
+
+    private static void ShowNow(ToastOptions opts, ToastKey key)
     {
         try
         {
             var toast = new ToastWindow(opts);
             toast.Closed += OnToastClosed;
-            _active.Add(toast);
+            _active.Add(new ActiveToast(toast, key));
             RepositionAll();
         }
         catch (Exception ex)
         {
-            Diagnostics.Log("ToastService.ShowOnUiThread", ex);
+            _known.Remove(key);
+            Diagnostics.Log("ToastService.ShowNow", ex);
         }
     }
 
     private static void OnToastClosed(object? sender, Microsoft.UI.Xaml.WindowEventArgs e)
     {
-        if (sender is ToastWindow tw)
+        if (sender is not ToastWindow tw)
+            return;
+
+        tw.Closed -= OnToastClosed;
+
+        for (int i = _active.Count - 1; i >= 0; i--)
         {
-            tw.Closed -= OnToastClosed;
-            _active.Remove(tw);
-            RepositionAll();
+            if (!ReferenceEquals(_active[i].Window, tw))
+                continue;
+
+            _known.Remove(_active[i].Key);
+            _active.RemoveAt(i);
+            break;
+        }
+
+        RepositionAll();
+        DrainPending();
+    }
+
+    private static void DrainPending()
+    {
+        while (_active.Count < MaxVisibleToasts && _pending.Count > 0)
+        {
+            var item = _pending.Dequeue();
+            ShowNow(item.Options, item.Key);
         }
     }
 
     internal static void RepositionAll()
     {
         for (int i = 0; i < _active.Count; i++)
-            _active[i].PositionAtSlot(i);
+            _active[i].Window.PositionAtSlot(i);
     }
 }

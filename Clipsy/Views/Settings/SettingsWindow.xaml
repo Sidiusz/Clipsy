@@ -993,6 +993,7 @@
                                         <ComboBox x:Name="OcrEngineBox" Grid.Column="1" Width="240" HorizontalAlignment="Right" VerticalAlignment="Center"
                                                   SelectionChanged="OnOcrEngineChanged">
                                             <ComboBoxItem x:Name="OcrTesseract" Content="Tesseract" Tag="Tesseract" />
+                                            <ComboBoxItem x:Name="OcrPpOcrV5" Content="PP-OCRv5" Tag="PPOCRv5" />
                                             <ComboBoxItem x:Name="OcrWinRt" Content="Windows OCR" Tag="WinRT" />
                                         </ComboBox>
                                     </Grid>
@@ -1009,6 +1010,21 @@
                                                            Style="{StaticResource ClipsyHelper}" />
                                             </StackPanel>
                                             <StackPanel x:Name="TessLangList" Spacing="2" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- PP-OCRv5 model management -->
+                                    <Border x:Name="PpOcrModelSection" Visibility="Collapsed">
+                                        <StackPanel Spacing="10">
+                                            <Border Style="{StaticResource ClipsyHairline}" />
+                                            <StackPanel Spacing="4">
+                                                <TextBlock x:Name="LblPpOcrModels" Text="PP-OCRv5 models"
+                                                           Style="{StaticResource ClipsyBodyStrong}" />
+                                                <TextBlock x:Name="HelperPpOcrModels"
+                                                           Text="Install the recognition models you need. Installed models are used automatically."
+                                                           Style="{StaticResource ClipsyHelper}" />
+                                            </StackPanel>
+                                            <StackPanel x:Name="PpOcrModelList" Spacing="2" />
                                         </StackPanel>
                                     </Border>
                                 </StackPanel>

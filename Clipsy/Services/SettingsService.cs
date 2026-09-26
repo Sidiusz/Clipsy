@@ -12,7 +12,7 @@ public sealed class AppSettings
     // General
     public string Language { get; set; } = "auto";          // auto / en / ru
     public string Theme { get; set; } = "auto";             // auto / dark / light
-    public string OcrEngine { get; set; } = "WinRT";          // Tesseract / WinRT
+    public string OcrEngine { get; set; } = "WinRT";          // WinRT / Tesseract / PPOCRv5
     public string TesseractLanguages { get; set; } = "";   // comma-separated codes, e.g. "eng,rus"
     public string? ScreenshotFolder { get; set; }
     public string? VideoFolder { get; set; }
@@ -186,6 +186,7 @@ public sealed class SettingsService
     {
         s.Language = OneOf(s.Language, "auto", "auto", "en", "ru");
         s.Theme = OneOf(s.Theme, "auto", "auto", "dark", "light");
+        s.OcrEngine = OneOf(s.OcrEngine, "WinRT", "WinRT", "Tesseract", "PPOCRv5");
         s.ScreenshotFormat = OneOf(s.ScreenshotFormat, "png", "png", "jpg", "webp");
         s.VideoFormat = OneOf(s.VideoFormat, "mp4", "mp4", "avi", "mkv", "gif");
         s.VideoCodec = OneOf(s.VideoCodec, "H.264", "H.264", "H.265", "VP9", "AV1");
