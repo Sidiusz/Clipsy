@@ -249,6 +249,16 @@ public sealed class PpOcrV5Engine : IOcrEngine
                     if (image.Empty())
                         return Array.Empty<OcrWord>();
 
+                    var preparedScaffoldWords = MergeScaffoldFragments(image, scaffoldWords);
+                    if (preparedScaffoldWords.Count >= 3 &&
+                        scriptHint is "cyrillic" or "ascii" or "latin")
+                    {
+                        var scaffoldResult = PostProcessWords(
+                            RecognizeScaffoldWords(image, preparedScaffoldWords));
+                        if (scaffoldResult.Count >= Math.Max(3, preparedScaffoldWords.Count / 2))
+                            return scaffoldResult;
+                    }
+
                     var detected = _detector!.TextDetect(image).Data;
                     if (detected?.ImgCropList == null ||
                         detected.ImgCropList.Count == 0 ||
@@ -293,17 +303,36 @@ public sealed class PpOcrV5Engine : IOcrEngine
                             }
                         }
 
-                        var fallbackModels = new HashSet<string>(
-                            bestModel.Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k!),
+                        var installedModels = PpOcrV5Service.InstalledRecognizerModels();
+                        var wordModelSpecs = new Dictionary<string, PpOcrV5RecognizerSpec>(
                             StringComparer.OrdinalIgnoreCase);
+
+                        foreach (string modelKey in bestModel
+                                     .Where(k => !string.IsNullOrWhiteSpace(k))
+                                     .Select(k => k!))
+                        {
+                            var spec = installedModels.FirstOrDefault(m =>
+                                string.Equals(m.Key, modelKey, StringComparison.OrdinalIgnoreCase));
+                            if (spec != null)
+                                wordModelSpecs[spec.Key] = spec;
+                        }
+
+                        foreach (var scaffoldWord in scaffoldWords)
+                        {
+                            string script = DetectDominantScript(scaffoldWord.Text);
+                            if (script == "neutral")
+                                continue;
+
+                            var spec = SelectCandidateModels(script).FirstOrDefault();
+                            if (spec != null)
+                                wordModelSpecs[spec.Key] = spec;
+                        }
 
                         var wordResultsByModel = new Dictionary<string, RapidOCRSharpOnnx.Models.RecResult[]>(
                             StringComparer.OrdinalIgnoreCase);
-                        foreach (string modelKey in fallbackModels)
+                        foreach (var spec in wordModelSpecs.Values)
                         {
-                            var spec = candidateModels.First(m =>
-                                string.Equals(m.Key, modelKey, StringComparison.OrdinalIgnoreCase));
-                            wordResultsByModel[modelKey] = GetRecognizer(spec)
+                            wordResultsByModel[spec.Key] = GetRecognizer(spec)
                                 .TextRecognize(detected.ImgCropList).Data;
                         }
 
@@ -314,21 +343,40 @@ public sealed class PpOcrV5Engine : IOcrEngine
                             if (string.IsNullOrWhiteSpace(modelKey))
                                 continue;
 
-                            if (!wordResultsByModel.TryGetValue(modelKey, out var wordResults))
-                                continue;
-
                             var line = lines[lineIndex];
                             var rawTexts = new string[line.ItemIndices.Length];
                             var rawScores = new float[line.ItemIndices.Length];
+                            var rawModelKeys = new string[line.ItemIndices.Length];
 
                             for (int i = 0; i < line.ItemIndices.Length; i++)
                             {
                                 int itemIndex = line.ItemIndices[i];
-                                if (itemIndex >= wordResults.Length)
+                                if (itemIndex >= detected.DetItems.Length)
                                     continue;
 
-                                rawTexts[i] = NormalizeWhitespace(wordResults[itemIndex].Label);
-                                rawScores[i] = wordResults[itemIndex].Score;
+                                var bounds = MapBoxToOriginal(detected, detected.DetItems[itemIndex].Box);
+                                if (bounds.Width <= 0 || bounds.Height <= 0)
+                                    continue;
+
+                                string itemScript = DetectScriptForBounds(bounds, scaffoldWords);
+                                string itemModelKey = itemScript == "neutral"
+                                    ? modelKey
+                                    : SelectCandidateModels(itemScript)
+                                        .FirstOrDefault()?.Key ?? modelKey;
+
+                                if (!wordResultsByModel.TryGetValue(itemModelKey, out var itemResults))
+                                {
+                                    itemModelKey = modelKey;
+                                    if (!wordResultsByModel.TryGetValue(itemModelKey, out itemResults))
+                                        continue;
+                                }
+
+                                if (itemIndex >= itemResults.Length)
+                                    continue;
+
+                                rawTexts[i] = NormalizeWhitespace(itemResults[itemIndex].Label);
+                                rawScores[i] = itemResults[itemIndex].Score;
+                                rawModelKeys[i] = itemModelKey;
                             }
 
                             var segments = SegmentLineText(bestLineText[lineIndex], rawTexts);
@@ -338,26 +386,35 @@ public sealed class PpOcrV5Engine : IOcrEngine
                                 if (itemIndex >= detected.DetItems.Length)
                                     continue;
 
+                                var bounds = MapBoxToOriginal(detected, detected.DetItems[itemIndex].Box);
+                                if (bounds.Width <= 0 || bounds.Height <= 0)
+                                    continue;
+
                                 string raw = rawTexts[i] ?? string.Empty;
                                 string segment = i < segments.Length ? segments[i] : string.Empty;
-                                string text = ShouldUseLineSegment(
-                                    raw,
-                                    rawScores[i],
-                                    segment,
-                                    bestLineScore[lineIndex])
+                                bool sameAsLineModel = string.Equals(
+                                    rawModelKeys[i],
+                                    modelKey,
+                                    StringComparison.OrdinalIgnoreCase);
+
+                                string text = sameAsLineModel &&
+                                    ShouldUseLineSegment(
+                                        raw,
+                                        rawScores[i],
+                                        segment,
+                                        bestLineScore[lineIndex])
                                     ? segment
                                     : raw;
 
                                 if (string.IsNullOrWhiteSpace(text))
                                     continue;
 
-                                var bounds = MapBoxToOriginal(detected, detected.DetItems[itemIndex].Box);
-                                if (bounds.Width <= 0 || bounds.Height <= 0)
-                                    continue;
+                                float score = sameAsLineModel
+                                    ? (rawScores[i] > 0
+                                        ? Math.Max(rawScores[i], bestLineScore[lineIndex])
+                                        : bestLineScore[lineIndex])
+                                    : rawScores[i];
 
-                                float score = rawScores[i] > 0
-                                    ? Math.Max(rawScores[i], bestLineScore[lineIndex])
-                                    : bestLineScore[lineIndex];
                                 if (score < MinimumTextScore ||
                                     IsLikelyIconGarbage(text, score, bounds))
                                     continue;
@@ -366,7 +423,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
                             }
                         }
 
-                        return RemoveDuplicateWords(words);
+                        return PostProcessWords(words);
                     }
                 }
                 catch (Exception ex)
@@ -401,7 +458,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
     private static IReadOnlyList<PpOcrV5RecognizerSpec> SelectCandidateModels(string scriptHint)
     {
         var installed = PpOcrV5Service.InstalledRecognizerModels();
-        if (installed.Count <= 3 || scriptHint == "neutral")
+        if (scriptHint == "neutral")
             return installed;
 
         string[] preferred = scriptHint switch
@@ -427,6 +484,599 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
         return selected != null ? [selected] : installed;
     }
+    private static IReadOnlyList<OcrWord> MergeScaffoldFragments(
+        OpenCvSharp.Mat image,
+        IReadOnlyList<OcrWord> words)
+    {
+        if (words.Count < 2)
+            return words;
+
+        double medianH = words
+            .Where(w => w.BoundsPixels.Height > 0)
+            .Select(w => w.BoundsPixels.Height)
+            .OrderBy(h => h)
+            .DefaultIfEmpty(12)
+            .ElementAt(Math.Max(0, words.Count(w => w.BoundsPixels.Height > 0) / 2));
+
+        double lineTolerance = Math.Max(4, medianH * 0.55);
+        var sorted = words
+            .OrderBy(w => w.BoundsPixels.Y)
+            .ThenBy(w => w.BoundsPixels.X)
+            .ToList();
+
+        var lines = new List<List<OcrWord>>();
+        foreach (var word in sorted)
+        {
+            double cy = word.BoundsPixels.Y + word.BoundsPixels.Height * 0.5;
+            List<OcrWord>? target = null;
+
+            foreach (var line in lines)
+            {
+                double lineCy = line.Average(w =>
+                    w.BoundsPixels.Y + w.BoundsPixels.Height * 0.5);
+                if (Math.Abs(cy - lineCy) <= lineTolerance)
+                {
+                    target = line;
+                    break;
+                }
+            }
+
+            if (target == null)
+            {
+                target = new List<OcrWord>();
+                lines.Add(target);
+            }
+            target.Add(word);
+        }
+
+        var result = new List<OcrWord>(words.Count);
+        foreach (var line in lines)
+        {
+            line.Sort((a, b) => a.BoundsPixels.X.CompareTo(b.BoundsPixels.X));
+            if (line.Count == 0)
+                continue;
+
+            OcrWord current = line[0];
+            for (int i = 1; i < line.Count; i++)
+            {
+                var next = line[i];
+                if (ShouldMergeScaffoldPair(image, current.BoundsPixels, next.BoundsPixels))
+                {
+                    var a = current.BoundsPixels;
+                    var b = next.BoundsPixels;
+                    double x0 = Math.Min(a.X, b.X);
+                    double y0 = Math.Min(a.Y, b.Y);
+                    double x1 = Math.Max(a.X + a.Width, b.X + b.Width);
+                    double y1 = Math.Max(a.Y + a.Height, b.Y + b.Height);
+                    current = new OcrWord(
+                        NormalizeWhitespace(current.Text) + NormalizeWhitespace(next.Text),
+                        new Rect(x0, y0, x1 - x0, y1 - y0));
+                }
+                else
+                {
+                    result.Add(current);
+                    current = next;
+                }
+            }
+            result.Add(current);
+        }
+
+        return result
+            .OrderBy(w => w.BoundsPixels.Y)
+            .ThenBy(w => w.BoundsPixels.X)
+            .ToArray();
+    }
+
+    private static bool ShouldMergeScaffoldPair(
+        OpenCvSharp.Mat image,
+        Rect left,
+        Rect right)
+    {
+        double leftRight = left.X + left.Width;
+        double gap = right.X - leftRight;
+        double h = Math.Max(left.Height, right.Height);
+
+        double minRepairGap = Math.Max(7, h * 0.60);
+        if (gap < minRepairGap || gap > Math.Max(24, h * 1.8))
+            return false;
+
+        int x0 = Math.Clamp((int)Math.Floor(leftRight), 0, image.Width - 1);
+        int x1 = Math.Clamp((int)Math.Ceiling(right.X), x0 + 1, image.Width);
+        int y0 = Math.Clamp(
+            (int)Math.Floor(Math.Min(left.Y, right.Y)),
+            0,
+            image.Height - 1);
+        int y1 = Math.Clamp(
+            (int)Math.Ceiling(Math.Max(left.Y + left.Height, right.Y + right.Height)),
+            y0 + 1,
+            image.Height);
+
+        int gapWidth = x1 - x0;
+        int height = y1 - y0;
+        if (gapWidth <= 1 || height <= 2)
+            return false;
+
+        int ux0 = Math.Clamp((int)Math.Floor(left.X), 0, image.Width - 1);
+        int ux1 = Math.Clamp((int)Math.Ceiling(right.X + right.Width), ux0 + 1, image.Width);
+        using var union = new OpenCvSharp.Mat(
+            image,
+            new OpenCvSharp.Rect(ux0, y0, ux1 - ux0, height));
+        using var gray = new OpenCvSharp.Mat();
+        using var binary = new OpenCvSharp.Mat();
+        OpenCvSharp.Cv2.CvtColor(union, gray, OpenCvSharp.ColorConversionCodes.BGR2GRAY);
+        OpenCvSharp.Cv2.Threshold(
+            gray,
+            binary,
+            0,
+            255,
+            OpenCvSharp.ThresholdTypes.Binary | OpenCvSharp.ThresholdTypes.Otsu);
+
+        if (OpenCvSharp.Cv2.CountNonZero(binary) > binary.Width * binary.Height / 2)
+            OpenCvSharp.Cv2.BitwiseNot(binary, binary);
+
+        int localGapStart = Math.Clamp(x0 - ux0, 0, binary.Width - 1);
+        int localGapEnd = Math.Clamp(x1 - ux0, localGapStart + 1, binary.Width);
+        int inkColumns = 0;
+        int blankRun = 0;
+        int maxBlankRun = 0;
+        int minInkPerColumn = Math.Max(2, (int)Math.Round(binary.Height * 0.10));
+
+        for (int x = localGapStart; x < localGapEnd; x++)
+        {
+            int ink = 0;
+            for (int y = 0; y < binary.Height; y++)
+            {
+                if (binary.At<byte>(y, x) != 0)
+                    ink++;
+            }
+
+            if (ink >= minInkPerColumn)
+            {
+                inkColumns++;
+                blankRun = 0;
+            }
+            else
+            {
+                blankRun++;
+                maxBlankRun = Math.Max(maxBlankRun, blankRun);
+            }
+        }
+
+        // Missing glyph fragments inside one word still leave ink across most
+        // of the gap. A real word boundary contains a wider fully blank run.
+        int wordSpaceRun = Math.Max(4, (int)Math.Round(binary.Height * 0.22));
+        if (maxBlankRun >= wordSpaceRun)
+            return false;
+
+        return inkColumns >= Math.Max(2, (int)Math.Ceiling(gapWidth * 0.25));
+    }
+
+    private static IReadOnlyList<OcrWord> RecognizeScaffoldWords(
+        OpenCvSharp.Mat image,
+        IReadOnlyList<OcrWord> scaffoldWords)
+    {
+        var output = new OcrWord?[scaffoldWords.Count];
+        var groups = new Dictionary<string, (PpOcrV5RecognizerSpec Spec, List<int> Indices)>(
+            StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < scaffoldWords.Count; i++)
+        {
+            string scaffoldText = NormalizeWhitespace(scaffoldWords[i].Text);
+            var bounds = scaffoldWords[i].BoundsPixels;
+            if (scaffoldText.Length == 0 || bounds.Width <= 0 || bounds.Height <= 0)
+                continue;
+
+            if (HasMixedLetterScripts(scaffoldText))
+            {
+                if (!IsLikelyIconGarbage(scaffoldText, 1f, bounds))
+                    output[i] = new OcrWord(scaffoldText, bounds);
+                continue;
+            }
+
+            var spec = LooksLikeTechnicalAlphaNumeric(scaffoldText)
+                ? PpOcrV5Service.InstalledRecognizerModels().FirstOrDefault(m =>
+                    string.Equals(m.Key, "en", StringComparison.OrdinalIgnoreCase))
+                : SelectPrimaryModelForScript(DetectDominantScript(scaffoldText));
+            if (spec == null)
+            {
+                if (!IsLikelyIconGarbage(scaffoldText, 1f, bounds))
+                    output[i] = new OcrWord(scaffoldText, bounds);
+                continue;
+            }
+
+            if (!groups.TryGetValue(spec.Key, out var group))
+            {
+                group = (spec, new List<int>());
+                groups[spec.Key] = group;
+            }
+            group.Indices.Add(i);
+        }
+
+        foreach (var group in groups.Values)
+        {
+            using var crops = BuildScaffoldWordCrops(image, scaffoldWords, group.Indices);
+            if (crops.Count == 0)
+                continue;
+
+            var recognized = GetRecognizer(group.Spec).TextRecognize(crops).Data;
+            int count = Math.Min(group.Indices.Count, recognized.Length);
+
+            for (int resultIndex = 0; resultIndex < count; resultIndex++)
+            {
+                int wordIndex = group.Indices[resultIndex];
+                var scaffold = scaffoldWords[wordIndex];
+                string scaffoldText = NormalizeWhitespace(scaffold.Text);
+                string recognizedText = NormalizeWhitespace(recognized[resultIndex].Label);
+                float score = recognized[resultIndex].Score;
+
+                string chosen = ChooseScaffoldRecognition(
+                    scaffoldText,
+                    recognizedText,
+                    score,
+                    group.Spec.Key);
+
+                chosen = TryRecoverMissingPrefix(
+                    image,
+                    scaffoldWords,
+                    wordIndex,
+                    group.Spec,
+                    scaffoldText,
+                    chosen);
+
+                if (string.IsNullOrWhiteSpace(chosen) ||
+                    IsLikelyIconGarbage(chosen, Math.Max(score, 0.90f), scaffold.BoundsPixels))
+                    continue;
+
+                output[wordIndex] = new OcrWord(chosen, scaffold.BoundsPixels);
+            }
+        }
+
+        return output.Where(w => w != null).Select(w => w!).ToArray();
+    }
+
+    private static string TryRecoverMissingPrefix(
+        OpenCvSharp.Mat image,
+        IReadOnlyList<OcrWord> scaffoldWords,
+        int wordIndex,
+        PpOcrV5RecognizerSpec spec,
+        string scaffoldText,
+        string chosen)
+    {
+        if (wordIndex <= 0 ||
+            CompactForCompare(scaffoldText).Length < 4 ||
+            !string.Equals(
+                NormalizeWhitespace(chosen),
+                NormalizeWhitespace(scaffoldText),
+                StringComparison.OrdinalIgnoreCase))
+            return chosen;
+
+        var previous = scaffoldWords[wordIndex - 1].BoundsPixels;
+        var current = scaffoldWords[wordIndex].BoundsPixels;
+        if (!IsSameScaffoldLine(previous, current))
+            return chosen;
+
+        double gap = current.X - (previous.X + previous.Width);
+        double h = Math.Max(previous.Height, current.Height);
+        if (gap < Math.Max(10, h * 1.25))
+            return chosen;
+
+        int? boundary = FindWordBoundaryX(image, previous, current);
+        if (!boundary.HasValue ||
+            !HasInkBetween(image, boundary.Value, (int)Math.Floor(current.X), current))
+            return chosen;
+
+        int pad = Math.Max(1, (int)Math.Round(Math.Min(current.Width, current.Height) * 0.08));
+        int x0 = Math.Clamp(boundary.Value, 0, image.Width - 1);
+        int y0 = Math.Clamp((int)Math.Floor(current.Y) - pad, 0, image.Height - 1);
+        int x1 = Math.Clamp(
+            (int)Math.Ceiling(current.X + current.Width) + pad,
+            x0 + 1,
+            image.Width);
+        int y1 = Math.Clamp(
+            (int)Math.Ceiling(current.Y + current.Height) + pad,
+            y0 + 1,
+            image.Height);
+
+        using var crops =
+            new DisposableList<RapidOCRSharpOnnx.Inference.PPOCR_Rec.Models.ImageIndex>();
+        var crop = new OpenCvSharp.Mat(
+            image,
+            new OpenCvSharp.Rect(x0, y0, x1 - x0, y1 - y0)).Clone();
+        crops.Add(new RapidOCRSharpOnnx.Inference.PPOCR_Rec.Models.ImageIndex(crop, 0));
+
+        var recognized = GetRecognizer(spec).TextRecognize(crops).Data;
+        if (recognized.Length == 0 || recognized[0].Score < 0.75f)
+            return chosen;
+
+        string expanded = NormalizeWhitespace(recognized[0].Label);
+        string baseline = NormalizeWhitespace(chosen);
+        if (expanded.Length <= baseline.Length ||
+            expanded.Length > baseline.Length + 4 ||
+            !expanded.EndsWith(baseline, StringComparison.OrdinalIgnoreCase))
+            return chosen;
+
+        return expanded;
+    }
+
+    private static DisposableList<RapidOCRSharpOnnx.Inference.PPOCR_Rec.Models.ImageIndex>
+        BuildScaffoldWordCrops(
+            OpenCvSharp.Mat image,
+            IReadOnlyList<OcrWord> scaffoldWords,
+            IReadOnlyList<int> indices)
+    {
+        var crops =
+            new DisposableList<RapidOCRSharpOnnx.Inference.PPOCR_Rec.Models.ImageIndex>();
+
+        foreach (int index in indices)
+        {
+            var b = scaffoldWords[index].BoundsPixels;
+            int pad = Math.Max(1, (int)Math.Round(Math.Min(b.Width, b.Height) * 0.08));
+            int x0 = Math.Clamp((int)Math.Floor(b.X) - pad, 0, image.Width - 1);
+            int y0 = Math.Clamp((int)Math.Floor(b.Y) - pad, 0, image.Height - 1);
+            int x1 = Math.Clamp((int)Math.Ceiling(b.X + b.Width) + pad, x0 + 1, image.Width);
+            int y1 = Math.Clamp((int)Math.Ceiling(b.Y + b.Height) + pad, y0 + 1, image.Height);
+
+            var crop = new OpenCvSharp.Mat(
+                image,
+                new OpenCvSharp.Rect(x0, y0, x1 - x0, y1 - y0)).Clone();
+            crops.Add(new RapidOCRSharpOnnx.Inference.PPOCR_Rec.Models.ImageIndex(crop, index));
+        }
+
+        return crops;
+    }
+
+    private static bool IsSameScaffoldLine(Rect a, Rect b)
+    {
+        double acy = a.Y + a.Height * 0.5;
+        double bcy = b.Y + b.Height * 0.5;
+        return Math.Abs(acy - bcy) <= Math.Max(4, Math.Max(a.Height, b.Height) * 0.65);
+    }
+
+    private static int? FindWordBoundaryX(OpenCvSharp.Mat image, Rect left, Rect right)
+    {
+        int gapStart = Math.Clamp(
+            (int)Math.Ceiling(left.X + left.Width),
+            0,
+            image.Width - 1);
+        int gapEnd = Math.Clamp(
+            (int)Math.Floor(right.X),
+            gapStart + 1,
+            image.Width);
+
+        if (gapEnd - gapStart < 2)
+            return null;
+
+        int y0 = Math.Clamp(
+            (int)Math.Floor(Math.Min(left.Y, right.Y)) - 2,
+            0,
+            image.Height - 1);
+        int y1 = Math.Clamp(
+            (int)Math.Ceiling(Math.Max(left.Y + left.Height, right.Y + right.Height)) + 2,
+            y0 + 1,
+            image.Height);
+
+        using var crop = new OpenCvSharp.Mat(
+            image,
+            new OpenCvSharp.Rect(gapStart, y0, gapEnd - gapStart, y1 - y0));
+        using var gray = new OpenCvSharp.Mat();
+        using var binary = new OpenCvSharp.Mat();
+        OpenCvSharp.Cv2.CvtColor(crop, gray, OpenCvSharp.ColorConversionCodes.BGR2GRAY);
+        OpenCvSharp.Cv2.Threshold(
+            gray,
+            binary,
+            0,
+            255,
+            OpenCvSharp.ThresholdTypes.Binary | OpenCvSharp.ThresholdTypes.Otsu);
+
+        if (OpenCvSharp.Cv2.CountNonZero(binary) > binary.Width * binary.Height / 2)
+            OpenCvSharp.Cv2.BitwiseNot(binary, binary);
+
+        int minInkPerColumn = Math.Max(1, (int)Math.Round(binary.Height * 0.06));
+        int runStart = -1;
+        int bestStart = -1;
+        int bestLength = 0;
+
+        for (int x = 0; x < binary.Width; x++)
+        {
+            int ink = 0;
+            for (int y = 0; y < binary.Height; y++)
+            {
+                if (binary.At<byte>(y, x) != 0)
+                    ink++;
+            }
+
+            if (ink <= minInkPerColumn)
+            {
+                if (runStart < 0)
+                    runStart = x;
+            }
+            else if (runStart >= 0)
+            {
+                int length = x - runStart;
+                if (length > bestLength)
+                {
+                    bestLength = length;
+                    bestStart = runStart;
+                }
+                runStart = -1;
+            }
+        }
+
+        if (runStart >= 0)
+        {
+            int length = binary.Width - runStart;
+            if (length > bestLength)
+            {
+                bestLength = length;
+                bestStart = runStart;
+            }
+        }
+
+        if (bestStart < 0 || bestLength < 2)
+            return null;
+
+        return gapStart + bestStart + bestLength / 2;
+    }
+
+    private static bool HasInkBetween(
+        OpenCvSharp.Mat image,
+        int xStart,
+        int xEnd,
+        Rect reference)
+    {
+        int x0 = Math.Clamp(Math.Min(xStart, xEnd), 0, image.Width - 1);
+        int x1 = Math.Clamp(Math.Max(xStart, xEnd), x0 + 1, image.Width);
+        if (x1 - x0 < 2)
+            return false;
+
+        int y0 = Math.Clamp(
+            (int)Math.Floor(reference.Y) - 2,
+            0,
+            image.Height - 1);
+        int y1 = Math.Clamp(
+            (int)Math.Ceiling(reference.Y + reference.Height) + 2,
+            y0 + 1,
+            image.Height);
+
+        using var crop = new OpenCvSharp.Mat(
+            image,
+            new OpenCvSharp.Rect(x0, y0, x1 - x0, y1 - y0));
+        using var gray = new OpenCvSharp.Mat();
+        using var binary = new OpenCvSharp.Mat();
+        OpenCvSharp.Cv2.CvtColor(crop, gray, OpenCvSharp.ColorConversionCodes.BGR2GRAY);
+        OpenCvSharp.Cv2.Threshold(
+            gray,
+            binary,
+            0,
+            255,
+            OpenCvSharp.ThresholdTypes.Binary | OpenCvSharp.ThresholdTypes.Otsu);
+
+        if (OpenCvSharp.Cv2.CountNonZero(binary) > binary.Width * binary.Height / 2)
+            OpenCvSharp.Cv2.BitwiseNot(binary, binary);
+
+        int foreground = OpenCvSharp.Cv2.CountNonZero(binary);
+        int area = binary.Width * binary.Height;
+        return foreground >= Math.Max(4, (int)Math.Round(area * 0.03));
+    }
+
+    private static PpOcrV5RecognizerSpec? SelectPrimaryModelForScript(string script)
+    {
+        var installed = PpOcrV5Service.InstalledRecognizerModels();
+        if (installed.Count == 0)
+            return null;
+
+        if (script == "neutral")
+        {
+            return installed.FirstOrDefault(m =>
+                       string.Equals(m.Key, "en", StringComparison.OrdinalIgnoreCase))
+                   ?? installed.FirstOrDefault(m =>
+                       string.Equals(m.Key, "latin", StringComparison.OrdinalIgnoreCase))
+                   ?? installed[0];
+        }
+
+        return SelectCandidateModels(script).FirstOrDefault();
+    }
+
+    private static string ChooseScaffoldRecognition(
+        string scaffoldText,
+        string recognizedText,
+        float score,
+        string modelKey)
+    {
+        if (recognizedText.Length == 0 || score < MinimumTextScore)
+            return scaffoldText;
+
+        string expectedScript = DetectDominantScript(scaffoldText);
+        string recognizedScript = DetectDominantScript(recognizedText);
+
+        if (LooksLikeTechnicalAlphaNumeric(scaffoldText) &&
+            string.Equals(modelKey, "en", StringComparison.OrdinalIgnoreCase) &&
+            recognizedScript == "ascii")
+            return recognizedText;
+
+        if (expectedScript != "neutral" &&
+            recognizedScript != "neutral" &&
+            !string.Equals(expectedScript, recognizedScript, StringComparison.Ordinal))
+            return scaffoldText;
+
+        if (!HasMixedLetterScripts(scaffoldText) &&
+            HasMixedLetterScripts(recognizedText))
+            return scaffoldText;
+
+        double ratio = recognizedText.Length / (double)Math.Max(1, scaffoldText.Length);
+        if ((ratio < 0.45 || ratio > 2.2) && score < 0.92f)
+            return scaffoldText;
+
+        return recognizedText;
+    }
+
+    private static bool LooksLikeTechnicalAlphaNumeric(string text)
+    {
+        string compact = CompactForCompare(text);
+        if (compact.Length is < 2 or > 20)
+            return false;
+
+        int digits = compact.Count(char.IsDigit);
+        int letters = compact.Count(char.IsLetter);
+        if (digits == 0 || letters == 0)
+            return false;
+
+        if (letters <= 4)
+            return true;
+
+        return compact.Any(ch => ch is '-' or '_' or '.' or '/');
+    }
+
+    private static bool HasMixedLetterScripts(string text)
+    {
+        var scripts = new HashSet<string>(StringComparer.Ordinal);
+        foreach (char ch in text)
+        {
+            if (!char.IsLetter(ch))
+                continue;
+
+            string script = GetLetterScript(ch);
+            if (script != "neutral")
+                scripts.Add(script);
+
+            if (scripts.Count > 1)
+                return true;
+        }
+        return false;
+    }
+
+    private static string GetLetterScript(char ch)
+    {
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z'))
+            return "ascii";
+        if ((ch >= '\u00C0' && ch <= '\u024F') ||
+            (ch >= '\u1E00' && ch <= '\u1EFF'))
+            return "latin";
+        if (ch >= '\u0400' && ch <= '\u052F')
+            return "cyrillic";
+        if ((ch >= '\u3040' && ch <= '\u30FF') ||
+            (ch >= '\u3400' && ch <= '\u9FFF'))
+            return "cjk";
+        if ((ch >= '\u1100' && ch <= '\u11FF') ||
+            (ch >= '\uAC00' && ch <= '\uD7AF'))
+            return "korean";
+        if (ch >= '\u0E00' && ch <= '\u0E7F')
+            return "th";
+        if (ch >= '\u0370' && ch <= '\u03FF')
+            return "el";
+        if ((ch >= '\u0600' && ch <= '\u06FF') ||
+            (ch >= '\u0750' && ch <= '\u077F') ||
+            (ch >= '\u08A0' && ch <= '\u08FF'))
+            return "arabic";
+        if (ch >= '\u0900' && ch <= '\u097F')
+            return "devanagari";
+        if (ch >= '\u0B80' && ch <= '\u0BFF')
+            return "ta";
+        if (ch >= '\u0C00' && ch <= '\u0C7F')
+            return "te";
+        return "neutral";
+    }
+
     private static void EnsureInitialized()
     {
         if (_detector != null && _recognizers != null)
@@ -616,6 +1266,31 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
         return lineScore >= rawScore + LineCorrectionMargin ||
                (rawScore < 0.75f && lineScore >= 0.85f);
+    }
+
+    private static string DetectScriptForBounds(
+        Rect bounds,
+        IReadOnlyList<OcrWord> scaffoldWords)
+    {
+        const double pad = 4.0;
+        var texts = scaffoldWords
+            .Where(w =>
+            {
+                var b = w.BoundsPixels;
+                double cx = b.X + b.Width * 0.5;
+                double cy = b.Y + b.Height * 0.5;
+                return cx >= bounds.X - pad &&
+                       cx <= bounds.X + bounds.Width + pad &&
+                       cy >= bounds.Y - pad &&
+                       cy <= bounds.Y + bounds.Height + pad;
+            })
+            .Select(w => w.Text)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .ToArray();
+
+        return texts.Length > 0
+            ? DetectDominantScript(string.Join(' ', texts))
+            : "neutral";
     }
 
     private static string NormalizeWhitespace(string? text)
@@ -826,6 +1501,119 @@ public sealed class PpOcrV5Engine : IOcrEngine
             return [new OcrWord(normalized, bounds)];
         }
     }
+    private static IReadOnlyList<OcrWord> PostProcessWords(IReadOnlyList<OcrWord> words)
+    {
+        var tagged = new List<(OcrWord Word, bool FromMixedSplit)>(words.Count);
+
+        foreach (var word in words)
+        {
+            string text = NormalizeWhitespace(word.Text);
+            if (text.Length < 2)
+            {
+                if (text.Length > 0)
+                    tagged.Add((word, false));
+                continue;
+            }
+
+            var cuts = new List<int>();
+            for (int i = 1; i < text.Length; i++)
+            {
+                char left = text[i - 1];
+                char right = text[i];
+                if (!char.IsLetter(left) || !char.IsLetter(right))
+                    continue;
+
+                string leftScript = GetLetterScript(left);
+                string rightScript = GetLetterScript(right);
+                bool latinCyrillic =
+                    (leftScript is "ascii" or "latin" && rightScript == "cyrillic") ||
+                    (leftScript == "cyrillic" && rightScript is "ascii" or "latin");
+
+                if (latinCyrillic)
+                    cuts.Add(i);
+            }
+
+            if (cuts.Count == 0)
+            {
+                tagged.Add((new OcrWord(text, word.BoundsPixels), false));
+                continue;
+            }
+
+            int start = 0;
+            var allCuts = cuts.Append(text.Length).ToArray();
+            foreach (int end in allCuts)
+            {
+                if (end <= start)
+                    continue;
+
+                string part = text[start..end];
+                double x0 = word.BoundsPixels.X +
+                            word.BoundsPixels.Width * start / text.Length;
+                double x1 = word.BoundsPixels.X +
+                            word.BoundsPixels.Width * end / text.Length;
+
+                tagged.Add((new OcrWord(
+                    part,
+                    new Rect(
+                        x0,
+                        word.BoundsPixels.Y,
+                        Math.Max(1, x1 - x0),
+                        word.BoundsPixels.Height)), true));
+
+                start = end;
+            }
+        }
+
+        var filtered = new List<OcrWord>(tagged.Count);
+        for (int i = 0; i < tagged.Count; i++)
+        {
+            var candidate = tagged[i];
+            if (candidate.FromMixedSplit)
+            {
+                bool originalNearby = false;
+                for (int j = 0; j < tagged.Count; j++)
+                {
+                    if (j == i)
+                        continue;
+
+                    var other = tagged[j];
+                    if (!other.FromMixedSplit &&
+                        string.Equals(
+                            NormalizeWhitespace(other.Word.Text),
+                            NormalizeWhitespace(candidate.Word.Text),
+                            StringComparison.OrdinalIgnoreCase) &&
+                        AreNearbyOnSameLine(other.Word.BoundsPixels, candidate.Word.BoundsPixels))
+                    {
+                        originalNearby = true;
+                        break;
+                    }
+                }
+
+                if (originalNearby)
+                    continue;
+            }
+
+            filtered.Add(candidate.Word);
+        }
+
+        return RemoveDuplicateWords(filtered);
+    }
+
+    private static bool AreNearbyOnSameLine(Rect a, Rect b)
+    {
+        if (!IsSameScaffoldLine(a, b))
+            return false;
+
+        double aRight = a.X + a.Width;
+        double bRight = b.X + b.Width;
+        double gap = aRight < b.X
+            ? b.X - aRight
+            : bRight < a.X
+                ? a.X - bRight
+                : 0;
+
+        return gap <= Math.Max(12, Math.Max(a.Height, b.Height));
+    }
     private static IReadOnlyList<OcrWord> RemoveDuplicateWords(IReadOnlyList<OcrWord> words)
     {
         var result = new List<OcrWord>(words.Count);
@@ -867,7 +1655,16 @@ public sealed class PpOcrV5Engine : IOcrEngine
         string normalized = NormalizeWhitespace(text);
         int glyphs = normalized.Count(char.IsLetterOrDigit);
         if (glyphs == 0)
-            return true;
+        {
+            if (normalized.Length == 1 &&
+                normalized[0] is '•' or '●' or '◦' or '▪' or '■' or '□' or '◆' or '◇')
+                return true;
+
+            if (bounds.Width <= 6 && bounds.Height <= 6)
+                return true;
+
+            return false;
+        }
 
         double aspect = bounds.Width / Math.Max(1.0, bounds.Height);
         if (glyphs == 1 &&
