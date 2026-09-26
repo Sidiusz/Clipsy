@@ -46,8 +46,27 @@ public static class ToastService
     private static bool _incomingScheduled;
 
     // Mutated on UI thread only.
+    private static readonly List<ToastWindow> _pool = new();
     private static readonly List<ActiveToast> _active = new();
     private static readonly HashSet<ToastKey> _known = new();
+
+    internal static void Prewarm()
+    {
+        var dq = App.Current?.HostWindow?.DispatcherQueue;
+        if (dq == null) return;
+        dq.TryEnqueue(EnsurePoolOnUiThread);
+    }
+
+    private static void EnsurePoolOnUiThread()
+    {
+        while (_pool.Count < MaxVisibleToasts)
+        {
+            var toast = new ToastWindow();
+            toast.Dismissed += OnToastDismissed;
+            toast.Prewarm();
+            _pool.Add(toast);
+        }
+    }
 
     public static void Show(ToastOptions opts)
     {
@@ -116,6 +135,7 @@ public static class ToastService
 
     private static void ShowOnUiThread(ToastOptions opts)
     {
+        EnsurePoolOnUiThread();
         var key = KeyOf(opts);
         if (_known.Contains(key))
             return;
@@ -129,12 +149,26 @@ public static class ToastService
 
     private static void ShowNow(ToastOptions opts, ToastKey key)
     {
+        ToastWindow? toast = null;
+        foreach (var candidate in _pool)
+        {
+            if (!candidate.IsInUse)
+            {
+                toast = candidate;
+                break;
+            }
+        }
+
+        if (toast == null)
+        {
+            _known.Remove(key);
+            return;
+        }
+
         try
         {
-            var toast = new ToastWindow(opts);
-            toast.Closed += OnToastClosed;
+            toast.ShowToast(opts, _active.Count);
             _active.Add(new ActiveToast(toast, key));
-            RepositionAll();
         }
         catch (Exception ex)
         {
@@ -143,12 +177,10 @@ public static class ToastService
         }
     }
 
-    private static void OnToastClosed(object? sender, Microsoft.UI.Xaml.WindowEventArgs e)
+    private static void OnToastDismissed(object? sender, EventArgs e)
     {
         if (sender is not ToastWindow tw)
             return;
-
-        tw.Closed -= OnToastClosed;
 
         for (int i = _active.Count - 1; i >= 0; i--)
         {

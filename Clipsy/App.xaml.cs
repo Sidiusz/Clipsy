@@ -84,6 +84,7 @@ public partial class App : Application
         _trayMenu.ExitClicked                 += OnExitRequested;
         UpdateManager.Init(HostWindow.DispatcherQueue);
         ThemeService.Register(HostWindow.Content as Microsoft.UI.Xaml.FrameworkElement);
+        ToastService.Prewarm();
 
         SingleInstanceService.StartServer(HandleCliRequest);
 

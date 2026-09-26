@@ -31,49 +31,88 @@ public sealed partial class ToastWindow : Window
 
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
-    private readonly Action? _action1;
-    private readonly Action? _action2;
-    private readonly bool _persistent;
-    private readonly int _dismissSeconds;
+    private Action? _action1;
+    private Action? _action2;
+    private bool _persistent;
+    private int _dismissSeconds;
     private DispatcherTimer? _dismissTimer;
-    private DispatcherTimer? _firstPaintFallback;
     private EventHandler<object>? _renderHandler;
     private bool _isHovered;
-    private bool _awaitingFirstPaint;
-    private bool _fadeInDone;
     private bool _isFadingOut;
+    private bool _isInUse;
+    private bool _isPrewarmed;
     private int _targetX, _targetY, _currentX, _currentY, _w, _h, _offscreenX;
 
-    public ToastWindow(ToastService.ToastOptions opts)
+    internal bool IsInUse => _isInUse;
+    internal event EventHandler? Dismissed;
+
+    public ToastWindow()
     {
         InitializeComponent();
         _hwnd = WindowNative.GetWindowHandle(this);
         _appWindow = AppWindow.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(_hwnd));
-        _action1 = opts.Action1Callback;
-        _action2 = opts.Action2Callback;
-        _persistent = opts.Persistent;
-        _dismissSeconds = opts.DismissSeconds;
 
         ConfigureWindow();
-        ApplyOptions(opts);
         ThemeService.Register(Content as FrameworkElement);
         Closed += OnWindowClosed;
-        StartDismissTimer();
     }
 
     private void OnWindowClosed(object? sender, WindowEventArgs e)
     {
         _dismissTimer?.Stop();
         _dismissTimer = null;
-        _firstPaintFallback?.Stop();
-        _firstPaintFallback = null;
-        _awaitingFirstPaint = false;
         StopRenderHandler();
     }
 
     // ── Public API ──────────────────────────────────────────────
 
+    internal void Prewarm()
+    {
+        if (_isPrewarmed)
+            return;
+
+        _isPrewarmed = true;
+        Cloak(true);
+        _appWindow.MoveAndResize(new RectInt32(-32000, -32000, ToastW, 72));
+        _appWindow.Show(false);
+    }
+
+    internal void ShowToast(ToastService.ToastOptions opts, int index)
+    {
+        Prewarm();
+        StopRenderHandler();
+        _dismissTimer?.Stop();
+        _dismissTimer = null;
+
+        _action1 = opts.Action1Callback;
+        _action2 = opts.Action2Callback;
+        _persistent = opts.Persistent;
+        _dismissSeconds = opts.DismissSeconds;
+        _isHovered = false;
+        _isFadingOut = false;
+        _isInUse = true;
+
+        ApplyOptions(opts);
+        CalculateSlot(index);
+
+        _currentX = _offscreenX;
+        _currentY = _targetY;
+        SetWindowPos(_hwnd, HWND_TOPMOST, _currentX, _currentY, _w, _h, SWP_NOACTIVATE);
+        Cloak(false);
+        AnimateTo(_targetX, _targetY, FadeInMs, EaseOutCubic);
+        StartDismissTimer();
+    }
+
     internal void PositionAtSlot(int index)
+    {
+        if (!_isInUse || _isFadingOut)
+            return;
+
+        CalculateSlot(index);
+        AnimateTo(_targetX, _targetY, RepositionMs, EaseOutCubic);
+    }
+
+    private void CalculateSlot(int index)
     {
         double scale = DpiScale();
         _w = (int)(ToastW * scale);
@@ -86,31 +125,7 @@ public sealed partial class ToastWindow : Window
 
         _targetX = mi.rcWork.right - _w - margin;
         _targetY = mi.rcWork.bottom - _h - margin - index * (_h + gap);
-        _offscreenX = mi.rcWork.right; // window left edge sits exactly at work-area right edge
-
-        if (!_fadeInDone)
-        {
-            _fadeInDone = true;
-            // Compose offscreen while cloaked, then reveal only after XAML
-            // has painted. This prevents the bare HWND black first frame.
-            Cloak(true);
-            _currentX = _offscreenX;
-            _currentY = _targetY;
-            _appWindow.MoveAndResize(new RectInt32(_currentX, _currentY, _w, _h));
-            Activate();
-            SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            RevealAfterFirstPaint();
-        }
-        else if (_awaitingFirstPaint)
-        {
-            _currentX = _offscreenX;
-            _currentY = _targetY;
-            SetWindowPos(_hwnd, HWND_TOPMOST, _currentX, _currentY, _w, _h, SWP_NOACTIVATE);
-        }
-        else if (!_isFadingOut)
-        {
-            AnimateTo(_targetX, _targetY, RepositionMs, EaseOutCubic);
-        }
+        _offscreenX = mi.rcWork.right;
     }
 
     private int ComputeHeightPx(double scale)
@@ -130,58 +145,29 @@ public sealed partial class ToastWindow : Window
 
     // ── Animation (animates the WINDOW position via Win32) ──────
 
-    private void RevealAfterFirstPaint()
-    {
-        StopRenderHandler();
-        _awaitingFirstPaint = true;
-        int frames = 0;
-
-        _renderHandler = (_, _) =>
-        {
-            if (++frames < 2)
-                return;
-
-            CompleteFirstPaintReveal();
-        };
-        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += _renderHandler;
-
-        _firstPaintFallback?.Stop();
-        _firstPaintFallback = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(180),
-        };
-        _firstPaintFallback.Tick += (_, _) => CompleteFirstPaintReveal();
-        _firstPaintFallback.Start();
-    }
-
-    private void CompleteFirstPaintReveal()
-    {
-        if (!_awaitingFirstPaint)
-            return;
-
-        _awaitingFirstPaint = false;
-        StopRenderHandler();
-        _firstPaintFallback?.Stop();
-        _firstPaintFallback = null;
-        Cloak(false);
-        BeginFadeIn();
-    }
-
-    private void BeginFadeIn()
-    {
-        AnimateTo(_targetX, _targetY, FadeInMs, EaseOutCubic);
-    }
-
     private void BeginFadeOut()
     {
-        if (_isFadingOut) return;
+        if (_isFadingOut || !_isInUse)
+            return;
+
         _isFadingOut = true;
         _dismissTimer?.Stop();
         _dismissTimer = null;
-        AnimateTo(_offscreenX, _currentY, FadeOutMs, EaseInQuad, onComplete: () =>
-        {
-            try { Close(); } catch { }
-        });
+        AnimateTo(_offscreenX, _currentY, FadeOutMs, EaseInQuad, Recycle);
+    }
+
+    private void Recycle()
+    {
+        StopRenderHandler();
+        Cloak(true);
+        _isInUse = false;
+        _isFadingOut = false;
+        _action1 = null;
+        _action2 = null;
+        _persistent = false;
+        _dismissSeconds = 0;
+        SetWindowPos(_hwnd, HWND_TOPMOST, -32000, -32000, _w, _h, SWP_NOACTIVATE);
+        Dismissed?.Invoke(this, EventArgs.Empty);
     }
 
     private void AnimateTo(
@@ -278,6 +264,12 @@ public sealed partial class ToastWindow : Window
 
     private void ApplyOptions(ToastService.ToastOptions opts)
     {
+        CardBorder.BorderBrush = ThemeService.GetBrush("ClipsyBorderBrush", CardBorder);
+        BodyText.Text = string.Empty;
+        BodyText.Visibility = Visibility.Collapsed;
+        ResetActionButton(Action1Btn);
+        ResetActionButton(Action2Btn);
+
         Color accent = opts.Category switch
         {
             ToastCategory.Screenshot => s_green,
@@ -303,6 +295,14 @@ public sealed partial class ToastWindow : Window
 
         SetupActionButton(Action1Btn, opts.Action1Icon, opts.Action1Tooltip, isPrimary: false);
         SetupActionButton(Action2Btn, opts.Action2Icon, opts.Action2Tooltip, isPrimary: opts.Action2IsPrimary);
+    }
+
+    private static void ResetActionButton(Button btn)
+    {
+        btn.Content = null;
+        btn.Style = (Style)Application.Current.Resources["ClipsyButtonGhost"];
+        btn.Visibility = Visibility.Collapsed;
+        ToolTipService.SetToolTip(btn, null);
     }
 
     private static void SetupActionButton(Button btn, string? icon, string? tooltip, bool isPrimary)
