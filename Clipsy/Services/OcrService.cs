@@ -550,11 +550,51 @@ public sealed class PpOcrV5Engine : IOcrEngine
                             if (usableHints.Length > 0 && alphanumeric < 2)
                                 continue;
 
-                            words.AddRange(
-                                SplitByStrongVisualGaps(
-                                    image,
-                                    bestText,
-                                    recovery.Bounds));
+                            var recoveredWords = SplitByStrongVisualGaps(
+                                image,
+                                bestText,
+                                recovery.Bounds);
+
+                            string recoveredCore = string.Concat(
+                                recoveredWords.Select(w =>
+                                    AlphanumericCore(w.Text)));
+
+                            bool nearDuplicate = recoveredCore.Length > 0 &&
+                                words.Any(existing =>
+                                {
+                                    if (OverlapOverSmaller(
+                                            recovery.Bounds,
+                                            existing.BoundsPixels) < 0.55)
+                                    {
+                                        return false;
+                                    }
+
+                                    string existingCore =
+                                        AlphanumericCore(existing.Text);
+                                    if (existingCore.Length == 0)
+                                        return false;
+
+                                    bool contains =
+                                        recoveredCore.Contains(
+                                            existingCore,
+                                            StringComparison.OrdinalIgnoreCase) ||
+                                        existingCore.Contains(
+                                            recoveredCore,
+                                            StringComparison.OrdinalIgnoreCase);
+
+                                    int tolerance = Math.Max(
+                                        1,
+                                        (int)Math.Ceiling(
+                                            existingCore.Length * 0.25));
+
+                                    return contains &&
+                                        Math.Abs(
+                                            recoveredCore.Length -
+                                            existingCore.Length) <= tolerance;
+                                });
+
+                            if (!nearDuplicate)
+                                words.AddRange(recoveredWords);
                         }
                     }
 
@@ -768,8 +808,22 @@ public sealed class PpOcrV5Engine : IOcrEngine
             float agreement = overlap / (float)outputScripts.Count;
             score += 0.10f * agreement;
 
-            if (overlap == 0 && confidence < 0.94f)
-                score -= 0.08f;
+            int foreignScripts = outputScripts.Count(script =>
+                !wordScripts.Contains(script));
+            if (wordScripts.Count == 1 && foreignScripts > 0 && overlap > 0)
+                score -= 0.42f;
+
+            if (overlap == 0)
+            {
+                CaseProfile originalCase = GetCaseProfile(originalText!);
+                bool strongOriginalScript =
+                    originalLetters >= 3 ||
+                    originalCase != CaseProfile.Upper;
+
+                score -= strongOriginalScript
+                    ? 0.42f
+                    : confidence < 0.94f ? 0.12f : 0;
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(originalText))
@@ -844,7 +898,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
                     bScript,
                     StringComparison.Ordinal))
             {
-                return -0.16f;
+                return -0.45f;
             }
 
             return 0.03f;
