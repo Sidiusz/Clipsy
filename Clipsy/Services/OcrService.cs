@@ -208,9 +208,10 @@ public sealed class PpOcrV5Engine : IOcrEngine
     private const float LineCorrectionMargin = 0.08f;
     private static readonly object Sync = new();
     private static IOcrDetector? _detector;
-    private static List<(PpOcrV5RecognizerSpec Spec, IOcrRecognizer Recognizer)>? _recognizers;
+    private static Dictionary<string, (PpOcrV5RecognizerSpec Spec, IOcrRecognizer Recognizer)>? _recognizers;
 
     private sealed record LineInfo(int[] ItemIndices, OpenCvSharp.Rect CropRect);
+    private sealed record ScriptHint(string Script, IReadOnlyList<OcrWord> Words);
 
     public static void Reset()
     {
@@ -220,20 +221,24 @@ public sealed class PpOcrV5Engine : IOcrEngine
             _detector = null;
             if (_recognizers != null)
             {
-                foreach (var (_, recognizer) in _recognizers)
+                foreach (var (_, recognizer) in _recognizers.Values)
                     try { recognizer.Dispose(); } catch { }
             }
             _recognizers = null;
         }
     }
 
-    public Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes)
+    public async Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes)
     {
-        return Task.Run<IReadOnlyList<OcrWord>>(() =>
-        {
-            if (!PpOcrV5Service.IsReady)
-                return Array.Empty<OcrWord>();
+        if (!PpOcrV5Service.IsReady)
+            return Array.Empty<OcrWord>();
 
+        var hint = await DetectScriptHintAsync(pngBytes).ConfigureAwait(false);
+        string scriptHint = hint.Script;
+        var scaffoldWords = hint.Words;
+
+        return await Task.Run<IReadOnlyList<OcrWord>>(() =>
+        {
             lock (Sync)
             {
                 try
@@ -259,20 +264,21 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
                         using var lineCrops = BuildLineCrops(image, lines);
                         int lineCount = lines.Count;
-                        var bestModel = Enumerable.Repeat(-1, lineCount).ToArray();
+                        var candidateModels = SelectCandidateModels(scriptHint);
+                        var bestModel = new string?[lineCount];
                         var bestLineText = Enumerable.Repeat(string.Empty, lineCount).ToArray();
                         var bestLineScore = new float[lineCount];
                         var bestRank = Enumerable.Repeat(float.NegativeInfinity, lineCount).ToArray();
 
-                        for (int modelIndex = 0; modelIndex < _recognizers!.Count; modelIndex++)
+                        foreach (var spec in candidateModels)
                         {
-                            var (spec, recognizer) = _recognizers[modelIndex];
+                            var recognizer = GetRecognizer(spec);
                             var recognized = recognizer.TextRecognize(lineCrops).Data;
                             int count = Math.Min(lineCount, recognized.Length);
 
                             for (int lineIndex = 0; lineIndex < count; lineIndex++)
                             {
-                                string text = Compact(recognized[lineIndex].Label);
+                                string text = NormalizeWhitespace(recognized[lineIndex].Label);
                                 if (text.Length == 0)
                                     continue;
 
@@ -281,26 +287,34 @@ public sealed class PpOcrV5Engine : IOcrEngine
                                     continue;
 
                                 bestRank[lineIndex] = rank;
-                                bestModel[lineIndex] = modelIndex;
+                                bestModel[lineIndex] = spec.Key;
                                 bestLineText[lineIndex] = text;
                                 bestLineScore[lineIndex] = recognized[lineIndex].Score;
                             }
                         }
 
-                        var wordResultsByModel = new Dictionary<int, RapidOCRSharpOnnx.Models.RecResult[]>();
-                        foreach (int modelIndex in bestModel.Where(i => i >= 0).Distinct())
+                        var fallbackModels = new HashSet<string>(
+                            bestModel.Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k!),
+                            StringComparer.OrdinalIgnoreCase);
+
+                        var wordResultsByModel = new Dictionary<string, RapidOCRSharpOnnx.Models.RecResult[]>(
+                            StringComparer.OrdinalIgnoreCase);
+                        foreach (string modelKey in fallbackModels)
                         {
-                            var recognized = _recognizers[modelIndex].Recognizer
+                            var spec = candidateModels.First(m =>
+                                string.Equals(m.Key, modelKey, StringComparison.OrdinalIgnoreCase));
+                            wordResultsByModel[modelKey] = GetRecognizer(spec)
                                 .TextRecognize(detected.ImgCropList).Data;
-                            wordResultsByModel[modelIndex] = recognized;
                         }
 
-                        var words = new List<OcrWord>(detected.DetItems.Length);
+                        var words = new List<OcrWord>(Math.Max(detected.DetItems.Length, scaffoldWords.Count));
                         for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
                         {
-                            int modelIndex = bestModel[lineIndex];
-                            if (modelIndex < 0 ||
-                                !wordResultsByModel.TryGetValue(modelIndex, out var wordResults))
+                            string? modelKey = bestModel[lineIndex];
+                            if (string.IsNullOrWhiteSpace(modelKey))
+                                continue;
+
+                            if (!wordResultsByModel.TryGetValue(modelKey, out var wordResults))
                                 continue;
 
                             var line = lines[lineIndex];
@@ -313,7 +327,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
                                 if (itemIndex >= wordResults.Length)
                                     continue;
 
-                                rawTexts[i] = wordResults[itemIndex].Label?.Trim() ?? string.Empty;
+                                rawTexts[i] = NormalizeWhitespace(wordResults[itemIndex].Label);
                                 rawScores[i] = wordResults[itemIndex].Score;
                             }
 
@@ -344,20 +358,22 @@ public sealed class PpOcrV5Engine : IOcrEngine
                                 float score = rawScores[i] > 0
                                     ? Math.Max(rawScores[i], bestLineScore[lineIndex])
                                     : bestLineScore[lineIndex];
-                                if (score < MinimumTextScore)
+                                if (score < MinimumTextScore ||
+                                    IsLikelyIconGarbage(text, score, bounds))
                                     continue;
 
-                                words.Add(new OcrWord(text, bounds));
+                                words.AddRange(SplitByScaffoldGaps(image, text, bounds, scaffoldWords));
                             }
                         }
 
-                        return words;
+                        return RemoveDuplicateWords(words);
                     }
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine(
                         $"[Clipsy] PP-OCRv5 failed: {ex.Message}");
+                    Diagnostics.Log("PP-OCRv5 failed", ex);
                     Reset();
                     return Array.Empty<OcrWord>();
                 }
@@ -365,12 +381,57 @@ public sealed class PpOcrV5Engine : IOcrEngine
         });
     }
 
+    private static async Task<ScriptHint> DetectScriptHintAsync(byte[] pngBytes)
+    {
+        try
+        {
+            var words = await new WinRtOcrEngine().RecognizeAsync(pngBytes).ConfigureAwait(false);
+            if (words.Count == 0)
+                return new ScriptHint("neutral", Array.Empty<OcrWord>());
+
+            string text = string.Join(' ', words.Select(w => w.Text));
+            return new ScriptHint(DetectDominantScript(text), words);
+        }
+        catch
+        {
+            return new ScriptHint("neutral", Array.Empty<OcrWord>());
+        }
+    }
+
+    private static IReadOnlyList<PpOcrV5RecognizerSpec> SelectCandidateModels(string scriptHint)
+    {
+        var installed = PpOcrV5Service.InstalledRecognizerModels();
+        if (installed.Count <= 3 || scriptHint == "neutral")
+            return installed;
+
+        string[] preferred = scriptHint switch
+        {
+            "cyrillic" => ["eslav", "cyrillic"],
+            "ascii" => ["en", "latin"],
+            "latin" => ["latin", "en"],
+            "cjk" => ["ch"],
+            "korean" => ["korean"],
+            "th" => ["th"],
+            "el" => ["el"],
+            "arabic" => ["arabic"],
+            "devanagari" => ["devanagari"],
+            "ta" => ["ta"],
+            "te" => ["te"],
+            _ => [],
+        };
+
+        var selected = preferred
+            .Select(key => installed.FirstOrDefault(m =>
+                string.Equals(m.Key, key, StringComparison.OrdinalIgnoreCase)))
+            .FirstOrDefault(m => m != null);
+
+        return selected != null ? [selected] : installed;
+    }
     private static void EnsureInitialized()
     {
         if (_detector != null && _recognizers != null)
             return;
 
-        var created = new List<(PpOcrV5RecognizerSpec, IOcrRecognizer)>();
         IOcrDetector? detector = null;
         try
         {
@@ -378,27 +439,27 @@ public sealed class PpOcrV5Engine : IOcrEngine
             if (installedModels.Count == 0)
                 throw new InvalidOperationException("No PP-OCRv5 recognizer models installed.");
 
-            var first = installedModels[0];
-            detector = new ExecutionProviderCPU(CreateConfig(first)).CreateDetector();
-
-            foreach (var spec in installedModels)
-            {
-                var recognizer = new ExecutionProviderCPU(CreateConfig(spec)).CreateRecognizer();
-                created.Add((spec, recognizer));
-            }
-
+            detector = new ExecutionProviderCPU(CreateConfig(installedModels[0])).CreateDetector();
             _detector = detector;
-            _recognizers = created;
+            _recognizers = new Dictionary<string, (PpOcrV5RecognizerSpec, IOcrRecognizer)>(
+                StringComparer.OrdinalIgnoreCase);
         }
         catch
         {
             try { detector?.Dispose(); } catch { }
-            foreach (var (_, recognizer) in created)
-                try { recognizer.Dispose(); } catch { }
             throw;
         }
     }
 
+    private static IOcrRecognizer GetRecognizer(PpOcrV5RecognizerSpec spec)
+    {
+        if (_recognizers!.TryGetValue(spec.Key, out var cached))
+            return cached.Recognizer;
+
+        var recognizer = new ExecutionProviderCPU(CreateConfig(spec)).CreateRecognizer();
+        _recognizers[spec.Key] = (spec, recognizer);
+        return recognizer;
+    }
     private static OcrConfig CreateConfig(PpOcrV5RecognizerSpec spec) =>
         new(PpOcrV5Service.DetectorPath, spec.Path, spec.Language, OCRVersion.PPOCRV5)
         {
@@ -496,7 +557,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
     private static string[] SegmentLineText(string lineText, IReadOnlyList<string> rawWords)
     {
         var result = new string[rawWords.Count];
-        string compact = Compact(lineText);
+        string compact = CompactForCompare(lineText);
         if (compact.Length == 0 || rawWords.Count == 0)
             return result;
 
@@ -507,12 +568,12 @@ public sealed class PpOcrV5Engine : IOcrEngine
         }
 
         var weights = rawWords
-            .Select(w => Math.Max(1, Compact(w).Length))
+            .Select(w => Math.Max(1, CompactForCompare(w).Length))
             .ToArray();
         int totalWeight = weights.Sum();
-
         int offset = 0;
         int cumulativeWeight = 0;
+
         for (int i = 0; i < rawWords.Count; i++)
         {
             if (i == rawWords.Count - 1)
@@ -522,31 +583,25 @@ public sealed class PpOcrV5Engine : IOcrEngine
             }
 
             cumulativeWeight += weights[i];
-            int target = (int)Math.Round(
-                compact.Length * (double)cumulativeWeight / totalWeight);
-
+            int target = (int)Math.Round(compact.Length * (double)cumulativeWeight / totalWeight);
             int minEnd = Math.Min(compact.Length, offset + 1);
-            int remainingWords = rawWords.Count - i - 1;
-            int maxEnd = Math.Max(
-                minEnd,
-                compact.Length - remainingWords);
+            int remaining = rawWords.Count - i - 1;
+            int maxEnd = Math.Max(minEnd, compact.Length - remaining);
             int end = Math.Clamp(target, minEnd, maxEnd);
-
             result[i] = compact[offset..end];
             offset = end;
         }
 
         return result;
     }
-
     private static bool ShouldUseLineSegment(
         string raw,
         float rawScore,
         string segment,
         float lineScore)
     {
-        raw = Compact(raw);
-        segment = Compact(segment);
+        raw = NormalizeWhitespace(raw);
+        segment = NormalizeWhitespace(segment);
 
         if (segment.Length == 0)
             return false;
@@ -555,19 +610,275 @@ public sealed class PpOcrV5Engine : IOcrEngine
         if (string.Equals(raw, segment, StringComparison.Ordinal))
             return false;
 
+        if (string.Equals(CompactForCompare(raw), CompactForCompare(segment), StringComparison.Ordinal) &&
+            segment.Contains(' ') && !raw.Contains(' '))
+            return true;
+
         return lineScore >= rawScore + LineCorrectionMargin ||
                (rawScore < 0.75f && lineScore >= 0.85f);
     }
 
-    private static string Compact(string? text)
+    private static string NormalizeWhitespace(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
             return string.Empty;
 
-        var chars = text.Where(ch => !char.IsWhiteSpace(ch)).ToArray();
-        return new string(chars);
+        return string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     }
 
+    private static string CompactForCompare(string? text)
+    {
+        string normalized = NormalizeWhitespace(text);
+        if (normalized.Length == 0)
+            return string.Empty;
+        return new string(normalized.Where(ch => !char.IsWhiteSpace(ch)).ToArray());
+    }
+
+    private static IReadOnlyList<OcrWord> SplitByScaffoldGaps(
+        OpenCvSharp.Mat image,
+        string text,
+        Rect bounds,
+        IReadOnlyList<OcrWord> scaffoldWords)
+    {
+        string normalized = NormalizeWhitespace(text);
+        if (normalized.Length == 0)
+            return Array.Empty<OcrWord>();
+
+        var scaffold = scaffoldWords
+            .Where(w =>
+            {
+                var b = w.BoundsPixels;
+                double cx = b.X + b.Width * 0.5;
+                double cy = b.Y + b.Height * 0.5;
+                return cx >= bounds.X - 3 &&
+                       cx <= bounds.X + bounds.Width + 3 &&
+                       cy >= bounds.Y - 3 &&
+                       cy <= bounds.Y + bounds.Height + 3;
+            })
+            .OrderBy(w => w.BoundsPixels.X)
+            .ToArray();
+
+        if (scaffold.Length < 2)
+            return [new OcrWord(normalized, bounds)];
+
+        int x0 = Math.Clamp((int)Math.Floor(bounds.X), 0, image.Width - 1);
+        int y0 = Math.Clamp((int)Math.Floor(bounds.Y), 0, image.Height - 1);
+        int x1 = Math.Clamp((int)Math.Ceiling(bounds.X + bounds.Width), x0 + 1, image.Width);
+        int y1 = Math.Clamp((int)Math.Ceiling(bounds.Y + bounds.Height), y0 + 1, image.Height);
+        int width = x1 - x0;
+        int height = y1 - y0;
+        if (width < 4 || height < 4)
+            return [new OcrWord(normalized, bounds)];
+
+        try
+        {
+            using var crop = new OpenCvSharp.Mat(
+                image, new OpenCvSharp.Rect(x0, y0, width, height));
+            using var gray = new OpenCvSharp.Mat();
+            using var binary = new OpenCvSharp.Mat();
+            OpenCvSharp.Cv2.CvtColor(crop, gray, OpenCvSharp.ColorConversionCodes.BGR2GRAY);
+            OpenCvSharp.Cv2.Threshold(
+                gray, binary, 0, 255,
+                OpenCvSharp.ThresholdTypes.Binary | OpenCvSharp.ThresholdTypes.Otsu);
+
+            if (OpenCvSharp.Cv2.CountNonZero(binary) > width * height / 2)
+                OpenCvSharp.Cv2.BitwiseNot(binary, binary);
+
+            int maxInkInBlank = Math.Max(0, (int)Math.Round(height * 0.03));
+            int minBlankRun = Math.Max(4, (int)Math.Round(height * 0.18));
+            var splitXs = new List<int>();
+            var splitAfterScaffold = new List<int>();
+
+            for (int i = 0; i < scaffold.Length - 1; i++)
+            {
+                var left = scaffold[i].BoundsPixels;
+                var right = scaffold[i + 1].BoundsPixels;
+
+                int gapStart = Math.Clamp(
+                    (int)Math.Ceiling(left.X + left.Width) - x0,
+                    0, width - 1);
+                int gapEnd = Math.Clamp(
+                    (int)Math.Floor(right.X) - x0,
+                    gapStart, width);
+
+                if (gapEnd - gapStart < minBlankRun)
+                    continue;
+
+                int bestStart = -1;
+                int bestLen = 0;
+                int runStart = -1;
+
+                for (int x = gapStart; x < gapEnd; x++)
+                {
+                    int ink = 0;
+                    for (int y = 0; y < height; y++)
+                    {
+                        if (binary.At<byte>(y, x) != 0)
+                            ink++;
+                    }
+
+                    if (ink <= maxInkInBlank)
+                    {
+                        if (runStart < 0)
+                            runStart = x;
+                    }
+                    else if (runStart >= 0)
+                    {
+                        int len = x - runStart;
+                        if (len > bestLen)
+                        {
+                            bestLen = len;
+                            bestStart = runStart;
+                        }
+                        runStart = -1;
+                    }
+                }
+
+                if (runStart >= 0)
+                {
+                    int len = gapEnd - runStart;
+                    if (len > bestLen)
+                    {
+                        bestLen = len;
+                        bestStart = runStart;
+                    }
+                }
+
+                if (bestLen < minBlankRun || bestStart < 0)
+                    continue;
+
+                splitXs.Add(bestStart + bestLen / 2);
+                splitAfterScaffold.Add(i);
+            }
+
+            if (splitXs.Count == 0)
+                return [new OcrWord(normalized, bounds)];
+
+            string compact = CompactForCompare(normalized);
+            if (compact.Length <= splitXs.Count)
+                return [new OcrWord(normalized, bounds)];
+
+            var groupWeights = new List<int>();
+            int groupStart = 0;
+            foreach (int splitAfter in splitAfterScaffold)
+            {
+                int weight = scaffold
+                    .Skip(groupStart)
+                    .Take(splitAfter - groupStart + 1)
+                    .Sum(w => Math.Max(1, CompactForCompare(w.Text).Length));
+                groupWeights.Add(Math.Max(1, weight));
+                groupStart = splitAfter + 1;
+            }
+            groupWeights.Add(Math.Max(
+                1,
+                scaffold.Skip(groupStart)
+                    .Sum(w => Math.Max(1, CompactForCompare(w.Text).Length))));
+
+            int totalWeight = groupWeights.Sum();
+            int charOffset = 0;
+            int cumulativeWeight = 0;
+            var edges = new List<int>(splitXs.Count + 2) { 0 };
+            edges.AddRange(splitXs);
+            edges.Add(width);
+            var result = new List<OcrWord>(groupWeights.Count);
+
+            for (int i = 0; i < groupWeights.Count; i++)
+            {
+                int charEnd;
+                if (i == groupWeights.Count - 1)
+                {
+                    charEnd = compact.Length;
+                }
+                else
+                {
+                    cumulativeWeight += groupWeights[i];
+                    int target = (int)Math.Round(
+                        compact.Length * (double)cumulativeWeight / totalWeight);
+                    int minEnd = charOffset + 1;
+                    int remaining = groupWeights.Count - i - 1;
+                    int maxEnd = compact.Length - remaining;
+                    charEnd = Math.Clamp(target, minEnd, maxEnd);
+                }
+
+                string part = compact[charOffset..charEnd];
+                if (part.Length > 0)
+                {
+                    int sx0 = edges[i];
+                    int sx1 = edges[i + 1];
+                    result.Add(new OcrWord(
+                        part,
+                        new Rect(
+                            x0 + sx0,
+                            y0,
+                            Math.Max(1, sx1 - sx0),
+                            height)));
+                }
+
+                charOffset = charEnd;
+            }
+
+            return result.Count > 0
+                ? result
+                : [new OcrWord(normalized, bounds)];
+        }
+        catch
+        {
+            return [new OcrWord(normalized, bounds)];
+        }
+    }
+    private static IReadOnlyList<OcrWord> RemoveDuplicateWords(IReadOnlyList<OcrWord> words)
+    {
+        var result = new List<OcrWord>(words.Count);
+        foreach (var word in words)
+        {
+            string text = NormalizeWhitespace(word.Text);
+            if (text.Length == 0)
+                continue;
+
+            bool duplicate = result.Any(existing =>
+                string.Equals(
+                    NormalizeWhitespace(existing.Text),
+                    text,
+                    StringComparison.OrdinalIgnoreCase) &&
+                OverlapOverSmaller(existing.BoundsPixels, word.BoundsPixels) >= 0.35);
+
+            if (!duplicate)
+                result.Add(word);
+        }
+        return result;
+    }
+
+    private static double OverlapOverSmaller(Rect a, Rect b)
+    {
+        double x0 = Math.Max(a.X, b.X);
+        double y0 = Math.Max(a.Y, b.Y);
+        double x1 = Math.Min(a.X + a.Width, b.X + b.Width);
+        double y1 = Math.Min(a.Y + a.Height, b.Y + b.Height);
+        if (x1 <= x0 || y1 <= y0)
+            return 0;
+
+        double intersection = (x1 - x0) * (y1 - y0);
+        double smaller = Math.Min(a.Width * a.Height, b.Width * b.Height);
+        return smaller > 0 ? intersection / smaller : 0;
+    }
+
+    private static bool IsLikelyIconGarbage(string text, float score, Rect bounds)
+    {
+        string normalized = NormalizeWhitespace(text);
+        int glyphs = normalized.Count(char.IsLetterOrDigit);
+        if (glyphs == 0)
+            return true;
+
+        double aspect = bounds.Width / Math.Max(1.0, bounds.Height);
+        if (glyphs == 1 &&
+            aspect is > 0.70 and < 1.40 &&
+            (score < 0.90f || Math.Min(bounds.Width, bounds.Height) >= 18))
+            return true;
+        if (glyphs >= 3 && aspect < glyphs * 0.28)
+            return true;
+
+        return false;
+    }
     private static float RankCandidate(string modelKey, string text, float score)
     {
         if (score <= 0)
