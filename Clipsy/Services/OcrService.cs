@@ -269,6 +269,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
                         scaffoldResult = PostProcessWords(scaffoldRaw);
 
                         if (scaffoldResult.Count >= Math.Max(3, preparedScaffoldWords.Count / 2) &&
+                            !HasStrongInternalScaffoldGap(image, preparedScaffoldWords) &&
                             (!detectorReady ||
                              !HasUncoveredDetectedText(detected!, scaffoldRaw)))
                         {
@@ -817,11 +818,14 @@ public sealed class PpOcrV5Engine : IOcrEngine
                 if (englishProbe[wordIndex] &&
                     string.Equals(group.Spec.Key, "en", StringComparison.OrdinalIgnoreCase))
                 {
-                    bool zeroRecovery =
-                        CompactForCompare(scaffoldText) == "О" &&
-                        CompactForCompare(chosen).All(char.IsDigit);
+                    string scaffoldCompact = CompactForCompare(scaffoldText);
+                    string chosenCompact = CompactForCompare(chosen);
+                    bool digitRecovery =
+                        scaffoldCompact is "О" or "O" or "З" or "з" &&
+                        chosenCompact.Length > 0 &&
+                        chosenCompact.All(char.IsDigit);
 
-                    if (zeroRecovery)
+                    if (digitRecovery)
                         rank += 0.18f;
                     else if (DetectDominantScript(chosen) == "ascii")
                         rank += 0.03f;
@@ -1258,30 +1262,19 @@ public sealed class PpOcrV5Engine : IOcrEngine
     {
         string compact = CompactForCompare(scaffoldText);
         string script = DetectDominantScript(compact);
-        int letters = compact.Count(char.IsLetter);
-        bool zeroLookalike = compact is "О" or "O";
-
-        if (script != "cyrillic" || (!zeroLookalike && letters is < 2 or > 5))
+        if (script != "cyrillic")
             return false;
 
-        if (!zeroLookalike)
-        {
-            int confusable = compact.Count(IsCyrillicLatinConfusable);
-            bool allUpper = compact.Where(char.IsLetter).All(char.IsUpper);
-
-            if (allUpper)
-            {
-                if (confusable < 1)
-                    return false;
-            }
-            else
-            {
-                if (letters != 3 || confusable < 2)
-                    return false;
-            }
-        }
+        var lettersOnly = compact.Where(char.IsLetter).ToArray();
+        int letters = lettersOnly.Length;
+        if (letters == 0 || letters > 5)
+            return false;
 
         var bounds = scaffoldWords[index].BoundsPixels;
+        int asciiLetters = 0;
+        int cyrillicLetters = 0;
+        int asciiTokens = 0;
+
         for (int i = 0; i < scaffoldWords.Count; i++)
         {
             if (i == index)
@@ -1292,18 +1285,63 @@ public sealed class PpOcrV5Engine : IOcrEngine
                 continue;
 
             string otherText = NormalizeWhitespace(other.Text);
-            string otherScript = DetectDominantScript(otherText);
-            if (otherScript == "ascii" &&
-                otherText.Count(char.IsLetterOrDigit) >= 2)
-                return true;
+            int tokenAscii = 0;
+            int tokenCyrillic = 0;
 
-            if (LooksLikeTechnicalAlphaNumeric(otherText))
-                return true;
+            foreach (char ch in otherText)
+            {
+                if (!char.IsLetter(ch))
+                    continue;
+
+                string otherScript = GetLetterScript(ch);
+                if (otherScript is "ascii" or "latin")
+                    tokenAscii++;
+                else if (otherScript == "cyrillic")
+                    tokenCyrillic++;
+            }
+
+            asciiLetters += tokenAscii;
+            cyrillicLetters += tokenCyrillic;
+            if (tokenAscii >= 2 || LooksLikeTechnicalAlphaNumeric(otherText))
+                asciiTokens++;
+        }
+
+        bool strongEnglish =
+            asciiLetters >= 6 &&
+            asciiLetters >= Math.Max(4, cyrillicLetters * 2);
+
+        bool digitLookalike = compact is "О" or "O" or "З" or "з";
+        if (digitLookalike)
+            return asciiTokens >= 1;
+
+        int confusable = lettersOnly.Count(IsCyrillicLatinConfusable);
+        bool allUpper = lettersOnly.All(char.IsUpper);
+
+        if (letters == 1)
+            return allUpper && strongEnglish;
+
+        if (allUpper)
+            return confusable >= 1 && asciiTokens >= 1;
+
+        if (letters == 2)
+            return strongEnglish && confusable == letters;
+
+        if (letters == 3)
+        {
+            bool allConfusable = confusable == letters;
+            bool leadingNonConfusable =
+                !IsCyrillicLatinConfusable(lettersOnly[0]) &&
+                lettersOnly.Skip(1).All(IsCyrillicLatinConfusable);
+
+            if (allConfusable)
+                return strongEnglish || asciiTokens >= 2;
+
+            if (leadingNonConfusable)
+                return strongEnglish;
         }
 
         return false;
     }
-
     private static bool IsCyrillicLatinConfusable(char ch) =>
         ch is
             'А' or 'В' or 'Е' or 'К' or 'М' or 'Н' or 'О' or 'Р' or 'С' or 'Т' or 'Х' or
@@ -1582,6 +1620,84 @@ public sealed class PpOcrV5Engine : IOcrEngine
         {
             MaxSideLen = 2400,
         };
+
+    private static bool HasStrongInternalScaffoldGap(
+        OpenCvSharp.Mat image,
+        IReadOnlyList<OcrWord> scaffoldWords)
+    {
+        foreach (var word in scaffoldWords)
+        {
+            string text = NormalizeWhitespace(word.Text);
+            var b = word.BoundsPixels;
+            if (text.Count(char.IsLetterOrDigit) < 5 ||
+                b.Width < b.Height * 2.5)
+            {
+                continue;
+            }
+
+            int x0 = Math.Clamp((int)Math.Floor(b.X), 0, image.Width - 1);
+            int y0 = Math.Clamp((int)Math.Floor(b.Y), 0, image.Height - 1);
+            int x1 = Math.Clamp((int)Math.Ceiling(b.X + b.Width), x0 + 1, image.Width);
+            int y1 = Math.Clamp((int)Math.Ceiling(b.Y + b.Height), y0 + 1, image.Height);
+            int width = x1 - x0;
+            int height = y1 - y0;
+            if (width < 12 || height < 6)
+                continue;
+
+            using var crop = new OpenCvSharp.Mat(
+                image, new OpenCvSharp.Rect(x0, y0, width, height));
+            using var gray = new OpenCvSharp.Mat();
+            using var binary = new OpenCvSharp.Mat();
+            OpenCvSharp.Cv2.CvtColor(
+                crop, gray, OpenCvSharp.ColorConversionCodes.BGR2GRAY);
+            OpenCvSharp.Cv2.Threshold(
+                gray, binary, 0, 255,
+                OpenCvSharp.ThresholdTypes.Binary | OpenCvSharp.ThresholdTypes.Otsu);
+
+            if (OpenCvSharp.Cv2.CountNonZero(binary) >
+                binary.Width * binary.Height / 2)
+            {
+                OpenCvSharp.Cv2.BitwiseNot(binary, binary);
+            }
+
+            int maxInk = Math.Max(0, (int)Math.Round(height * 0.03));
+            int minGap = Math.Max(5, (int)Math.Round(height * 0.32));
+            int edgeGuard = Math.Max(2, (int)Math.Round(width * 0.08));
+            int runStart = -1;
+
+            for (int x = edgeGuard; x < width - edgeGuard; x++)
+            {
+                int ink = 0;
+                for (int y = 0; y < height; y++)
+                {
+                    if (binary.At<byte>(y, x) != 0)
+                        ink++;
+                }
+
+                if (ink <= maxInk)
+                {
+                    if (runStart < 0)
+                        runStart = x;
+                    continue;
+                }
+
+                if (runStart >= 0)
+                {
+                    if (x - runStart >= minGap)
+                        return true;
+                    runStart = -1;
+                }
+            }
+
+            if (runStart >= 0 &&
+                width - edgeGuard - runStart >= minGap)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static bool HasUncoveredDetectedText(
         RapidOCRSharpOnnx.Inference.PPOCR_Det.DetResult detected,
@@ -2132,7 +2248,140 @@ public sealed class PpOcrV5Engine : IOcrEngine
             filtered.Add(candidate.Word);
         }
 
-        return RemoveDuplicateWords(MergeNumericOutputFragments(filtered));
+        var merged = MergeNumericOutputFragments(filtered);
+        var decorationsRemoved = RemoveDecorativeGlyphs(merged);
+        return RemoveDuplicateWords(RemoveIsolatedNarrowGlyphs(decorationsRemoved));
+    }
+
+    private static IReadOnlyList<OcrWord> RemoveDecorativeGlyphs(IReadOnlyList<OcrWord> words)
+    {
+        if (words.Count == 0)
+            return words;
+
+        static bool IsDecoration(char ch) =>
+            ch is '•' or '●' or '◦' or '▪' or '■' or '□' or '◆' or '◇';
+
+        static bool IsCircleLookalike(string text) =>
+            text is "o" or "O" or "о" or "О";
+
+        var cleaned = new List<OcrWord>(words.Count);
+
+        for (int i = 0; i < words.Count; i++)
+        {
+            var word = words[i];
+            string text = NormalizeWhitespace(word.Text);
+
+            while (text.Length > 0 && IsDecoration(text[^1]))
+                text = text[..^1];
+
+            if (text.Length == 0)
+                continue;
+
+            var bounds = word.BoundsPixels;
+            bool removeCircleDecoration = false;
+
+            if (text.Length == 1 && IsCircleLookalike(text))
+            {
+                double aspect = bounds.Width / Math.Max(1.0, bounds.Height);
+                if (aspect is > 0.55 and < 1.50)
+                {
+                    for (int j = 0; j < words.Count; j++)
+                    {
+                        if (i == j)
+                            continue;
+
+                        var other = words[j];
+                        string otherText = NormalizeWhitespace(other.Text);
+                        if (otherText.Count(char.IsLetterOrDigit) < 3 ||
+                            !IsSameScaffoldLine(bounds, other.BoundsPixels))
+                        {
+                            continue;
+                        }
+
+                        double aRight = bounds.X + bounds.Width;
+                        double bRight = other.BoundsPixels.X + other.BoundsPixels.Width;
+                        double gap = aRight < other.BoundsPixels.X
+                            ? other.BoundsPixels.X - aRight
+                            : bRight < bounds.X
+                                ? bounds.X - bRight
+                                : 0;
+
+                        string otherScript = DetectDominantScript(otherText);
+                        bool cyrillicCircle = text is "о" or "О";
+                        double maxGap = cyrillicCircle && otherScript == "ascii"
+                            ? Math.Max(7, bounds.Height * 0.65)
+                            : Math.Max(3, bounds.Height * 0.20);
+
+                        if (gap <= maxGap)
+                        {
+                            removeCircleDecoration = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!removeCircleDecoration)
+                cleaned.Add(new OcrWord(text, bounds));
+        }
+
+        return cleaned;
+    }
+
+    private static IReadOnlyList<OcrWord> RemoveIsolatedNarrowGlyphs(IReadOnlyList<OcrWord> words)
+    {
+        if (words.Count == 0)
+            return words;
+
+        var result = new List<OcrWord>(words.Count);
+
+        for (int i = 0; i < words.Count; i++)
+        {
+            var word = words[i];
+            string text = NormalizeWhitespace(word.Text);
+            var bounds = word.BoundsPixels;
+
+            bool narrowSingleLetter =
+                text.Count(char.IsLetterOrDigit) == 1 &&
+                text.Any(char.IsLetter) &&
+                bounds.Height >= 8 &&
+                bounds.Width / Math.Max(1.0, bounds.Height) <= 0.22;
+
+            if (narrowSingleLetter)
+            {
+                bool hasNearbyText = false;
+                for (int j = 0; j < words.Count; j++)
+                {
+                    if (i == j)
+                        continue;
+
+                    var other = words[j];
+                    if (!IsSameScaffoldLine(bounds, other.BoundsPixels))
+                        continue;
+
+                    double aRight = bounds.X + bounds.Width;
+                    double bRight = other.BoundsPixels.X + other.BoundsPixels.Width;
+                    double gap = aRight < other.BoundsPixels.X
+                        ? other.BoundsPixels.X - aRight
+                        : bRight < bounds.X
+                            ? bounds.X - bRight
+                            : 0;
+
+                    if (gap <= Math.Max(16, bounds.Height * 1.5))
+                    {
+                        hasNearbyText = true;
+                        break;
+                    }
+                }
+
+                if (!hasNearbyText)
+                    continue;
+            }
+
+            result.Add(word);
+        }
+
+        return result;
     }
 
     private static IReadOnlyList<OcrWord> MergeNumericOutputFragments(IReadOnlyList<OcrWord> words)
@@ -2240,11 +2489,6 @@ public sealed class PpOcrV5Engine : IOcrEngine
         }
 
         double aspect = bounds.Width / Math.Max(1.0, bounds.Height);
-        if (glyphs == 1 &&
-            char.IsLetter(normalized.FirstOrDefault()) &&
-            bounds.Height >= 8 &&
-            aspect <= 0.22)
-            return true;
 
         if (glyphs == 1 &&
             aspect is > 0.70 and < 1.40 &&
