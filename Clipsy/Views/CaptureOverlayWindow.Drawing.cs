@@ -365,6 +365,9 @@ public sealed partial class CaptureOverlayWindow
 
     private void SetTool(ToolKind tool)
     {
+        if (tool != ToolKind.None)
+            EnsureDrawingSurface();
+
         _drawing.Settings.Tool = tool;
 
         // Swap the Style (not inline brushes): the Selected style's own visual

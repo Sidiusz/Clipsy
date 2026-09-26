@@ -12,7 +12,6 @@
     x:Class="Clipsy.Views.CaptureOverlayWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
     xmlns:views="using:Clipsy.Views">
 
     <Grid x:Name="RootGrid"
@@ -45,9 +44,10 @@
             <Rectangle x:Name="DimRight"  Fill="{ThemeResource ClipsyOverlayDimBrush}" />
         </Canvas>
 
-        <!-- Committed drawings render here on the GPU (Win2D), redrawn only on
-             change — keeps the visual tree flat no matter how much is drawn. -->
-        <canvas:CanvasControl x:Name="CommittedLayer" IsHitTestVisible="False" ClearColor="Transparent" />
+        <!-- Win2D drawing surface is created lazily only after the user
+             selects a drawing tool. Keeping it out of the initial visual tree
+             avoids creating a D3D device on every PrintScreen. -->
+        <Grid x:Name="CommittedLayerHost" IsHitTestVisible="False" />
 
         <!-- In-progress (active) stroke/shape + text entry live here as XAML. -->
         <Canvas x:Name="DrawingCanvas"

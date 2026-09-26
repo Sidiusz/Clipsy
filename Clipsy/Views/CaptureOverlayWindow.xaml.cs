@@ -10,6 +10,7 @@ using IOPath = System.IO.Path;
 using Clipsy.Drawing;
 using Clipsy.Localization;
 using Clipsy.Services;
+using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
@@ -46,6 +47,7 @@ public sealed partial class CaptureOverlayWindow : Window
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
     private readonly DrawingController _drawing;
+    private CanvasControl? _committedLayer;
     private readonly List<Microsoft.UI.Xaml.Shapes.Rectangle> _handleVisuals = new();
     private readonly Ellipse _pencilPreview;
     private readonly TextBlock _textPreview;
@@ -113,7 +115,7 @@ public sealed partial class CaptureOverlayWindow : Window
         // already shows the snapshot, not black-then-desktop.
         TryLoadFrozenImage();
 
-        _drawing = new DrawingController(CommittedLayer);
+        _drawing = new DrawingController();
         ApplyLocalization();
         PositionHintOnPrimaryScreen();
         BuildHandles();
@@ -149,6 +151,36 @@ public sealed partial class CaptureOverlayWindow : Window
         ArmReveal();
 
         SetTool(ToolKind.None);
+    }
+
+    private void EnsureDrawingSurface()
+    {
+        if (_committedLayer != null)
+            return;
+
+        var canvas = new CanvasControl
+        {
+            IsHitTestVisible = false,
+            ClearColor = Microsoft.UI.Colors.Transparent,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+        };
+
+        _committedLayer = canvas;
+        CommittedLayerHost.Children.Add(canvas);
+        _drawing.AttachCanvas(canvas);
+    }
+
+    private void ReleaseDrawingSurface()
+    {
+        var canvas = _committedLayer;
+        _drawing.DetachCanvas();
+        if (canvas == null)
+            return;
+
+        try { canvas.RemoveFromVisualTree(); } catch { }
+        try { CommittedLayerHost.Children.Remove(canvas); } catch { }
+        _committedLayer = null;
     }
 
     // Re-cloaks and re-arms the cloak→reveal handshake; used by ctor and reuse.
@@ -211,6 +243,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
         RemoveActiveDrawingVisuals();
         _drawing.ClearAll();
+        ReleaseDrawingSurface();
         _movingText = null;
         _draggingActiveText = false;
         _mode = InteractionMode.Idle;
@@ -428,6 +461,24 @@ public sealed partial class CaptureOverlayWindow : Window
 
         UpdateDimGeometry(null);
 
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("CLIPSY_DRAW_SURFACE_TEST"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            EnsureDrawingSurface();
+            _drawing.Add(new RectangleElement
+            {
+                Bounds = new Rect(20, 20, 80, 50),
+                Color = Microsoft.UI.Colors.Red,
+                Thickness = 2,
+            });
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _drawing.ClearAll();
+                ReleaseDrawingSurface();
+            });
+        }
     }
 
     private bool _cloaked = true;
@@ -599,9 +650,8 @@ public sealed partial class CaptureOverlayWindow : Window
             _magBitmap = null;
             DrawingCanvas.Children.Clear();
             CursorPreviewLayer.Children.Clear();
-            // Win2D holds a GPU device; release it explicitly.
-            try { _drawing?.DisposeResources(); } catch { }
-            try { CommittedLayer.RemoveFromVisualTree(); } catch { }
+            // Win2D is created lazily; release the GPU surface if drawing was used.
+            try { ReleaseDrawingSurface(); } catch { }
             RootGrid.Children.Clear();
             this.Content = null;
         }

@@ -13,7 +13,7 @@ namespace Clipsy.Drawing;
 // Committed elements render on a GPU Win2D canvas, redrawn only on change.
 public sealed class DrawingController
 {
-    private readonly CanvasControl _canvas;
+    private CanvasControl? _canvas;
     private readonly List<DrawElement> _elements = new();
     private readonly Stack<HistoryOp> _undo = new();
     private readonly Stack<HistoryOp> _redo = new();
@@ -43,14 +43,37 @@ public sealed class DrawingController
     public DrawingSettings Settings { get; } = new();
     public IReadOnlyList<DrawElement> Elements => _elements;
 
-    public DrawingController(CanvasControl canvas)
+    public DrawingController() { }
+
+    public void AttachCanvas(CanvasControl canvas)
     {
+        if (ReferenceEquals(_canvas, canvas))
+            return;
+
+        if (_canvas != null)
+            _canvas.Draw -= OnDraw;
+
         _canvas = canvas;
         _canvas.Draw += OnDraw;
+        _cacheDirty = true;
+        _canvas?.Invalidate();
+    }
+
+    public void DetachCanvas()
+    {
+        if (_canvas != null)
+            _canvas.Draw -= OnDraw;
+
+        _canvas = null;
+        DisposeResources();
     }
 
     // Committed content changed (move/undo/etc.): rebuild the cache next draw.
-    public void InvalidateCommitted() { _cacheDirty = true; _canvas.Invalidate(); }
+    public void InvalidateCommitted()
+    {
+        _cacheDirty = true;
+        _canvas?.Invalidate();
+    }
 
     public void BeginActiveStroke(Color color, double thickness, Point start)
     {
@@ -78,7 +101,7 @@ public sealed class DrawingController
         {
             _activeMissedPaint = true;
             _activeLast = points[^1];
-            _canvas.Invalidate();
+            _canvas?.Invalidate();
             return;
         }
         using var ds = _cache.CreateDrawingSession();
@@ -89,7 +112,7 @@ public sealed class DrawingController
             last = pt;
         }
         _activeLast = last;
-        _canvas.Invalidate();
+        _canvas?.Invalidate();
     }
 
     // Pixels are already in the cache; add the element without a rebuild.
@@ -120,7 +143,7 @@ public sealed class DrawingController
     {
         if (_selected == null) return;
         _selected.Offset(dx, dy);
-        _canvas.Invalidate();
+        _canvas?.Invalidate();
     }
 
     // Topmost-first, for click-cycle selection.
@@ -134,10 +157,10 @@ public sealed class DrawingController
 
     private void PaintActiveSegment(Point a, Point b)
     {
-        if (_cache == null) { _activeMissedPaint = true; _canvas.Invalidate(); return; }
+        if (_cache == null) { _activeMissedPaint = true; _canvas?.Invalidate(); return; }
         using var cds = _cache.CreateDrawingSession();
         cds.DrawLine(V(a), V(b), _activeColor, (float)_activeThickness, RoundStroke);
-        _canvas.Invalidate();
+        _canvas?.Invalidate();
     }
 
     public void DisposeResources()
