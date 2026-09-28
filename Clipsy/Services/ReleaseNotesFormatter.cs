@@ -27,29 +27,21 @@ public static class ReleaseNotesFormatter
             .Where(s => s.Length > 0)
             .ToArray();
 
-        if (sections.Length <= 1) return StripMarkers(text).Trim();
+        // "---" is only a language divider when the parts are in different languages;
+        // otherwise it's an ordinary horizontal rule inside one set of notes.
+        var russianParts = sections.Where(IsMostlyCyrillic).ToArray();
+        var englishParts = sections.Where(s => !IsMostlyCyrillic(s)).ToArray();
+        if (sections.Length <= 1 || russianParts.Length == 0 || englishParts.Length == 0)
+            return StripMarkers(text).Trim();
 
         bool wantRussian = string.Equals(language, "ru", StringComparison.OrdinalIgnoreCase);
-        if (wantRussian)
-        {
-            var russian = sections
-                .Select(s => (Text: s, Cyrillic: CountCyrillic(s)))
-                .OrderByDescending(x => x.Cyrillic)
-                .First();
-            if (russian.Cyrillic > 0) return StripMarkers(russian.Text).Trim();
-        }
-        else
-        {
-            var english = sections
-                .Select((s, i) => (Text: s, Index: i, Cyrillic: CountCyrillic(s), Latin: CountLatin(s)))
-                .OrderBy(x => x.Cyrillic)
-                .ThenByDescending(x => x.Latin)
-                .ThenBy(x => x.Index)
-                .First();
-            return StripMarkers(english.Text).Trim();
-        }
+        return StripMarkers(string.Join("\n\n---\n\n", wantRussian ? russianParts : englishParts)).Trim();
+    }
 
-        return StripMarkers(sections[0]).Trim();
+    private static bool IsMostlyCyrillic(string text)
+    {
+        int cyrillic = CountCyrillic(text);
+        return cyrillic > 0 && cyrillic >= CountLatin(text);
     }
     private static string? SelectTagged(string text, string language)
     {

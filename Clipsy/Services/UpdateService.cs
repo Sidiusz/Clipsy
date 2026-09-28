@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Clipsy.Services;
@@ -60,12 +61,12 @@ public static class UpdateService
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine($"[Clipsy] Update API returned {(int)resp.StatusCode}; trying web fallback.");
+                Diagnostics.Log($"Update API returned {(int)resp.StatusCode}; trying web fallback.");
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Update API check failed: {ex.Message}");
+            Diagnostics.Log($"Update API check failed: {ex.Message}");
         }
 
         // Fallback: github.com web redirect. Survives API 403 / rate limits.
@@ -264,7 +265,7 @@ public static class UpdateService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Update web fallback failed: {ex.Message}");
+            Diagnostics.Log($"Update web fallback failed: {ex.Message}");
             return new UpdateCheckResult(UpdateCheckStatus.Failed, null);
         }
     }
@@ -276,7 +277,7 @@ public static class UpdateService
         return r > c;
     }
 
-    private static bool TryParseVersion(string s, out Version v)
+    internal static bool TryParseVersion(string s, out Version v)
     {
         v = new Version(0, 0, 0);
         if (string.IsNullOrEmpty(s)) return false;
@@ -296,55 +297,68 @@ public static class UpdateService
         }
     }
 
-    /// <summary>Downloads the installer to %TEMP%; returns its path or null on
-    /// failure. Kept separate from launch so callers can pre-fetch silently.</summary>
-    public static async Task<string?> DownloadInstallerAsync(UpdateInfo info, IProgress<double>? progress = null)
+    private static readonly string UpdatesDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clipsy", "updates");
+
+    /// <summary>Downloads and verifies the installer; the returned handle keeps it locked against
+    /// modification until it's launched. Null on failure.</summary>
+    public static async Task<VerifiedInstaller?> DownloadInstallerAsync(UpdateInfo info, IProgress<double>? progress = null, CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(info.InstallerUrl)) return null;
-        var fileName = $"ClipsySetup-{info.Version}.exe";
-        var path = Path.Combine(Path.GetTempPath(), fileName);
+        Directory.CreateDirectory(UpdatesDir);
+        var path = Path.Combine(UpdatesDir, $"ClipsySetup-{info.Version}.exe");
+        DeleteStaleInstallers(keep: path);
         try
         {
-
-            using (var response = await _http.GetAsync(info.InstallerUrl, HttpCompletionOption.ResponseHeadersRead))
+            using (var response = await _http.GetAsync(info.InstallerUrl, HttpCompletionOption.ResponseHeadersRead, ct))
             {
                 response.EnsureSuccessStatusCode();
                 long? total = response.Content.Headers.ContentLength;
-                await using var src = await response.Content.ReadAsStreamAsync();
-                await using var dst = File.Create(path);
+                await using var src = await response.Content.ReadAsStreamAsync(ct);
+                await using var dst = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
                 var buffer = new byte[81920];
                 long read = 0;
-                int n;
-                while ((n = await src.ReadAsync(buffer)) > 0)
+                while (true)
                 {
-                    await dst.WriteAsync(buffer.AsMemory(0, n));
+                    // HttpClient.Timeout doesn't cover body reads: a stalled connection would hang forever.
+                    using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    stall.CancelAfter(TimeSpan.FromSeconds(30));
+                    int n = await src.ReadAsync(buffer, stall.Token);
+                    if (n == 0) break;
+                    await dst.WriteAsync(buffer.AsMemory(0, n), ct);
                     read += n;
                     if (total is > 0) progress?.Report((double)read / total.Value);
                 }
                 progress?.Report(1.0);
             }
 
-            var fi = new FileInfo(path);
-            if (!fi.Exists || fi.Length < 1024)
-            {
-                TryDeleteDownloadedInstaller(path);
-                return null;
-            }
-            if (!VerifyInstallerDigest(path, info.InstallerDigest))
+            var installer = VerifiedInstaller.Open(path, info.InstallerDigest);
+            if (installer == null)
             {
                 Diagnostics.Log($"Update digest mismatch for {info.InstallerName ?? Path.GetFileName(path)}");
                 TryDeleteDownloadedInstaller(path);
-                return null;
             }
-            return path;
+            return installer;
         }
         catch (Exception ex)
         {
             TryDeleteDownloadedInstaller(path);
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Update download failed: {ex.Message}");
             Diagnostics.Log("UpdateService.DownloadInstaller", ex);
             return null;
         }
+    }
+
+    private static void DeleteStaleInstallers(string keep)
+    {
+        try
+        {
+            foreach (var f in Directory.GetFiles(UpdatesDir, "ClipsySetup-*.exe"))
+                if (!string.Equals(f, keep, StringComparison.OrdinalIgnoreCase)) TryDeleteDownloadedInstaller(f);
+            // Older builds downloaded into %TEMP%.
+            foreach (var f in Directory.GetFiles(Path.GetTempPath(), "ClipsySetup-*.exe"))
+                TryDeleteDownloadedInstaller(f);
+        }
+        catch { }
     }
 
     private static void TryDeleteDownloadedInstaller(string path)
@@ -352,35 +366,65 @@ public static class UpdateService
         try { if (File.Exists(path)) File.Delete(path); } catch { }
     }
 
-    private static bool VerifyInstallerDigest(string path, string? digest)
+    internal static bool DigestMatches(Stream stream, string? digest)
     {
         if (string.IsNullOrWhiteSpace(digest) || !digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
             return false;
         var expected = digest[7..].Trim();
         if (expected.Length != 64) return false;
-        using var stream = File.OpenRead(path);
+        stream.Position = 0;
         var actual = Convert.ToHexString(SHA256.HashData(stream));
         return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Launches a downloaded installer; the caller must exit so the exe
-    /// can overwrite the running app.</summary>
-    public static bool LaunchInstaller(string path)
+    /// <summary>A downloaded installer held open without write/delete sharing, so nothing can swap it
+    /// between verification and launch (it may sit for hours until the user clicks Install).</summary>
+    public sealed class VerifiedInstaller : IDisposable
     {
-        try
+        private readonly FileStream _lock;
+        private readonly string? _digest;
+        public string Path { get; }
+
+        private VerifiedInstaller(string path, FileStream fileLock, string? digest)
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            Path = path;
+            _lock = fileLock;
+            _digest = digest;
+        }
+
+        public static VerifiedInstaller? Open(string path, string? digest)
+        {
+            var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (fs.Length >= 1024 && DigestMatches(fs, digest)) return new VerifiedInstaller(path, fs, digest);
+            fs.Dispose();
+            return null;
+        }
+
+        /// <summary>Re-checks the hash on the locked file and starts it.</summary>
+        public bool Launch()
+        {
+            try
             {
-                FileName = path,
-                UseShellExecute = true,
-            });
-            return true;
+                if (!DigestMatches(_lock, _digest))
+                {
+                    Diagnostics.Log("Installer changed after verification; not launching.");
+                    return false;
+                }
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = Path,
+                    UseShellExecute = true,
+                });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log("UpdateService.LaunchInstaller", ex);
+                return false;
+            }
         }
-        catch (Exception ex)
-        {
-            Diagnostics.Log("UpdateService.LaunchInstaller", ex);
-            return false;
-        }
+
+        public void Dispose() => _lock.Dispose();
     }
 
     public static string CurrentVersion()

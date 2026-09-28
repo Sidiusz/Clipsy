@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using Clipsy.Localization;
 using Microsoft.UI.Dispatching;
 
 namespace Clipsy.Services;
@@ -17,7 +18,8 @@ public static class UpdateManager
     public static UpdatePhase Phase { get; private set; } = UpdatePhase.None;
     public static UpdateInfo? Info { get; private set; }
     public static double Progress { get; private set; }
-    public static string? InstallerPath { get; private set; }
+    private static UpdateService.VerifiedInstaller? _installer;
+    private static bool _downloadFailed;
 
     public static event Action? StateChanged;
 
@@ -49,15 +51,16 @@ public static class UpdateManager
 
             SetPhase(UpdatePhase.Checking);
             var result = await UpdateService.CheckLatestAsync();
-            s.LastUpdateCheckUtc = DateTime.UtcNow;
-            SettingsService.Instance.Save();
-
             if (result.Status == UpdateCheckStatus.Failed)
             {
                 if (force) NotificationService.Warning("UpdateCheckFailed");
                 SetPhase(UpdatePhase.Failed);
                 return;
             }
+            // Only a successful check counts, so an offline boot retries on the next tick.
+            s = SettingsService.Instance.Settings;
+            s.LastUpdateCheckUtc = DateTime.UtcNow;
+            SettingsService.Instance.SaveState();
             var info = result.Info;
             if (info == null || !UpdateService.IsNewer(info.Version, UpdateService.CurrentVersion()))
             {
@@ -71,8 +74,11 @@ public static class UpdateManager
                 SetPhase(UpdatePhase.UpToDate);
                 return;
             }
+            bool isNew = Info?.Version != info.Version;
             Info = info;
+            _downloadFailed = false;
             SetPhase(UpdatePhase.Available);
+            if (isNew && !force) NotifyAvailable(info);
         }
         catch (Exception ex)
         {
@@ -81,14 +87,25 @@ public static class UpdateManager
         }
     }
 
-    // Tray/Settings primary action: download when available, install when ready,
-    // re-check on failure.
+    private static void NotifyAvailable(UpdateInfo info)
+        => NotificationService.Post(NotificationLevel.Info, "Clipsy",
+            string.Format(Strings.Get("NotifyUpdateAvailable"), info.Version),
+            ToastCategory.Update,
+            action1Icon: "\uE894", action1Tooltip: Strings.Get("ToastSkipVersion"), action1: SkipCurrent,
+            action2Icon: "\uE896", action2Tooltip: Strings.Get("ToastDownload"), action2: () => _ = StartDownloadAsync(),
+            action2IsPrimary: true);
+
+    // Tray/Settings primary action: download when available, install when ready; after a failed
+    // download send the user to the release page, after a failed check re-check.
     public static void PrimaryAction()
     {
         switch (Phase)
         {
             case UpdatePhase.Available: _ = StartDownloadAsync(); break;
             case UpdatePhase.Ready:     InstallNow();             break;
+            case UpdatePhase.Failed when _downloadFailed && Info != null:
+                NotificationService.OpenReleasePage(Info.Url);
+                break;
             case UpdatePhase.Failed:    _ = CheckAsync(true);     break;
         }
     }
@@ -106,20 +123,37 @@ public static class UpdateManager
         Progress = 0;
         SetPhase(UpdatePhase.Downloading);
         var prog = new Progress<double>(p => { Progress = p; Raise(); });
-        string? path = await UpdateService.DownloadInstallerAsync(Info, prog);
+        var installer = await UpdateService.DownloadInstallerAsync(Info, prog);
         _downloading = false;
-        if (path == null) { SetPhase(UpdatePhase.Failed); return; }
-        InstallerPath = path;
+        if (installer == null)
+        {
+            _downloadFailed = true;
+            NotificationService.Warning("ToastUpdateDownloadFailed");
+            SetPhase(UpdatePhase.Failed);
+            return;
+        }
+        _installer?.Dispose();
+        _installer = installer;
         SetPhase(UpdatePhase.Ready);
     }
 
     public static void InstallNow()
     {
-        if (string.IsNullOrEmpty(InstallerPath)) return;
-        if (UpdateService.LaunchInstaller(InstallerPath))
+        if (_installer == null) return;
+        // The installer closes Clipsy; don't cut a recording short.
+        if (RecordingController.IsBusy)
         {
-            ProcessWatchdog.MarkCleanExit();
-            try { Microsoft.UI.Xaml.Application.Current.Exit(); } catch { }
+            NotificationService.Warning("UpdateWaitRecording");
+            return;
+        }
+        if (_installer.Launch())
+            App.Current.ExitApp();
+        else
+        {
+            _installer.Dispose();
+            _installer = null;
+            _downloadFailed = true;
+            SetPhase(UpdatePhase.Failed);
         }
     }
 
@@ -127,7 +161,7 @@ public static class UpdateManager
     {
         if (Info == null) return;
         SettingsService.Instance.Settings.SkippedVersion = Info.Version;
-        SettingsService.Instance.Save();
+        SettingsService.Instance.SaveState();
         Info = null;
         SetPhase(UpdatePhase.UpToDate);
     }
