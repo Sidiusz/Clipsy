@@ -12,10 +12,11 @@ public sealed class HotkeyService : IDisposable
     private const int WM_HOTKEY       = 0x0312;
     private const int WM_QUIT         = 0x0012;
     private const int WM_USER_REREG   = 0x0401;
-    private const uint MOD_NONE       = 0x0000;
     private const uint MOD_ALT        = 0x0001;
     private const uint MOD_CONTROL    = 0x0002;
     private const uint MOD_SHIFT      = 0x0004;
+    private const uint MOD_WIN        = 0x0008;
+    private const uint MOD_NOREPEAT   = 0x4000;
     private const int HOTKEY_CAPTURE  = 0xC1170;
     private const int HOTKEY_RECORD   = 0xC1171;
     private const int HOTKEY_MIC      = 0xC1172;
@@ -48,9 +49,9 @@ public sealed class HotkeyService : IDisposable
     private bool _captureViaLL;
     private bool _recordViaLL;
     private bool _micViaLL;
+    private uint _heldVk;
 
     public bool IsCaptureRegistered { get; private set; }
-    public int LastRegisterError { get; private set; }
 
     public HotkeyService(DispatcherQueue uiDispatcher)
     {
@@ -91,8 +92,9 @@ public sealed class HotkeyService : IDisposable
         ParseBinding(captureBinding, out _captureVk, out _captureMods);
         ParseBinding(recordBinding,  out _recordVk,  out _recordMods);
         ParseBinding(micBinding,     out _micVk,     out _micMods);
-        if (_threadId != 0)
-            PostThreadMessage(_threadId, WM_USER_REREG, IntPtr.Zero, IntPtr.Zero);
+        // Posted to the window, not the thread: thread messages never reach WndProc.
+        if (_hwnd != IntPtr.Zero)
+            PostMessageW(_hwnd, WM_USER_REREG, IntPtr.Zero, IntPtr.Zero);
     }
 
     private void MessageLoop(ManualResetEventSlim ready)
@@ -128,7 +130,7 @@ public sealed class HotkeyService : IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Hotkey pump crash: {ex}");
+            Diagnostics.Log("Hotkey pump crash", ex);
             ready.Set();
         }
         finally
@@ -165,38 +167,33 @@ public sealed class HotkeyService : IDisposable
         _micViaLL     = false;
         IsCaptureRegistered = false;
 
+        bool captureHotkey = false;
         if (_captureVk != 0)
         {
-            // LL hook sees PrintScreen before app-level hotkeys, so apps that
-            // grab it (other tools, games, Win11 Snipping) no longer swallow it.
+            // LL hook beats other apps' hotkeys; RegisterHotKey still fires when an
+            // elevated window is focused, which UIPI hides from the hook.
             _captureViaLL = true;
+            captureHotkey = RegisterHotKey(_hwnd, HOTKEY_CAPTURE, _captureMods | MOD_NOREPEAT, _captureVk);
         }
 
-        if (_recordVk != 0 && _recordCallback != null)
+        if (_recordVk != 0 && _recordCallback != null
+            && !RegisterHotKey(_hwnd, HOTKEY_RECORD, _recordMods | MOD_NOREPEAT, _recordVk))
         {
-            if (!RegisterHotKey(_hwnd, HOTKEY_RECORD, _recordMods, _recordVk))
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Clipsy] RegisterHotKey(record-stop) failed err=0x{Marshal.GetLastWin32Error():X} — falling back to LL hook");
-                _recordViaLL = true;
-            }
+            Diagnostics.Log($"RegisterHotKey(record-stop) failed err=0x{Marshal.GetLastWin32Error():X}; using LL hook");
+            _recordViaLL = true;
         }
 
-        if (_micVk != 0 && _micCallback != null)
+        if (_micVk != 0 && _micCallback != null
+            && !RegisterHotKey(_hwnd, HOTKEY_MIC, _micMods | MOD_NOREPEAT, _micVk))
         {
-            if (!RegisterHotKey(_hwnd, HOTKEY_MIC, _micMods, _micVk))
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Clipsy] RegisterHotKey(mic-toggle) failed err=0x{Marshal.GetLastWin32Error():X} — falling back to LL hook");
-                _micViaLL = true;
-            }
+            Diagnostics.Log($"RegisterHotKey(mic-toggle) failed err=0x{Marshal.GetLastWin32Error():X}; using LL hook");
+            _micViaLL = true;
         }
 
         SyncLowLevelHook();
 
-        // Capture is LL-only now; it's truly registered only if the hook installed.
         if (_captureVk != 0)
-            IsCaptureRegistered = !_captureViaLL || _llHook != IntPtr.Zero;
+            IsCaptureRegistered = _llHook != IntPtr.Zero || captureHotkey;
     }
 
     private void SyncLowLevelHook()
@@ -210,8 +207,7 @@ public sealed class HotkeyService : IDisposable
             _llHook = SetWindowsHookExW(WH_KEYBOARD_LL, _llProc, hMod, 0);
             if (_llHook == IntPtr.Zero)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Clipsy] SetWindowsHookEx(WH_KEYBOARD_LL) failed err=0x{Marshal.GetLastWin32Error():X}");
+                Diagnostics.Log($"SetWindowsHookEx(WH_KEYBOARD_LL) failed err=0x{Marshal.GetLastWin32Error():X}");
                 if (_llProcHandle.IsAllocated) _llProcHandle.Free();
                 _llProc = null;
             }
@@ -227,35 +223,42 @@ public sealed class HotkeyService : IDisposable
 
     private IntPtr LowLevelKbProc(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode == HC_ACTION)
+        try
         {
-            int w = wParam.ToInt32();
-            if (w == WM_KEYDOWN || w == WM_SYSKEYDOWN)
-            {
-                var kbd = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-                uint vk = kbd.vkCode;
-                uint mods = CurrentModifiers();
-                if (_captureViaLL && vk == _captureVk && mods == _captureMods)
-                {
-                    var cb = _captureCallback;
-                    cb?.Invoke(); // callback only signals the dedicated capture worker
-                    return new IntPtr(1); // swallow so OS shortcut doesn't also fire
-                }
-                if (_recordViaLL && vk == _recordVk && mods == _recordMods)
-                {
-                    var cb = _recordCallback;
-                    if (cb != null) _dispatcher.TryEnqueue(() => cb());
-                    return new IntPtr(1);
-                }
-                if (_micViaLL && vk == _micVk && mods == _micMods)
-                {
-                    var cb = _micCallback;
-                    if (cb != null) _dispatcher.TryEnqueue(() => cb());
-                    return new IntPtr(1);
-                }
-            }
+            if (nCode == HC_ACTION && HandleLowLevelKey(wParam.ToInt32(), Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam).vkCode))
+                return new IntPtr(1); // swallow so the OS shortcut doesn't also fire
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("Hotkey LL hook", ex);
         }
         return CallNextHookEx(_llHook, nCode, wParam, lParam);
+    }
+
+    private bool HandleLowLevelKey(int message, uint vk)
+    {
+        if (message == WM_KEYUP || message == WM_SYSKEYUP)
+        {
+            if (vk == _heldVk) _heldVk = 0;
+            return false;
+        }
+        if (message != WM_KEYDOWN && message != WM_SYSKEYDOWN) return false;
+
+        uint mods = CurrentModifiers();
+        Action? cb;
+        bool onUi = true;
+        if (_captureViaLL && vk == _captureVk && mods == _captureMods) { cb = _captureCallback; onUi = false; }
+        else if (_recordViaLL && vk == _recordVk && mods == _recordMods) cb = _recordCallback;
+        else if (_micViaLL && vk == _micVk && mods == _micMods) cb = _micCallback;
+        else return false;
+
+        // Auto-repeat while held must not retrigger.
+        if (_heldVk == vk) return true;
+        _heldVk = vk;
+        if (cb == null) return true;
+        if (onUi) _dispatcher.TryEnqueue(() => cb());
+        else cb(); // capture callback only signals the dedicated capture worker
+        return true;
     }
 
     private static uint CurrentModifiers()
@@ -264,34 +267,42 @@ public sealed class HotkeyService : IDisposable
         if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) m |= MOD_CONTROL;
         if ((GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0) m |= MOD_SHIFT;
         if ((GetAsyncKeyState(VK_MENU)    & 0x8000) != 0) m |= MOD_ALT;
+        if ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0) m |= MOD_WIN;
         return m;
     }
 
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
-        if (msg == WM_HOTKEY)
+        try
         {
-            int id = wParam.ToInt32();
-            if (id == HOTKEY_CAPTURE)
+            if (msg == WM_HOTKEY)
             {
-                var cb = _captureCallback;
-                cb?.Invoke();
+                int id = wParam.ToInt32();
+                if (id == HOTKEY_CAPTURE)
+                {
+                    _captureCallback?.Invoke();
+                }
+                else if (id == HOTKEY_RECORD)
+                {
+                    var cb = _recordCallback;
+                    if (cb != null) _dispatcher.TryEnqueue(() => cb());
+                }
+                else if (id == HOTKEY_MIC)
+                {
+                    var cb = _micCallback;
+                    if (cb != null) _dispatcher.TryEnqueue(() => cb());
+                }
+                return IntPtr.Zero;
             }
-            else if (id == HOTKEY_RECORD)
+            if (msg == WM_USER_REREG)
             {
-                var cb = _recordCallback;
-                if (cb != null) _dispatcher.TryEnqueue(() => cb());
+                DoRegister();
+                return IntPtr.Zero;
             }
-            else if (id == HOTKEY_MIC)
-            {
-                var cb = _micCallback;
-                if (cb != null) _dispatcher.TryEnqueue(() => cb());
-            }
-            return IntPtr.Zero;
         }
-        if (msg == WM_USER_REREG)
+        catch (Exception ex)
         {
-            DoRegister();
+            Diagnostics.Log("Hotkey WndProc", ex);
             return IntPtr.Zero;
         }
         return DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -319,9 +330,16 @@ public sealed class HotkeyService : IDisposable
                 case "ctrl": case "control": mods |= MOD_CONTROL; break;
                 case "shift":                mods |= MOD_SHIFT;   break;
                 case "alt":  case "menu":    mods |= MOD_ALT;     break;
+                case "win":  case "windows": mods |= MOD_WIN;     break;
             }
         }
         vk = KeyNameToVk(parts[^1].Trim());
+    }
+
+    public static bool IsValidBinding(string? binding)
+    {
+        ParseBinding(binding, out uint vk, out _);
+        return vk != 0;
     }
 
     public static bool MatchesBinding(string? binding, Windows.System.VirtualKey key)
@@ -330,33 +348,30 @@ public sealed class HotkeyService : IDisposable
         return vk != 0 && vk == (uint)key && mods == CurrentModifiers();
     }
 
-    private static uint KeyNameToVk(string name) => name.ToLowerInvariant() switch
+    internal static uint KeyNameToVk(string name)
     {
-        "snapshot" or "printscreen" or "print screen" => 0x2C,
-        "pause"    => 0x13,
-        "escape"   => 0x1B,
-        "tab"      => 0x09,
-        "space"    => 0x20,
-        "insert"   => 0x2D,
-        "delete"   => 0x2E,
-        "home"     => 0x24,
-        "end"      => 0x23,
-        "pageup"   => 0x21,
-        "pagedown" => 0x22,
-        "left"     => 0x25,
-        "up"       => 0x26,
-        "right"    => 0x27,
-        "down"     => 0x28,
-        "f1"  => 0x70, "f2"  => 0x71, "f3"  => 0x72, "f4"  => 0x73,
-        "f5"  => 0x74, "f6"  => 0x75, "f7"  => 0x76, "f8"  => 0x77,
-        "f9"  => 0x78, "f10" => 0x79, "f11" => 0x7A, "f12" => 0x7B,
-        "number0" => 0x30, "number1" => 0x31, "number2" => 0x32,
-        "number3" => 0x33, "number4" => 0x34, "number5" => 0x35,
-        "number6" => 0x36, "number7" => 0x37, "number8" => 0x38,
-        "number9" => 0x39,
-        _ when name.Length == 1 && char.IsLetter(name[0]) => (uint)char.ToUpper(name[0]),
-        _ => 0
-    };
+        if (string.IsNullOrEmpty(name)) return 0;
+        switch (name.ToLowerInvariant())
+        {
+            case "printscreen": case "print screen": case "prtsc": return 0x2C;
+            case "esc": return 0x1B;
+            case "del": return 0x2E;
+            case "ins": return 0x2D;
+            case "pgup": return 0x21;
+            case "pgdn": return 0x22;
+        }
+        if (name.Length == 1 && char.IsAsciiLetterOrDigit(name[0])) return char.ToUpperInvariant(name[0]);
+        // Settings stores VirtualKey.ToString(); keys without a name (OEM) are stored as numbers.
+        if (Enum.TryParse<Windows.System.VirtualKey>(name, ignoreCase: true, out var key))
+        {
+            uint v = (uint)key;
+            if (v is > 0 and < 0xFF && !IsModifierVk(v)) return v;
+        }
+        return 0;
+    }
+
+    private static bool IsModifierVk(uint vk) =>
+        vk is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C or (>= 0xA0 and <= 0xA5);
 
     // ---------- Win32 ----------
 
@@ -421,6 +436,9 @@ public sealed class HotkeyService : IDisposable
     private static extern IntPtr DispatchMessageW(ref MSG lpMsg);
 
     [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool PostMessageW(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern bool PostThreadMessage(uint idThread, int msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("kernel32.dll")]
@@ -436,10 +454,14 @@ public sealed class HotkeyService : IDisposable
     private const int WH_KEYBOARD_LL = 13;
     private const int HC_ACTION      = 0;
     private const int WM_KEYDOWN     = 0x0100;
+    private const int WM_KEYUP       = 0x0101;
     private const int WM_SYSKEYDOWN  = 0x0104;
+    private const int WM_SYSKEYUP    = 0x0105;
     private const int VK_SHIFT       = 0x10;
     private const int VK_CONTROL     = 0x11;
     private const int VK_MENU        = 0x12;
+    private const int VK_LWIN        = 0x5B;
+    private const int VK_RWIN        = 0x5C;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct KBDLLHOOKSTRUCT
