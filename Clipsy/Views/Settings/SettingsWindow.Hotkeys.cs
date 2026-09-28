@@ -97,6 +97,7 @@ public sealed partial class SettingsWindow
             return;
         }
         if (_listeningButton != null) FinishListening();
+        FinishEyedropperListening();
         _listeningButton = b;
         _listeningKey = key;
         b.Content = Strings.Get("HkPressKeys");
@@ -121,11 +122,23 @@ public sealed partial class SettingsWindow
         }
         if (IsModifierOnly(e.Key)) { e.Handled = true; return; }
         var binding = ChordToString(e.Key);
+        e.Handled = true;
+        if (!HotkeyService.IsValidBinding(binding))
+        {
+            ShowNotification("HkUnsupportedKey", "warning");
+            return;
+        }
+        var clash = _hotkeyRows.FirstOrDefault(r => r.Key != _listeningKey
+            && string.Equals(r.Binding, binding, System.StringComparison.OrdinalIgnoreCase));
+        if (clash != null)
+        {
+            ShowNotificationText(string.Format(Strings.Get("HkDuplicate"), binding, clash.Label), "warning");
+            return;
+        }
         var row = _hotkeyRows.FirstOrDefault(r => r.Key == _listeningKey);
         if (row != null) row.Binding = binding;
         _listeningButton.Content = binding;
         FinishListening();
-        e.Handled = true;
     }
 
     private void FinishListening()
@@ -164,6 +177,7 @@ public sealed partial class SettingsWindow
         if (IsDown(VirtualKey.Control)) parts.Add("Ctrl");
         if (IsDown(VirtualKey.Shift)) parts.Add("Shift");
         if (IsDown(VirtualKey.Menu)) parts.Add("Alt");
+        if (IsDown(VirtualKey.LeftWindows) || IsDown(VirtualKey.RightWindows)) parts.Add("Win");
         parts.Add(key.ToString());
         return string.Join("+", parts);
     }
