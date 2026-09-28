@@ -44,6 +44,8 @@ public sealed partial class CaptureOverlayWindow
             BorderThickness = new Thickness(1),
             FontFamily = family,
             FontSize = _drawing.Settings.TextSize,
+            // Committed text renders SemiBold; match it so text doesn't jump on commit.
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             Padding = TextEntryPadding,
         };
         // Scoped styles override the app-global font pinned on the inner text host.
@@ -61,9 +63,9 @@ public sealed partial class CaptureOverlayWindow
         _liveFontApplied = false;
         tb.LostFocus += (_, _) =>
         {
-            // Don't commit while the user is dragging the handle — focus moves
-            // off the textbox during drag.
-            if (_draggingActiveText) return;
+            // A late LostFocus from a previous box must not commit (and discard) the new one;
+            // dragging the handle also moves focus off the box.
+            if (_activeTextBox != tb || _draggingActiveText) return;
             CommitText();
         };
         tb.KeyDown += (_, ke) =>

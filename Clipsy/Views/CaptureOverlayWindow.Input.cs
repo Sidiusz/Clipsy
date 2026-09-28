@@ -33,7 +33,12 @@ public sealed partial class CaptureOverlayWindow
         bool rmb = cp.Properties.IsRightButtonPressed;
         bool lmb = cp.Properties.IsLeftButtonPressed;
 
-        if (_eyedropperActive)
+        if (_tempEyedropper && rmb)
+        {
+            ExitTempEyedropper(pick: false);
+            _eyedropperSuppressed = true;
+        }
+        else if (_eyedropperActive)
         {
             if (lmb)
                 ApplyPickedColor(SamplePixel(pos));
@@ -65,6 +70,7 @@ public sealed partial class CaptureOverlayWindow
             if (rmb)
             {
                 _mode = InteractionMode.Erasing;
+                _drawing.BeginEdit();
                 RootGrid.CapturePointer(e.Pointer);
                 TryEraseAt(pos);
                 e.Handled = true;
@@ -149,7 +155,9 @@ public sealed partial class CaptureOverlayWindow
         if (!_inOcrMode && _drawing.Settings.Tool != ToolKind.None && _activeTextBox == null)
         {
             bool mod = IsEyedropperModifierDown();
-            if (mod && !_tempEyedropper && !_eyedropperActive) EnterTempEyedropper();
+            if (!mod) _eyedropperSuppressed = false;
+            if (mod && !_eyedropperSuppressed && _mode == InteractionMode.Idle && !_tempEyedropper && !_eyedropperActive)
+                EnterTempEyedropper();
             else if (!mod && _tempEyedropper) { ExitTempEyedropper(pick: true); return; }
         }
 
@@ -190,11 +198,12 @@ public sealed partial class CaptureOverlayWindow
                 break;
             case InteractionMode.MovingSelection:
             {
-                double dx = pos.X - _dragStart.X;
-                double dy = pos.Y - _dragStart.Y;
+                // Keep the whole selection on the captured frame; pixels outside it don't exist.
+                double maxX = System.Math.Max(0, RootGrid.ActualWidth - _selectionAtDragStart.Width);
+                double maxY = System.Math.Max(0, RootGrid.ActualHeight - _selectionAtDragStart.Height);
                 _selectionRect = new Rect(
-                    _selectionAtDragStart.X + dx,
-                    _selectionAtDragStart.Y + dy,
+                    System.Math.Clamp(_selectionAtDragStart.X + pos.X - _dragStart.X, 0, maxX),
+                    System.Math.Clamp(_selectionAtDragStart.Y + pos.Y - _dragStart.Y, 0, maxY),
                     _selectionAtDragStart.Width,
                     _selectionAtDragStart.Height);
                 RequestSelectionVisualUpdate();
@@ -224,9 +233,6 @@ public sealed partial class CaptureOverlayWindow
                 break;
             case InteractionMode.Erasing:
                 TryEraseAt(pos);
-                break;
-            case InteractionMode.SelectingOcrText:
-                UpdateOcrDragSelection(pos);
                 break;
             case InteractionMode.MovingText:
                 if (_movingText != null)
@@ -266,6 +272,7 @@ public sealed partial class CaptureOverlayWindow
 
     private TextElement? _movingText;
     private Point _movingTextGrab;
+    private Point _movingTextStart;
 
     // ---------- Move tool (any object) ----------
 
@@ -273,6 +280,7 @@ public sealed partial class CaptureOverlayWindow
     private int _moveCycleIndex;
     private Point _moveHitPoint;
     private Point _moveLastPos;
+    private Point _moveStartPos;
 
     private void StartMovePress(Point pos, Pointer pointer)
     {
@@ -305,6 +313,7 @@ public sealed partial class CaptureOverlayWindow
         _drawing.SetSelected(hits[_moveCycleIndex]);
         _mode = InteractionMode.MovingElement;
         _moveLastPos = pos;
+        _moveStartPos = pos;
         RootGrid.CapturePointer(pointer);
     }
 
@@ -317,6 +326,7 @@ public sealed partial class CaptureOverlayWindow
             {
                 _mode = InteractionMode.MovingText;
                 _movingText = te;
+                _movingTextStart = te.Position;
                 _movingTextGrab = new Point(pos.X - te.Position.X, pos.Y - te.Position.Y);
                 RootGrid.CapturePointer(pointer);
                 return true;
@@ -328,8 +338,20 @@ public sealed partial class CaptureOverlayWindow
     private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e)
     {
         var pos = e.GetCurrentPoint(RootGrid).Position;
+        FinishPointerInteraction(pos);
+        // After the mode reset: releasing capture raises PointerCaptureLost synchronously.
         RootGrid.ReleasePointerCapture(e.Pointer);
+    }
 
+    // Win key, UAC or a touch cancel steal capture mid-drag; finish instead of leaving the mode stuck.
+    private void OnRootPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (_mode == InteractionMode.Idle) return;
+        FinishPointerInteraction(_lastPointerPos);
+    }
+
+    private void FinishPointerInteraction(Point pos)
+    {
         switch (_mode)
         {
             case InteractionMode.SelectingNew:
@@ -376,15 +398,20 @@ public sealed partial class CaptureOverlayWindow
             case InteractionMode.DrawingRect:
                 FinishActiveShape();
                 break;
-            case InteractionMode.SelectingOcrText:
-                FinishOcrSelection(pos);
+            case InteractionMode.Erasing:
+                _drawing.EndEdit();
                 break;
             case InteractionMode.MovingText:
+                if (_movingText != null)
+                    _drawing.RecordMove(_movingText, _movingText.Position.X - _movingTextStart.X,
+                        _movingText.Position.Y - _movingTextStart.Y);
                 _movingText = null;
                 break;
             case InteractionMode.MovingElement:
                 // Keep selection + outline until deselect / tool change; update the
                 // cycle anchor so the moved object isn't re-cycled from its old spot.
+                if (_drawing.Selected != null)
+                    _drawing.RecordMove(_drawing.Selected, _moveLastPos.X - _moveStartPos.X, _moveLastPos.Y - _moveStartPos.Y);
                 _moveHitPoint = pos;
                 break;
         }
@@ -454,15 +481,11 @@ public sealed partial class CaptureOverlayWindow
             e.Handled = true;
             return;
         }
-        if (_drawing.Settings.Tool != ToolKind.None && _hasSelection)
+        if (_drawing.Settings.Tool != ToolKind.None)
         {
-            var pos = e.GetPosition(RootGrid);
-            if (IsInsideSelection(pos))
-            {
-                // RMB inside selection with tool active is erase, not menu.
-                e.Handled = true;
-                return;
-            }
+            // With a tool active every RMB press is an erase, not the menu.
+            e.Handled = true;
+            return;
         }
         UpdateContextMenuVisibility();
     }
@@ -473,14 +496,18 @@ public sealed partial class CaptureOverlayWindow
     {
         if (_activeTextBox != null) return; // typing in textbox; handled by it
 
-        // Modifier held over a draw tool → enter temp eyedropper immediately,
-        // even without a mouse move.
-        if (!_inOcrMode && _drawing.Settings.Tool != ToolKind.None
-            && IsEyedropperModifierDown())
+        // Pressing the modifier alone over a draw tool enters the temp eyedropper;
+        // any other key held with it is a shortcut (Ctrl+Z), so shortcuts win.
+        if (!_inOcrMode && _drawing.Settings.Tool != ToolKind.None && IsEyedropperModifierDown())
         {
-            EnterTempEyedropper();
-            e.Handled = true;
-            return;
+            if (IsEyedropperModifierKey(e.Key))
+            {
+                if (!_eyedropperSuppressed && _mode == InteractionMode.Idle) EnterTempEyedropper();
+                e.Handled = true;
+                return;
+            }
+            _eyedropperSuppressed = true;
+            if (_tempEyedropper) ExitTempEyedropper(pick: false);
         }
 
         if (e.Key == VirtualKey.Escape)
@@ -505,13 +532,13 @@ public sealed partial class CaptureOverlayWindow
         if (HotkeyService.MatchesBinding(hotkeys.HotkeyUndo, e.Key))
         {
             e.Handled = true;
-            _drawing.Undo();
+            if (_mode == InteractionMode.Idle) _drawing.Undo();
             return;
         }
         if (HotkeyService.MatchesBinding(hotkeys.HotkeyRedo, e.Key))
         {
             e.Handled = true;
-            _drawing.Redo();
+            if (_mode == InteractionMode.Idle) _drawing.Redo();
             return;
         }
         if (HotkeyService.MatchesBinding(hotkeys.HotkeyScreenshotSilent, e.Key))
@@ -519,6 +546,13 @@ public sealed partial class CaptureOverlayWindow
             if (_inOcrMode) return;
             e.Handled = true;
             _ = SaveSilentAsync();
+            return;
+        }
+        if (HotkeyService.MatchesBinding(SaveAsBinding(hotkeys.HotkeyScreenshotSilent), e.Key))
+        {
+            if (_inOcrMode) return;
+            e.Handled = true;
+            _ = SaveAsAsync();
             return;
         }
         if (HotkeyService.MatchesBinding(hotkeys.HotkeyCopy, e.Key))
@@ -535,7 +569,7 @@ public sealed partial class CaptureOverlayWindow
         switch (e.Key)
         {
             case VirtualKey.Number1 or VirtualKey.Number2 or VirtualKey.Number3
-                 or VirtualKey.Number4 or VirtualKey.Number5 when !ctrl:
+                 or VirtualKey.Number4 when !ctrl:
                 if (HandleToolHotkey(e.Key)) e.Handled = true;
                 return;
         }
@@ -560,9 +594,6 @@ public sealed partial class CaptureOverlayWindow
                 return true;
             case VirtualKey.Number4:
                 _ = EnterOcrModeAsync();
-                return true;
-            case VirtualKey.Number5:
-                SetTool(_drawing.Settings.Tool == ToolKind.Move ? ToolKind.None : ToolKind.Move);
                 return true;
         }
         return false;
@@ -597,7 +628,24 @@ public sealed partial class CaptureOverlayWindow
     // ---------- Hold-to-eyedrop ----------
 
     private bool _tempEyedropper;
+    private bool _eyedropperSuppressed;
     private Point _lastPointerPos;
+
+    /// <summary>Save As = the quick-save binding plus Shift (Ctrl+S → Ctrl+Shift+S).</summary>
+    internal static string SaveAsBinding(string? quickSave)
+        => string.IsNullOrWhiteSpace(quickSave) ? string.Empty : "Shift+" + quickSave;
+
+    private static bool IsEyedropperModifierKey(VirtualKey key)
+    {
+        var binding = SettingsService.Instance.Settings.EyedropperModifier;
+        if (string.Equals(binding, "Ctrl", StringComparison.OrdinalIgnoreCase))
+            return key is VirtualKey.Control or VirtualKey.LeftControl or VirtualKey.RightControl;
+        if (string.Equals(binding, "Alt", StringComparison.OrdinalIgnoreCase))
+            return key is VirtualKey.Menu or VirtualKey.LeftMenu or VirtualKey.RightMenu;
+        if (string.Equals(binding, "Shift", StringComparison.OrdinalIgnoreCase))
+            return key is VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift;
+        return Enum.TryParse(binding, ignoreCase: true, out VirtualKey custom) && custom == key;
+    }
 
     private static bool IsEyedropperModifierDown()
     {
@@ -613,6 +661,7 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnKeyUp(object sender, KeyRoutedEventArgs e)
     {
+        if (!IsEyedropperModifierDown()) _eyedropperSuppressed = false;
         if (_tempEyedropper && !IsEyedropperModifierDown())
         {
             ExitTempEyedropper(pick: true);

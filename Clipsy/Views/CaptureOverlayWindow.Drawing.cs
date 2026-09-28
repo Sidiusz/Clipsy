@@ -135,20 +135,7 @@ public sealed partial class CaptureOverlayWindow
     }
 
     private static (Point, Point) ArrowHeadPoints(Point a, Point b, double thickness)
-    {
-        double dx = b.X - a.X, dy = b.Y - a.Y;
-        double len = System.Math.Sqrt(dx * dx + dy * dy);
-        if (len < 1e-3) return (b, b);
-        double ux = dx / len, uy = dy / len;
-        // Head scales with the brush but never longer than the shaft itself.
-        double headLen = System.Math.Min(System.Math.Max(9.0, thickness * 3.0), len);
-        const double spread = 0.46; // ~26° per side
-        double cos = System.Math.Cos(spread), sin = System.Math.Sin(spread);
-        double bx = -ux, by = -uy;
-        var p1 = new Point(b.X + headLen * (bx * cos - by * sin), b.Y + headLen * (bx * sin + by * cos));
-        var p2 = new Point(b.X + headLen * (bx * cos + by * sin), b.Y + headLen * (-bx * sin + by * cos));
-        return (p1, p2);
-    }
+        => DrawingController.ArrowHead(a, b, thickness);
 
     // Drop sub-pixel points (~1.4 px min spacing) to bound stroke size.
     private const double MinStrokePointDistSq = 2.0;
@@ -307,22 +294,6 @@ public sealed partial class CaptureOverlayWindow
     }
 
     // ---------- Toolbar / tool selection ----------
-
-    private void OnToolToggle(object sender, RoutedEventArgs e)
-    {
-        if (sender is not ToggleButton tb) return;
-        ToolKind tool = tb.Name switch
-        {
-            "PencilBtn" => ToolKind.Pencil,
-            "Rectangle" => ToolKind.Rectangle,
-            "EllipseBtn" => ToolKind.Ellipse,
-            "LineBtn" => ToolKind.Line,
-            "TextBtn" => ToolKind.Text,
-            _ => ToolKind.None,
-        };
-        SetTool(tb.IsChecked == true ? tool : ToolKind.None);
-        if (tb.IsChecked == true) PopButton(tb);
-    }
 
     // Quick scale-pop on tool select — confirms the click without delaying it.
     // ScaleX/ScaleY on a transform are dependent animations, hence the flag.

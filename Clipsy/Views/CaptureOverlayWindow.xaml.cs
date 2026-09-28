@@ -35,7 +35,7 @@ namespace Clipsy.Views;
 // .ColorPicker/.Actions/.Ocr (+ this file: ctor, window setup, win32 interop).
 public sealed partial class CaptureOverlayWindow : Window
 {
-    private enum InteractionMode { Idle, SelectingNew, MovingSelection, ResizingSelection, DrawingStroke, DrawingRect, Erasing, PlacingText, SelectingOcrText, MovingText, MovingElement }
+    private enum InteractionMode { Idle, SelectingNew, MovingSelection, ResizingSelection, DrawingStroke, DrawingRect, Erasing, PlacingText, MovingText, MovingElement }
     private enum HandlePos { TL, T, TR, R, BR, B, BL, L }
 
     private const double MinSelectionSize = 4.0;
@@ -53,6 +53,8 @@ public sealed partial class CaptureOverlayWindow : Window
     private readonly TextBlock _textPreview;
 
     private InteractionMode _mode = InteractionMode.Idle;
+    private int _session;
+    private Storyboard? _introStoryboard;
     private bool _hasSelection;
     private Rect _selectionRect;
     private Rect _selectionAtDragStart;
@@ -71,15 +73,13 @@ public sealed partial class CaptureOverlayWindow : Window
     private Point _ocrPanelDragOffset;
 
     private ToolKind _currentShapeTool = ToolKind.Rectangle;
-    private readonly List<(Rect bounds, Microsoft.UI.Xaml.Shapes.Rectangle box, TextBlock glyph)> _ocrVisuals = new();
+    private readonly List<(Rect bounds, Microsoft.UI.Xaml.Shapes.Rectangle box)> _ocrVisuals = new();
     private readonly List<OcrWord> _ocrWordsRaw = new();
     private readonly List<Rect> _ocrWordsDip = new();
-    private readonly HashSet<int> _ocrSelected = new();
     private DispatcherTimer? _scanTimer;
     private DispatcherTimer? _hoverTimer;
     private double _scanProgress;
     private double _scanDir = 1.0;
-    private Point _ocrDragStart;
 
     public CaptureOverlayWindow(ScreenFreezeService.FrozenFrame frame)
     {
@@ -219,18 +219,37 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         _frame = frame;
         _closed = false;
+        _session++;
         ResetForReuse();
         ConfigureAsOverlay();   // un-hides (SWP_SHOWWINDOW), resizes to current bounds
         TryLoadFrozenImage();   // swap in the new capture's bitmap
+        // Monitors, language and bindings may have changed since the window was built.
+        ApplyLocalization();
+        BuildScreenMenu();
+        PositionHintOnPrimaryScreen();
         ArmReveal();
     }
+
+    private static readonly ScreenFreezeService.FrozenFrame EmptyFrame = new()
+    {
+        PixelBytes = Array.Empty<byte>(),
+        PixelWidth = 0,
+        PixelHeight = 0,
+        VirtualBounds = default,
+        Monitors = Array.Empty<ScreenFreezeService.MonitorInfo>(),
+    };
 
     // Hides + fully resets, keeping the instance alive for the next capture.
     internal void HideAndReset()
     {
         HideForClose();
         try { ShowWindow(_hwnd, SW_HIDE); } catch { }
+        _session++;
         ResetForReuse();
+        // Don't keep the last screenshot (tens of MB, and private) alive while idle in the tray.
+        FrozenImage.Source = null;
+        _frame = EmptyFrame;
+        GC.Collect(2, GCCollectionMode.Forced, blocking: false);
     }
 
     // Returns every interaction surface to its just-opened state.
@@ -277,7 +296,9 @@ public sealed partial class CaptureOverlayWindow : Window
         // New capture → eyedropper must resample; drop the aliased buffer.
         _eyedropperPixels = null;
 
-        // Intro animation replays from these start values.
+        // Intro animation replays from these start values; a finished HoldEnd storyboard would pin them.
+        _introStoryboard?.Stop();
+        _introStoryboard = null;
         DimLayer.Opacity = 0;
         Hint.Opacity = 0;
         HintTranslate.Y = 0;
@@ -333,6 +354,30 @@ public sealed partial class CaptureOverlayWindow : Window
         MenuSaveAs.Text       = Strings.Get("MenuSaveAs");
         MenuClear.Text        = Strings.Get("MenuClear");
         MenuCancel.Text       = Strings.Get("MenuCancel");
+
+        // Shortcut hints follow the user's bindings, not the defaults.
+        var s = SettingsService.Instance.Settings;
+        MenuSelectAll.KeyboardAcceleratorTextOverride = s.HotkeySelectAll;
+        MenuCopy.KeyboardAcceleratorTextOverride      = s.HotkeyCopy;
+        MenuSave.KeyboardAcceleratorTextOverride      = s.HotkeyScreenshotSilent;
+        MenuSaveAs.KeyboardAcceleratorTextOverride    = FormatSaveAsBinding(s.HotkeyScreenshotSilent);
+        HintSelectAllKeys.Children.Clear();
+        foreach (var part in (s.HotkeySelectAll ?? string.Empty).Split('+', StringSplitOptions.RemoveEmptyEntries))
+        {
+            HintSelectAllKeys.Children.Add(new Border
+            {
+                Style = (Style)Application.Current.Resources["ClipsyKbd"],
+                Child = new TextBlock { Text = part.Trim(), Style = (Style)Application.Current.Resources["ClipsyMono"] },
+            });
+        }
+    }
+
+    // "Ctrl+S" → "Ctrl+Shift+S": Shift goes right before the key, as users write it.
+    private static string FormatSaveAsBinding(string? quickSave)
+    {
+        if (string.IsNullOrWhiteSpace(quickSave)) return string.Empty;
+        int i = quickSave.LastIndexOf('+');
+        return i < 0 ? "Shift+" + quickSave : quickSave[..(i + 1)] + "Shift+" + quickSave[(i + 1)..];
     }
 
     private void PositionHintOnPrimaryScreen()
@@ -341,20 +386,22 @@ public sealed partial class CaptureOverlayWindow : Window
         {
             var b = _frame.VirtualBounds;
             var primary = _frame.Monitors.FirstOrDefault(m => m.IsPrimary);
-            double rootW = RootGrid.ActualWidth > 0 ? RootGrid.ActualWidth : RootGrid.Width;
-            double rootH = RootGrid.ActualHeight > 0 ? RootGrid.ActualHeight : RootGrid.Height;
-            if (primary == null || rootW <= 0 || rootH <= 0 || b.Width <= 0 || b.Height <= 0)
+            // Explicit size is set synchronously on resize; ActualWidth lags until the next layout pass.
+            double rootW = RootGrid.Width > 0 ? RootGrid.Width : RootGrid.ActualWidth;
+            double rootH = RootGrid.Height > 0 ? RootGrid.Height : RootGrid.ActualHeight;
+            if (primary == null || !(rootW > 0) || !(rootH > 0) || b.Width <= 0 || b.Height <= 0)
             {
-                Hint.Margin = new Thickness(50, 72, 0, 0);
+                Hint.Margin = new Thickness(0, 72, 0, 0);
                 return;
             }
+            // Margins box the primary monitor; HorizontalAlignment=Center centers the pill in it.
             double sx = rootW / b.Width, sy = rootH / b.Height;
-            double centerX = (primary.Bounds.X - b.X + primary.Bounds.Width / 2.0) * sx;
+            double left = (primary.Bounds.X - b.X) * sx;
+            double right = Math.Max(0, rootW - (primary.Bounds.X - b.X + primary.Bounds.Width) * sx);
             double topY = (primary.Bounds.Y - b.Y) * sy + 72;
-            Hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            Hint.Margin = new Thickness(centerX - Hint.DesiredSize.Width / 2, topY, 0, 0);
+            Hint.Margin = new Thickness(left, topY, right, 0);
         }
-        catch { Hint.Margin = new Thickness(50, 72, 0, 0); }
+        catch { Hint.Margin = new Thickness(0, 72, 0, 0); }
     }
 
     private AppWindow GetAppWindowForCurrentWindow()
@@ -383,14 +430,30 @@ public sealed partial class CaptureOverlayWindow : Window
         SetOverlayClientBounds(OffscreenX, OffscreenY, b.Width, b.Height,
             SWP_NOACTIVATE | SWP_SHOWWINDOW);
 
-        // XAML element sizes are in DIPs, so divide by DPI scale.
-        // Use GetDpiForWindow for accuracy before XamlRoot is ready.
+        SyncXamlSizeToWindowDpi();
+        UpdateDimGeometry(null);
+    }
+
+    // XAML sizes are DIPs of the window's current DPI. The window adopts the DPI of the monitor it
+    // mostly covers, which changes when it moves from the off-screen spot onto the desktop.
+    private void SyncXamlSizeToWindowDpi()
+    {
+        var b = _frame.VirtualBounds;
+        if (b.Width <= 0 || b.Height <= 0) return;
         var rawDpi = GetDpiForWindow(_hwnd);
         var dpiScale = rawDpi > 0 ? rawDpi / 96.0 : (Content?.XamlRoot?.RasterizationScale ?? 1.0);
-        RootGrid.Width = b.Width / dpiScale;
-        RootGrid.Height = b.Height / dpiScale;
+        double w = b.Width / dpiScale, h = b.Height / dpiScale;
+        SetIfChanged(RootGrid, FrameworkElement.WidthProperty, w);
+        SetIfChanged(RootGrid, FrameworkElement.HeightProperty, h);
+        SetIfChanged(FrozenImage, FrameworkElement.WidthProperty, w);
+        SetIfChanged(FrozenImage, FrameworkElement.HeightProperty, h);
+    }
 
-        UpdateDimGeometry(null);
+    // Width/Height start as NaN (auto); NaN compares unequal to everything, so test it explicitly.
+    private static void SetIfChanged(FrameworkElement element, DependencyProperty property, double value)
+    {
+        var current = (double)element.GetValue(property);
+        if (double.IsNaN(current) || Math.Abs(current - value) > 0.01) element.SetValue(property, value);
     }
 
     private void SetOverlayClientBounds(int clientX, int clientY, int clientWidth, int clientHeight, uint flags)
@@ -456,7 +519,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void OnActivated(object sender, WindowActivatedEventArgs e)
     {
-        if (FrozenImage.Source == null) TryLoadFrozenImage();
+        if (FrozenImage.Source == null && _frame.PixelWidth > 0) TryLoadFrozenImage();
         RootGrid.Focus(FocusState.Programmatic);
 
         UpdateDimGeometry(null);
@@ -496,6 +559,8 @@ public sealed partial class CaptureOverlayWindow : Window
         // redirection surface black until the next present. Reveal a few ticks later.
         var b = _frame.VirtualBounds;
         SetOverlayClientBounds(b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
+        SyncXamlSizeToWindowDpi();
+        PositionHintOnPrimaryScreen();
         int ticksAfterMove = 0;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnPostMoveTick;
         void OnPostMoveTick(object? s, object e)
@@ -550,6 +615,8 @@ public sealed partial class CaptureOverlayWindow : Window
             _cloaked = false;
             var b = _frame.VirtualBounds;
             SetOverlayClientBounds(b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
+            SyncXamlSizeToWindowDpi();
+            PositionHintOnPrimaryScreen();
             CompleteReveal();
         };
         wd.Start();
@@ -612,6 +679,7 @@ public sealed partial class CaptureOverlayWindow : Window
                 sb.Children.Add(hintFade);
             }
 
+            _introStoryboard = sb;
             sb.Begin();
         }
         catch
@@ -627,6 +695,7 @@ public sealed partial class CaptureOverlayWindow : Window
     private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
     {
         UpdateDimGeometry(_hasSelection ? _selectionRect : null);
+        if (!_hasSelection) PositionHintOnPrimaryScreen();
     }
 
     // WinUI 3 retains the Window after Close; null heavy fields so they collect.
@@ -670,16 +739,11 @@ public sealed partial class CaptureOverlayWindow : Window
                 dst.Write(_frame.PixelBytes, 0, _frame.PixelBytes.Length);
             wb.Invalidate();
             FrozenImage.Source = wb;
-
-            var b = _frame.VirtualBounds;
-            var rawDpi = GetDpiForWindow(_hwnd);
-            var dpiScale = rawDpi > 0 ? rawDpi / 96.0 : (Content?.XamlRoot?.RasterizationScale ?? 1.0);
-            FrozenImage.Width = b.Width / dpiScale;
-            FrozenImage.Height = b.Height / dpiScale;
+            SyncXamlSizeToWindowDpi();
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] FrozenImage sync load failed: {ex.Message}");
+            Diagnostics.Log("FrozenImage sync load failed", ex);
         }
     }
 
@@ -753,6 +817,7 @@ public sealed partial class CaptureOverlayWindow : Window
             SetForegroundWindow(hwnd);
             BringWindowToTop(hwnd);
             if (attached) AttachThreadInput(fgThread, thisThread, false);
+            if (GetForegroundWindow() != hwnd) Diagnostics.Log("Overlay did not get foreground; keys go to the previous window");
         }
         catch { SetForegroundWindow(hwnd); }
     }

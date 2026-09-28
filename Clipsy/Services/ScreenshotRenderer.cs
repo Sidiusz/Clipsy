@@ -1,21 +1,24 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Numerics;
+using System.Runtime.InteropServices;
 using Clipsy.Drawing;
+using Microsoft.Graphics.Canvas;
 using SkiaSharp;
-using Windows.Foundation;
-using WinColor = Windows.UI.Color;
+using Rect = Windows.Foundation.Rect;
 
 namespace Clipsy.Services;
 
-/// <summary>Rasterizes a selection (cropped frozen pixels + burned-in vector
-/// drawing layer) into an encoded byte buffer.</summary>
+/// <summary>Rasterizes a selection (cropped frozen pixels + burned-in drawings) into an encoded buffer.
+/// Drawings go through the same Win2D code as the overlay, so the file matches what was on screen.</summary>
 public static class ScreenshotRenderer
 {
     public enum OutputFormat { Png, Jpeg, Webp }
+
+    public readonly record struct PixelRect(int X, int Y, int Width, int Height);
 
     public static OutputFormat ParseFormat(string s)
     {
@@ -34,6 +37,16 @@ public static class ScreenshotRenderer
         _ => ".png",
     };
 
+    /// <summary>Same rounding as the overlay's selection hole, clamped to the frame.</summary>
+    public static PixelRect ToPixelRect(Rect selectionDip, double dpiScale, int frameWidth, int frameHeight)
+    {
+        int left = Math.Clamp((int)Math.Round(selectionDip.X * dpiScale), 0, frameWidth);
+        int top = Math.Clamp((int)Math.Round(selectionDip.Y * dpiScale), 0, frameHeight);
+        int right = Math.Clamp((int)Math.Round((selectionDip.X + selectionDip.Width) * dpiScale), 0, frameWidth);
+        int bottom = Math.Clamp((int)Math.Round((selectionDip.Y + selectionDip.Height) * dpiScale), 0, frameHeight);
+        return new PixelRect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+    }
+
     /// <param name="selectionDip">Selection rect in overlay-window DIPs.</param>
     /// <param name="dpiScale">Scale factor that converts DIPs to source-bitmap pixels.</param>
     public static byte[] RenderPng(
@@ -41,9 +54,7 @@ public static class ScreenshotRenderer
         Rect selectionDip,
         IReadOnlyList<DrawElement> elements,
         double dpiScale)
-    {
-        return RenderEncoded(frame, selectionDip, elements, dpiScale, OutputFormat.Png, 95);
-    }
+        => RenderEncoded(frame, selectionDip, elements, dpiScale, OutputFormat.Png);
 
     public static byte[] RenderEncoded(
         ScreenFreezeService.FrozenFrame frame,
@@ -53,51 +64,92 @@ public static class ScreenshotRenderer
         OutputFormat format,
         int quality = 90)
     {
-        using var bmp = RenderBitmap(frame, selectionDip, elements, dpiScale);
-        using var ms = new MemoryStream();
-        switch (format)
+        var rect = ToPixelRect(selectionDip, dpiScale, frame.PixelWidth, frame.PixelHeight);
+        if (rect.Width == 0 || rect.Height == 0)
+            throw new InvalidOperationException("Selection is outside the captured frame.");
+        var pixels = Crop(frame, rect);
+        if (elements.Count > 0)
+            pixels = BurnDrawings(pixels, rect, elements, dpiScale);
+        return Encode(pixels, rect.Width, rect.Height, format, quality);
+    }
+
+    public static byte[] Crop(ScreenFreezeService.FrozenFrame frame, PixelRect rect)
+    {
+        int rowBytes = rect.Width * 4;
+        var output = GC.AllocateUninitializedArray<byte>(rowBytes * rect.Height);
+        int srcStride = frame.PixelWidth * 4;
+        for (int y = 0; y < rect.Height; y++)
         {
-            case OutputFormat.Jpeg:
-                {
-                    var encoder = GetEncoder(ImageFormat.Jpeg);
-                    if (encoder == null)
-                    {
-                        bmp.Save(ms, ImageFormat.Jpeg);
-                    }
-                    else
-                    {
-                        using var ep = new EncoderParameters(1);
-                        ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,
-                            System.Math.Clamp((long)quality, 1L, 100L));
-                        // JPG has no alpha channel - drop alpha first to avoid pink-tinted output.
-                        using var flat = new Bitmap(bmp.Width, bmp.Height, PixelFormat.Format24bppRgb);
-                        using (var g = Graphics.FromImage(flat))
-                        {
-                            g.Clear(Color.White);
-                            g.DrawImage(bmp, 0, 0, bmp.Width, bmp.Height);
-                        }
-                        flat.Save(ms, encoder, ep);
-                    }
-                    break;
-                }
-            case OutputFormat.Webp:
-                {
-                    using var png = new MemoryStream();
-                    bmp.Save(png, ImageFormat.Png);
-                    png.Position = 0;
-                    using var skBitmap = SKBitmap.Decode(png)
-                        ?? throw new InvalidOperationException("Failed to decode screenshot for WebP encoding.");
-                    using var image = SKImage.FromBitmap(skBitmap);
-                    using var data = image.Encode(SKEncodedImageFormat.Webp, Math.Clamp(quality, 1, 100))
-                        ?? throw new InvalidOperationException("Failed to encode WebP screenshot.");
-                    data.SaveTo(ms);
-                    break;
-                }
-            default:
-                bmp.Save(ms, ImageFormat.Png);
-                break;
+            Buffer.BlockCopy(frame.PixelBytes, (rect.Y + y) * srcStride + rect.X * 4,
+                output, y * rowBytes, rowBytes);
         }
-        return ms.ToArray();
+        return output;
+    }
+
+    private static byte[] BurnDrawings(byte[] pixels, PixelRect rect, IReadOnlyList<DrawElement> elements, double scale)
+    {
+        try { return BurnDrawings(CanvasDevice.GetSharedDevice(), pixels, rect, elements, scale); }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        {
+            // GPU removed/reset: WARP renders the same output on the CPU.
+            Diagnostics.Log("Screenshot render: GPU device failed, using software renderer", ex);
+            using var device = new CanvasDevice(forceSoftwareRenderer: true);
+            return BurnDrawings(device, pixels, rect, elements, scale);
+        }
+    }
+
+    private static byte[] BurnDrawings(CanvasDevice device, byte[] pixels, PixelRect rect,
+        IReadOnlyList<DrawElement> elements, double scale)
+    {
+        using var background = CanvasBitmap.CreateFromBytes(device, pixels, rect.Width, rect.Height,
+            Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, 96f, CanvasAlphaMode.Premultiplied);
+        using var target = new CanvasRenderTarget(device, rect.Width, rect.Height, 96f);
+        using (var ds = target.CreateDrawingSession())
+        {
+            ds.DrawImage(background);
+            // Elements live in overlay DIPs; map the crop origin to 0,0 and DIPs to pixels.
+            ds.Transform = Matrix3x2.CreateTranslation((float)(-rect.X / scale), (float)(-rect.Y / scale))
+                         * Matrix3x2.CreateScale((float)scale);
+            foreach (var el in elements)
+            {
+                try { DrawingController.Render(ds, el); }
+                catch (Exception ex) { Diagnostics.Log("Screenshot render: element skipped", ex); }
+            }
+        }
+        return target.GetPixelBytes();
+    }
+
+    public static byte[] Encode(byte[] bgra, int width, int height, OutputFormat format, int quality)
+    {
+        var handle = GCHandle.Alloc(bgra, GCHandleType.Pinned);
+        try
+        {
+            IntPtr scan0 = handle.AddrOfPinnedObject();
+            if (format == OutputFormat.Webp)
+            {
+                var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque);
+                using var pixmap = new SKPixmap(info, scan0, width * 4);
+                using var data = pixmap.Encode(SKEncodedImageFormat.Webp, Math.Clamp(quality, 1, 100))
+                    ?? throw new InvalidOperationException("Failed to encode WebP screenshot.");
+                return data.ToArray();
+            }
+
+            // 32bppRgb ignores alpha: PNG is written as RGB and JPEG gets no tinted alpha.
+            using var bmp = new Bitmap(width, height, width * 4, PixelFormat.Format32bppRgb, scan0);
+            using var ms = new MemoryStream();
+            if (format == OutputFormat.Jpeg && GetEncoder(ImageFormat.Jpeg) is { } jpeg)
+            {
+                using var ep = new EncoderParameters(1);
+                ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, Math.Clamp((long)quality, 1L, 100L));
+                bmp.Save(ms, jpeg, ep);
+            }
+            else
+            {
+                bmp.Save(ms, format == OutputFormat.Jpeg ? ImageFormat.Jpeg : ImageFormat.Png);
+            }
+            return ms.ToArray();
+        }
+        finally { handle.Free(); }
     }
 
     private static ImageCodecInfo? GetEncoder(ImageFormat format)
@@ -108,214 +160,4 @@ public static class ScreenshotRenderer
         }
         return null;
     }
-
-    public static Bitmap RenderBitmap(
-        ScreenFreezeService.FrozenFrame frame,
-        Rect selectionDip,
-        IReadOnlyList<DrawElement> elements,
-        double dpiScale)
-    {
-        using var src = ScreenFreezeService.CreateBitmap(frame);
-
-        int px = (int)System.Math.Floor(selectionDip.X * dpiScale);
-        int py = (int)System.Math.Floor(selectionDip.Y * dpiScale);
-        int pw = System.Math.Max(1, (int)System.Math.Ceiling(selectionDip.Width * dpiScale));
-        int ph = System.Math.Max(1, (int)System.Math.Ceiling(selectionDip.Height * dpiScale));
-        var srcRect = new System.Drawing.Rectangle(px, py, pw, ph);
-        srcRect.Intersect(new System.Drawing.Rectangle(0, 0, src.Width, src.Height));
-        if (srcRect.Width == 0 || srcRect.Height == 0)
-        {
-            return new Bitmap(1, 1);
-        }
-
-        var output = new Bitmap(srcRect.Width, srcRect.Height, PixelFormat.Format32bppArgb);
-        using (var g = Graphics.FromImage(output))
-        {
-            // Use nearest neighbor to avoid interpolation artifacts
-            g.InterpolationMode = InterpolationMode.NearestNeighbor;
-            g.SmoothingMode = SmoothingMode.None;
-            g.PixelOffsetMode = PixelOffsetMode.None;
-            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-            g.DrawImage(src, new System.Drawing.Rectangle(0, 0, srcRect.Width, srcRect.Height),
-                srcRect, GraphicsUnit.Pixel);
-            BurnDrawings(g, elements, dpiScale, selectionDip.X, selectionDip.Y);
-        }
-        return output;
-    }
-
-    /// <param name="offsetDipX">Subtract from each element's X (root-overlay DIPs)
-    /// before the DPI scale, since the output is sized to the cropped selection.</param>
-    private static void BurnDrawings(Graphics g, IReadOnlyList<DrawElement> elements,
-        double scale, double offsetDipX, double offsetDipY)
-    {
-        foreach (var el in elements)
-        {
-            switch (el)
-            {
-                case StrokeElement s: DrawStroke(g, s, scale, offsetDipX, offsetDipY); break;
-                case RectangleElement r: DrawRect(g, r, scale, offsetDipX, offsetDipY); break;
-                case EllipseElement ellipse: DrawEllipse(g, ellipse, scale, offsetDipX, offsetDipY); break;
-                case LineElement line: DrawLine(g, line, scale, offsetDipX, offsetDipY); break;
-                case TextElement t: DrawText(g, t, scale, offsetDipX, offsetDipY); break;
-            }
-        }
-    }
-
-    private static void DrawStroke(Graphics g, StrokeElement s, double scale, double ox, double oy)
-    {
-        if (s.Points.Count < 2) return;
-        var color = ExtractStrokeColor(s);
-        using var pen = new Pen(color, (float)(s.Thickness * scale))
-        {
-            StartCap = LineCap.Round,
-            EndCap = LineCap.Round,
-            LineJoin = LineJoin.Round,
-        };
-        var pts = new PointF[s.Points.Count];
-        for (int i = 0; i < s.Points.Count; i++)
-        {
-            pts[i] = new PointF(
-                (float)((s.Points[i].X - ox) * scale),
-                (float)((s.Points[i].Y - oy) * scale));
-        }
-        g.DrawLines(pen, pts);
-    }
-
-    private static void DrawRect(Graphics g, RectangleElement r, double scale, double ox, double oy)
-    {
-        var color = ExtractStrokeColor(r);
-        using var pen = new Pen(color, (float)(r.Thickness * scale));
-        var rect = new RectangleF(
-            (float)((r.Bounds.X - ox) * scale),
-            (float)((r.Bounds.Y - oy) * scale),
-            (float)(r.Bounds.Width * scale),
-            (float)(r.Bounds.Height * scale));
-        g.DrawRectangle(pen, rect.X, rect.Y, rect.Width, rect.Height);
-    }
-
-    private static void DrawEllipse(Graphics g, EllipseElement el, double scale, double ox, double oy)
-    {
-        var color = ExtractStrokeColor(el);
-        using var pen = new Pen(color, (float)(el.Thickness * scale));
-        var rect = new RectangleF(
-            (float)((el.Bounds.X - ox) * scale),
-            (float)((el.Bounds.Y - oy) * scale),
-            (float)(el.Bounds.Width * scale),
-            (float)(el.Bounds.Height * scale));
-        g.DrawEllipse(pen, rect);
-    }
-
-    private static void DrawLine(Graphics g, LineElement line, double scale, double ox, double oy)
-    {
-        var color = ExtractStrokeColor(line);
-        using var pen = new Pen(color, (float)(line.Thickness * scale))
-        {
-            StartCap = LineCap.Round,
-            EndCap = LineCap.Round,
-            LineJoin = LineJoin.Round,
-        };
-        using var arrowCap = line.EndArrow ? new AdjustableArrowCap(3f, 3.5f, false) : null;
-        if (arrowCap != null) pen.CustomEndCap = arrowCap;
-        var a = new PointF((float)((line.Start.X - ox) * scale), (float)((line.Start.Y - oy) * scale));
-        var b = new PointF((float)((line.End.X - ox) * scale), (float)((line.End.Y - oy) * scale));
-        g.DrawLine(pen, a, b);
-    }
-
-    private static void DrawText(Graphics g, TextElement t, double scale, double ox, double oy)
-    {
-        var color = ExtractTextColor(t);
-        using var brush = new SolidBrush(color);
-
-        var familyName = ExtractTextFamily(t);
-        var family = ResolveFontFamily(familyName);
-        // FontSize in DIPs; GDI Font wants points (75% of DIPs at 96 DPI).
-        var size = (float)(t.FontSize * scale * 0.75);
-        Font? font = null;
-        try
-        {
-            font = new Font(family, size, FontStyle.Bold, GraphicsUnit.Point);
-        }
-        catch
-        {
-            // Some families only ship a Regular face — Bold throws.
-            try { font = new Font(family, size, FontStyle.Regular, GraphicsUnit.Point); }
-            catch { font = new Font(FontFamily.GenericSansSerif, size, FontStyle.Bold, GraphicsUnit.Point); }
-        }
-        var pos = new PointF(
-            (float)((t.Position.X - ox) * scale),
-            (float)((t.Position.Y - oy) * scale));
-        g.DrawString(t.Text, font, brush, pos);
-        font.Dispose();
-    }
-
-    private static string ExtractTextFamily(TextElement t) => t.FontFamily ?? string.Empty;
-
-    // PrivateFontCollection for bundled .ttf (Onest): GDI ignores ms-appx:// URIs,
-    // so register the file once and pull the family by name.
-    private static readonly System.Drawing.Text.PrivateFontCollection _privateFonts = new();
-    private static FontFamily? _onestFamily;
-    private static bool _onestLoaded;
-
-    private static FontFamily ResolveFontFamily(string source)
-    {
-        // FontFamily.Source may be a plain name, a CSS-style list, or an
-        // ms-appx:// URI with a #Family suffix.
-        if (string.IsNullOrWhiteSpace(source)) return FontFamily.GenericSansSerif;
-
-        // Walk the fallback chain left→right, return the first family GDI can resolve.
-        foreach (var rawPart in source.Split(','))
-        {
-            var part = rawPart.Trim();
-            if (string.IsNullOrEmpty(part)) continue;
-
-            // ms-appx URI: extract postscript family after '#' and load the
-            // referenced .ttf into our private collection.
-            if (part.StartsWith("ms-appx:", StringComparison.OrdinalIgnoreCase))
-            {
-                int hash = part.IndexOf('#');
-                if (hash < 0) continue;
-                string family = part.Substring(hash + 1).Trim();
-                EnsureBundledOnestLoaded();
-                if (_onestFamily != null &&
-                    string.Equals(_onestFamily.Name, family, StringComparison.OrdinalIgnoreCase))
-                    return _onestFamily;
-                continue;
-            }
-
-            // Strip CSS-style generic ("sans-serif", "serif", "monospace").
-            if (part.Equals("sans-serif", StringComparison.OrdinalIgnoreCase)) return FontFamily.GenericSansSerif;
-            if (part.Equals("serif", StringComparison.OrdinalIgnoreCase))      return FontFamily.GenericSerif;
-            if (part.Equals("monospace", StringComparison.OrdinalIgnoreCase))  return FontFamily.GenericMonospace;
-
-            try { return new FontFamily(part); } catch { /* not installed, try next */ }
-        }
-        return FontFamily.GenericSansSerif;
-    }
-
-    private static void EnsureBundledOnestLoaded()
-    {
-        if (_onestLoaded) return;
-        _onestLoaded = true;
-        try
-        {
-            var dir = AppContext.BaseDirectory;
-            var path = Path.Combine(dir, "Assets", "Fonts", "Onest-VariableFont_wght.ttf");
-            if (File.Exists(path))
-            {
-                _privateFonts.AddFontFile(path);
-                if (_privateFonts.Families.Length > 0)
-                    _onestFamily = _privateFonts.Families[0];
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Onest font load failed: {ex.Message}");
-        }
-    }
-
-    private static Color ExtractStrokeColor(DrawElement el) => ToGdiColor(el.Color);
-
-    private static Color ExtractTextColor(TextElement t) => ToGdiColor(t.Color);
-
-    private static Color ToGdiColor(WinColor c) => Color.FromArgb(c.A, c.R, c.G, c.B);
 }

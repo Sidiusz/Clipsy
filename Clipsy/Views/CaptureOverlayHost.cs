@@ -58,8 +58,6 @@ public static class CaptureOverlayHost
             _captureSignal.Set();
     }
 
-    public static void ShowOverlay() => RequestOverlay();
-
     private static void CaptureLoop()
     {
         while (_running)
