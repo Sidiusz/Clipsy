@@ -51,7 +51,7 @@ public sealed partial class SettingsWindow : Window
     // FFmpeg download
     private CancellationTokenSource? _ffmpegCts;
 
-    // Autostart is a scheduled task (not AppSettings) — track init state separately.
+    // Autostart lives in the registry, not AppSettings; tracked separately.
     private bool _initialAutostart;
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _notifyTimer;
@@ -198,6 +198,7 @@ public sealed partial class SettingsWindow : Window
         {
             ApplyLocalization();
             RefreshNavIcons();
+            ApplyTitleBarColors();
         }
         catch (Exception ex) { Diagnostics.Log("SettingsWindow.OnGlobalSettingsChanged", ex); }
     }
@@ -212,24 +213,7 @@ public sealed partial class SettingsWindow : Window
         {
             _appWindow!.Title = Strings.Get("TraySettings");
             _appWindow.Resize(new SizeInt32(WinW, WinH));
-            try
-            {
-                var tb = _appWindow.TitleBar;
-                var transparent = Windows.UI.Color.FromArgb(0, 0, 0, 0);
-                var fg = Windows.UI.Color.FromArgb(0xFF, 0xB5, 0xBA, 0xC1);
-                var fgHover = Windows.UI.Color.FromArgb(0xFF, 0xF2, 0xF3, 0xF5);
-                var hover = Windows.UI.Color.FromArgb(0xFF, 0x35, 0x37, 0x3C);
-                var pressed = Windows.UI.Color.FromArgb(0xFF, 0x40, 0x42, 0x49);
-                tb.ButtonBackgroundColor = transparent;
-                tb.ButtonInactiveBackgroundColor = transparent;
-                tb.ButtonForegroundColor = fg;
-                tb.ButtonInactiveForegroundColor = Windows.UI.Color.FromArgb(0xFF, 0x80, 0x84, 0x8E);
-                tb.ButtonHoverBackgroundColor = hover;
-                tb.ButtonHoverForegroundColor = fgHover;
-                tb.ButtonPressedBackgroundColor = pressed;
-                tb.ButtonPressedForegroundColor = fgHover;
-            }
-            catch (Exception ex) { Diagnostics.Log("SettingsWindow.ThemeTitleBar", ex); }
+            ApplyTitleBarColors();
 
             Load();
             ApplyLocalization();
@@ -240,6 +224,26 @@ public sealed partial class SettingsWindow : Window
                 if (rb.IsChecked == true) { OnNavChecked(rb, new RoutedEventArgs()); break; }
         }
         catch (Exception ex) { Diagnostics.Show("SettingsWindow.SetupOnce", ex); }
+    }
+
+    private void ApplyTitleBarColors()
+    {
+        try
+        {
+            var tb = _appWindow!.TitleBar;
+            bool light = ThemeService.ResolveTheme(SettingsService.Instance.Settings.Theme) == ElementTheme.Light;
+            static Windows.UI.Color C(uint rgb) => Windows.UI.Color.FromArgb(0xFF, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+            var transparent = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+            tb.ButtonBackgroundColor = transparent;
+            tb.ButtonInactiveBackgroundColor = transparent;
+            tb.ButtonForegroundColor = light ? C(0x4A4D55) : C(0xB5BAC1);
+            tb.ButtonInactiveForegroundColor = light ? C(0x9A9EA6) : C(0x80848E);
+            tb.ButtonHoverBackgroundColor = light ? C(0xE3E5E8) : C(0x35373C);
+            tb.ButtonHoverForegroundColor = light ? C(0x111214) : C(0xF2F3F5);
+            tb.ButtonPressedBackgroundColor = light ? C(0xD6D8DC) : C(0x404249);
+            tb.ButtonPressedForegroundColor = light ? C(0x111214) : C(0xF2F3F5);
+        }
+        catch (Exception ex) { Diagnostics.Log("SettingsWindow.ThemeTitleBar", ex); }
     }
 
     // Composite the XAML once off-screen without activating (Show(false)) so the
@@ -277,7 +281,7 @@ public sealed partial class SettingsWindow : Window
                 SetWindowLong(_hwnd, GWL_EXSTYLE, ex);
             }
             catch (Exception ex) { Diagnostics.Log("SettingsWindow.Reveal promote", ex); }
-            _appWindow?.Move(new Windows.Graphics.PointInt32(CenterX(), CenterY()));
+            PlaceOnCursorMonitor();
             Activate();
             SetForegroundWindow(_hwnd);
             StartTipRotation();
@@ -330,11 +334,22 @@ public sealed partial class SettingsWindow : Window
         catch { }
     }
 
-    private Windows.Graphics.RectInt32 WorkArea() =>
-        DisplayArea.GetFromWindowId(
-            Win32Interop.GetWindowIdFromWindow(_hwnd), DisplayAreaFallback.Primary).WorkArea;
-    private int CenterX() { var w = WorkArea(); return w.X + (w.Width  - WinW) / 2; }
-    private int CenterY() { var w = WorkArea(); return w.Y + (w.Height - WinH) / 2; }
+    // Sizes are DIPs; move onto the target monitor first so the window adopts its DPI, then size.
+    private void PlaceOnCursorMonitor()
+    {
+        if (_appWindow == null) return;
+        GetCursorPos(out var pt);
+        var work = DisplayArea.GetFromPoint(new PointInt32(pt.X, pt.Y), DisplayAreaFallback.Primary).WorkArea;
+        _appWindow.Move(new PointInt32(work.X + 16, work.Y + 16));
+        double scale = Math.Max(1.0, GetDpiForWindow(_hwnd) / 96.0);
+        int w = Math.Min((int)Math.Round(WinW * scale), work.Width);
+        int h = Math.Min((int)Math.Round(WinH * scale), work.Height);
+        _appWindow.MoveAndResize(new RectInt32(work.X + (work.Width - w) / 2, work.Y + (work.Height - h) / 2, w, h));
+    }
+
+    [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X; public int Y; }
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT pt);
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
 
     private const int OffScreen = -32000;
     private const int WinW = 940, WinH = 640;
@@ -641,10 +656,7 @@ public sealed partial class SettingsWindow : Window
     }
 
     private System.Threading.Tasks.Task<string?> PickFolderAsync(string initialDir)
-    {
-        // Use the Win32 picker so ownership and initial-folder behavior stay consistent.
-        return SaveDialogService.PickFolderAsync(_hwnd);
-    }
+        => SaveDialogService.PickFolderAsync(_hwnd, initialDir, Strings.Get("DlgSelectFolder"));
 
     private void OnThemeSegmentClick(object sender, RoutedEventArgs e)
     {
@@ -983,11 +995,16 @@ public sealed partial class SettingsWindow : Window
         try
         {
             Collect();
-            if (!SettingsService.Instance.Replace(_draft))
+            // Apply only what the user edited here, so runtime state saved while the
+            // window was open (last folder, mic, update stamps) isn't reverted.
+            var merged = SettingsService.Instance.Settings.Clone();
+            merged.ApplyChanges(_initial, _draft);
+            if (!SettingsService.Instance.Replace(merged))
             {
                 ShowNotification("NotifySaveFailed", "error");
                 return;
             }
+            _draft = merged.Clone();
             bool wantAutostart = AutostartSwitch.IsChecked == true;
             if (wantAutostart != _initialAutostart)
             {
@@ -998,6 +1015,7 @@ public sealed partial class SettingsWindow : Window
             _initial = _draft.Clone();
             _dirty.Clear();
             ThemeService.ApplyTo(Content as FrameworkElement);
+            ApplyTitleBarColors();
             ApplyLocalization();
             UpdateDirtyVisuals();
             // Theme may have changed: re-tint nav icons once ActualTheme settles.
@@ -1049,11 +1067,12 @@ public sealed partial class SettingsWindow : Window
             ShowNotification("NotifySaveFailed", "error");
             return;
         }
-        _draft = defaults;
-        // Autostart isn't part of AppSettings; default = off.
-        AutostartService.SetEnabled(false);
+        _draft = defaults.Clone();
+        // Autostart lives outside AppSettings; the installer default is on.
+        AutostartService.SetEnabled(true);
         Load();
         ThemeService.ApplyTo(Content as FrameworkElement);
+        ApplyTitleBarColors();
         ApplyLocalization();
         DispatcherQueue.TryEnqueue(RefreshNavIcons);
         ShowNotification("NotifyReset", "info");
@@ -1093,7 +1112,7 @@ public sealed partial class SettingsWindow : Window
         var s = SettingsService.Instance.Settings;
         if (s.LastChangelogVersion == current) return;
         s.LastChangelogVersion = current;
-        SettingsService.Instance.Save();
+        SettingsService.Instance.SaveState();
         ChangelogWindow.ShowWindow();
     }
 

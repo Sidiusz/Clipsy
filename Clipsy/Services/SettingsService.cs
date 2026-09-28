@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Linq;
 using System.Text.Json;
 
 namespace Clipsy.Services;
@@ -79,6 +80,7 @@ public sealed class AppSettings
     public string TranslateService { get; set; } = "Google"; // Google / MyMemory — Google default for better quality + language coverage.
     public string TranslateFrom { get; set; } = "auto";
     public string TranslateTo { get; set; } = "ui"; // "ui" = current interface language
+    public bool TranslationNoticeShown { get; set; }
 
     // Notifications
     public bool NotificationsEnabled { get; set; } = true;
@@ -97,6 +99,31 @@ public sealed class AppSettings
     {
         return (AppSettings)MemberwiseClone();
     }
+
+    private static readonly System.Reflection.PropertyInfo[] Properties =
+        typeof(AppSettings).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Where(p => p.CanRead && p.CanWrite).ToArray();
+
+    /// <summary>Copies onto this instance only the properties that differ between baseline and edited.</summary>
+    public void ApplyChanges(AppSettings baseline, AppSettings edited)
+    {
+        foreach (var p in Properties)
+        {
+            var after = p.GetValue(edited);
+            if (!Equals(p.GetValue(baseline), after)) p.SetValue(this, after);
+        }
+    }
+
+    internal void FillNullStrings()
+    {
+        var defaults = new AppSettings();
+        foreach (var p in Properties)
+        {
+            if (p.PropertyType != typeof(string) || p.GetValue(this) != null) continue;
+            var fallback = p.GetValue(defaults);
+            if (fallback != null) p.SetValue(this, fallback);
+        }
+    }
 }
 
 public sealed class SettingsService
@@ -109,6 +136,7 @@ public sealed class SettingsService
     private readonly string _backupPath;
     private readonly string _tempPath;
     private readonly JsonSerializerOptions _json = new() { WriteIndented = true };
+    private readonly object _saveLock = new();
     public AppSettings Settings { get; private set; }
 
     public event Action? SettingsChanged;
@@ -156,7 +184,13 @@ public sealed class SettingsService
             using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty(nameof(AppSettings.SettingsVersion), out var v))
                 v.TryGetInt32(out version);
-            if (version > CurrentSettingsVersion) return false;
+            if (version > CurrentSettingsVersion)
+            {
+                // Written by a newer build: keep a copy so a downgrade doesn't silently lose it.
+                var keep = path + $".v{version}";
+                if (!File.Exists(keep)) File.Copy(path, keep);
+                Diagnostics.Log($"Settings '{Path.GetFileName(path)}' has newer version {version}; loading known fields.");
+            }
             settings = JsonSerializer.Deserialize<AppSettings>(json, _json);
             return settings != null;
         }
@@ -184,6 +218,7 @@ public sealed class SettingsService
 
     private static void Normalize(AppSettings s)
     {
+        s.FillNullStrings();
         s.Language = OneOf(s.Language, "auto", "auto", "en", "ru");
         s.Theme = OneOf(s.Theme, "auto", "auto", "dark", "light");
         s.OcrEngine = OneOf(s.OcrEngine, "WinRT", "WinRT", "Tesseract", "PPOCRv5");
@@ -204,34 +239,46 @@ public sealed class SettingsService
     private static string OneOf(string? value, string fallback, params string[] allowed)
         => allowed.Contains(value ?? string.Empty, StringComparer.OrdinalIgnoreCase) ? value! : fallback;
 
+    /// <summary>Persists and notifies subscribers (hotkeys, theme, language, open windows).</summary>
     public bool Save()
     {
-        Normalize(Settings);
-        Settings.SettingsVersion = CurrentSettingsVersion;
-        try
-        {
-            var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(Settings, _json));
-            using (var fs = new FileStream(_tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
-            {
-                fs.Write(bytes, 0, bytes.Length);
-                fs.Flush(flushToDisk: true);
-            }
-            if (IsReadableJson(_path)) File.Copy(_path, _backupPath, overwrite: true);
-            File.Move(_tempPath, _path, overwrite: true);
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log("Settings save failed", ex);
-            return false;
-        }
-        finally
-        {
-            try { if (File.Exists(_tempPath)) File.Delete(_tempPath); } catch { }
-        }
-
+        if (!Write()) return false;
         try { SettingsChanged?.Invoke(); }
         catch (Exception ex) { Diagnostics.Log("SettingsChanged subscriber failed", ex); }
         return true;
+    }
+
+    /// <summary>Persists runtime state (last folder, mic, update stamps) without rebuilding the UI.</summary>
+    public bool SaveState() => Write();
+
+    private bool Write()
+    {
+        lock (_saveLock)
+        {
+            Normalize(Settings);
+            Settings.SettingsVersion = CurrentSettingsVersion;
+            try
+            {
+                var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(Settings, _json));
+                using (var fs = new FileStream(_tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+                {
+                    fs.Write(bytes, 0, bytes.Length);
+                    fs.Flush(flushToDisk: true);
+                }
+                if (IsReadableJson(_path)) File.Copy(_path, _backupPath, overwrite: true);
+                File.Move(_tempPath, _path, overwrite: true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log("Settings save failed", ex);
+                return false;
+            }
+            finally
+            {
+                try { if (File.Exists(_tempPath)) File.Delete(_tempPath); } catch { }
+            }
+        }
     }
 
     private static bool IsReadableJson(string path)
@@ -263,6 +310,21 @@ public sealed class SettingsService
         return false;
     }
 
+    public string GetEffectiveVideoFolder()
+    {
+        if (Settings.RememberLastFolder && !string.IsNullOrEmpty(Settings.LastVideoFolder)
+            && Directory.Exists(Settings.LastVideoFolder))
+        {
+            return Settings.LastVideoFolder!;
+        }
+        var configured = Settings.VideoFolder;
+        if (!string.IsNullOrEmpty(configured) && Directory.Exists(configured)) return configured!;
+        var fallback = string.IsNullOrEmpty(configured) ? DefaultVideoFolder : configured!;
+        try { Directory.CreateDirectory(fallback); }
+        catch { fallback = DefaultVideoFolder; Directory.CreateDirectory(fallback); }
+        return fallback;
+    }
+
     public string GetEffectiveScreenshotFolder()
     {
         if (Settings.RememberLastFolder && !string.IsNullOrEmpty(Settings.LastScreenshotFolder)
@@ -272,8 +334,9 @@ public sealed class SettingsService
         }
         var configured = Settings.ScreenshotFolder;
         if (!string.IsNullOrEmpty(configured) && Directory.Exists(configured)) return configured!;
-        var fallback = DefaultScreenshotFolder;
-        Directory.CreateDirectory(fallback);
+        var fallback = string.IsNullOrEmpty(configured) ? DefaultScreenshotFolder : configured!;
+        try { Directory.CreateDirectory(fallback); }
+        catch { fallback = DefaultScreenshotFolder; Directory.CreateDirectory(fallback); }
         return fallback;
     }
 }
