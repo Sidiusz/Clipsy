@@ -13,14 +13,10 @@ public static class Strings
         // Tray
         ["TrayTooltip"]      = New("Clipsy", "Clipsy"),
         ["TrayCapture"]          = New("Capture screen",              "Захват экрана"),
-        ["TrayRecord"]           = New("Record region",               "Запись области"),
-        ["TrayOpenFolder"]       = New("Open captures folder",        "Открыть папку"),
         ["TrayOpenScreenshots"]  = New("Open screenshots folder",     "Открыть папку скриншотов"),
         ["TrayOpenVideos"]       = New("Open videos folder",          "Открыть папку с видео"),
         ["TraySettings"]         = New("Settings",                    "Настройки"),
-        ["TrayAbout"]            = New("About",                       "О программе"),
         ["TrayExit"]             = New("Exit",                        "Выход"),
-        ["TrayReady"]            = New("ready",                       "готов"),
         ["TrayUpdateChecking"]   = New("Checking for updates…",       "Проверка обновлений…"),
         ["TrayUpdateAvailable"]  = New("Update available — click to download", "Доступно обновление — нажмите, чтобы скачать"),
         ["TrayUpdateDownloading"]= New("Downloading update…",         "Скачивание обновления…"),
@@ -33,9 +29,11 @@ public static class Strings
         ["HintCancel"]          = New("cancel", "отмена"),
         ["FilterPlaceholder"]   = New("Filter…", "Фильтр…"),
         ["NoTextFound"]         = New("No text found", "Текст не найден"),
-        ["OcrLangHint"]         = New("Looks like {0} — language pack not installed. Add it in Settings.", "Похоже на {0} — языковой пакет не установлен. Добавьте его в настройках."),
         ["Copied"]              = New("Copied", "Скопировано"),
         ["TranslateUnavailable"]= New("Translation unavailable", "Перевод недоступен"),
+        ["TranslateQuota"]      = New("Translation limit reached. Try again later or switch the service in Settings.", "Лимит перевода исчерпан. Попробуйте позже или смените сервис в настройках."),
+        ["TranslateNetwork"]    = New("Translation service is unreachable. Check the connection.", "Сервис перевода недоступен. Проверьте подключение."),
+        ["TranslateNotice"]     = New("Translation sends the recognized text to {0}.", "Для перевода распознанный текст отправляется в {0}."),
 
         // Capture overlay - bottom toolbar tooltips
         ["TipRecord"]           = New("Record",     "Запись"),
@@ -49,7 +47,6 @@ public static class Strings
         ["TipColorCancel"]      = New("Cancel", "Отмена"),
         ["TipEyedropper"]       = New("Pick color from screen", "Взять цвет с экрана"),
         ["TipPencil"]           = New("Pencil. LMB draw, RMB erase", "Карандаш. ЛКМ рисовать, ПКМ стирать"),
-        ["TipRectangle"]        = New("Rectangle", "Прямоугольник"),
         ["TipEllipse"]          = New("Ellipse", "Эллипс"),
         ["TipLine"]             = New("Line", "Линия"),
         ["TipArrow"]            = New("Arrow", "Стрелка"),
@@ -57,7 +54,6 @@ public static class Strings
         ["TipShapes"]           = New("Shapes", "Фигуры"),
         ["TipOcr"]              = New("Find text", "Найти текст"),
         ["TipMove"]             = New("Move objects. Click to select, click again to cycle overlaps, drag to move.", "Перемещение объектов. Клик — выбрать, повторный клик — следующий под курсором, тянуть — двигать."),
-        ["TipBrushSize"]        = New("Brush size", "Размер кисти"),
 
         // OCR toolbar
         ["TipOcrSelectAll"]     = New("Select all text", "Выбрать весь текст"),
@@ -65,7 +61,6 @@ public static class Strings
         ["TipOcrTranslate"]     = New("Translate", "Перевести"),
         ["TipOcrExit"]          = New("Exit OCR (Esc)", "Выйти из OCR (Esc)"),
         ["OcrRecognized"]       = New("Recognized text", "Распознанный текст"),
-        ["TrOriginal"]          = New("Original", "Оригинал"),
         ["TrTranslation"]       = New("Translation", "Перевод"),
 
         // Overlay context menu
@@ -76,14 +71,13 @@ public static class Strings
         ["MenuSaveAs"]          = New("Save As…",      "Сохранить как…"),
         ["MenuClear"]           = New("Clear drawings","Очистить рисунки"),
         ["MenuCancel"]          = New("Cancel",        "Отмена"),
+        ["MenuScreenN"]         = New("Screen {0}",    "Экран {0}"),
+        ["MenuScreenPrimary"]   = New("Screen {0} (primary)", "Экран {0} (основной)"),
 
         // Recording HUD
         ["TipMicActive"]        = New("Microphone on — click to mute",         "Микрофон включён — кликните для отключения"),
         ["TipMicMuted"]         = New("Microphone muted — click to unmute",    "Микрофон выключен — кликните для включения"),
         ["TipPause"]            = New("Pause",                                 "Пауза"),
-        ["TipPauseUnsupportedFfmpeg"] = New("Pause is not available for VP9 / AV1 recording.", "Пауза недоступна при записи в VP9 / AV1."),
-        ["TipResizeUnsupportedFfmpeg"] = New("Changing the capture region is not available for VP9 / AV1 recording.", "Изменение области недоступно при записи в VP9 / AV1."),
-        ["TipMicUnsupportedFfmpeg"] = New("Microphone switching during recording is not available for VP9 / AV1.", "Переключение микрофона во время записи недоступно для VP9 / AV1."),
         ["TipStop"]             = New("Stop and save to last folder",          "Стоп и сохранить в последнюю папку"),
         ["TipSaveAs"]           = New("Stop and Save As",                      "Стоп и сохранить как"),
         ["TipDraw"]             = New("Draw. RMB: erase. Shift+RMB: erase entire stroke.",
@@ -180,10 +174,7 @@ public static class Strings
                                       "У вас есть несохранённые изменения. При закрытии они будут потеряны."),
         ["BtnClose"]            = New("Close",        "Закрыть"),
         ["BtnSave"]             = New("Save changes", "Сохранить"),
-        ["SettingsSaved"]       = New("Settings saved", "Настройки сохранены"),
         ["BtnCheckNow"]         = New("Check now",    "Проверить"),
-        ["BtnCheckForUpdates"]  = New("Check for updates", "Проверить обновления"),
-        ["BtnAuthor"]           = New("Author: Sidiusz", "Автор: Sidiusz"),
 
         // Settings - combobox items
         ["OptAuto"]             = New("Auto-detect", "Автоматически"),
@@ -222,11 +213,19 @@ public static class Strings
         ["ErrOcrFailed"]     = New("OCR failed.",                     "Сбой распознавания."),
         ["ErrPpOcrDownload"] = New("PP-OCRv5 model download failed.", "Не удалось скачать модель PP-OCRv5."),
         ["ErrCopyFailed"]    = New("Could not copy to clipboard.",    "Не удалось скопировать."),
-        ["ErrGifConversionFailed"] = New("GIF conversion failed.",    "Не удалось конвертировать в GIF."),
-        ["ErrFFmpegDownloadFailed"] = New("FFmpeg download failed.",  "Не удалось скачать FFmpeg."),
+        ["ErrDeleteFailed"]  = New("Could not delete the file. It may be in use.", "Не удалось удалить файл. Возможно, он используется."),
+        ["ErrOcrUnavailable"] = New("OCR is unavailable: no recognition language is installed.", "Распознавание недоступно: не установлен язык распознавания."),
+        ["ErrVideoKept"]     = New("Could not save the recording in the chosen format. It was kept here: {0}", "Не удалось сохранить запись в выбранном формате. Она сохранена здесь: {0}"),
+        ["ToastVideoRecovered"] = New("A recording from an interrupted session was recovered.", "Восстановлена запись из прерванного сеанса."),
+        ["RecordBusy"]       = New("The previous recording is still being saved.", "Предыдущая запись ещё сохраняется."),
+        ["VideoConverting"]  = New("Converting the recording…", "Конвертация записи…"),
+        ["WarnGifTruncated"] = New("The GIF was shortened: install FFmpeg for long clips.", "GIF укорочен: для длинных клипов установите FFmpeg."),
+        ["WarnConvertFailedMp4"] = New("{0} conversion failed — saved as MP4 instead ({1}).", "Не удалось конвертировать в {0} — сохранено как MP4 ({1})."),
+        ["UpdateWaitRecording"] = New("Finish the recording before installing the update.", "Завершите запись перед установкой обновления."),
+        ["ErrDialogCaption"] = New("Clipsy error",                    "Ошибка Clipsy"),
+        ["ErrOpenFolder"]    = New("Could not open the folder.",      "Не удалось открыть папку."),
 
         // Updates
-        ["UpdateAvailable"]  = New("A new version of Clipsy is available.", "Доступна новая версия Clipsy."),
         ["UpdateUpToDate"]   = New("You are running the latest version.",    "Установлена последняя версия."),
         ["UpdateCheckFailed"]= New("Update check failed.",                   "Проверка обновлений не удалась."),
         ["WarnCodecFallback"] = New("H.265 is not supported by your hardware. Recording in H.264.",
@@ -234,7 +233,6 @@ public static class Strings
         ["HelperCodecVp9Av1"] = New("With FFmpeg installed you get VP9, AV1 and noticeably better GIF quality.",
                                      "С установленным FFmpeg доступны VP9, AV1 и заметно лучшее качество GIF."),
         // Microphone settings
-        ["LblMicrophone"]       = New("Microphone",                            "Микрофон"),
         ["LblMicEnabled"]       = New("Record microphone",                     "Записывать микрофон"),
         ["HelperMic"]           = New("Makes the microphone available while recording. Enabled by default; the first recording starts muted, and the last mute state is remembered.", "Делает микрофон доступным во время записи. По умолчанию функция включена, первая запись начинается с выключенным микрофоном, а последнее состояние запоминается."),
         ["LblMicDevice"]        = New("Input device",                          "Устройство ввода"),
@@ -250,13 +248,10 @@ public static class Strings
         ["BtnDeleteFfmpeg"]   = New("Remove",                    "Удалить"),
         ["BtnCancelFfmpeg"]   = New("Cancel",                    "Отмена"),
         ["FfmpegDownloading"] = New("Downloading FFmpeg...",     "Загрузка FFmpeg..."),
-        ["FfmpegExtracting"]  = New("Extracting...",             "Распаковка..."),
         ["FfmpegDone"]        = New("FFmpeg installed.",         "FFmpeg установлен."),
         ["ErrFfmpegFailed"]   = New("FFmpeg installation failed.","Не удалось установить FFmpeg."),
         ["WarnNoFfmpeg"]      = New("VP9 / AV1 requires FFmpeg. Install it in Recording settings.",
                                      "VP9 / AV1 требует FFmpeg. Установите его в настройках записи."),
-        ["NoteAv1Slow"]       = New("AV1 is CPU-intensive; real-time capture may drop frames on slower hardware.",
-                                     "AV1 нагружает CPU; на медленном железе возможны пропуски кадров."),
 
         // Settings - subtitles, helpers, info, author
         ["TitleBarSubtitle"]      = New("Settings",                "Настройки"),
@@ -269,7 +264,6 @@ public static class Strings
         ["HelperLanguage"]        = New("Auto-detect follows the system language.",       "Автоопределение использует язык системы."),
         ["HelperTheme"]           = New("Applies instantly, no restart needed.",          "Применяется сразу, без перезапуска."),
         ["HelperOcr"]             = New("Engine that recognizes text in captures.", "Движок, который распознаёт текст на снимках."),
-        ["LblTranslation"]        = New("Translation",          "Перевод"),
         ["HelperTranslation"]     = New("Service and language pair used when translating recognized text.", "Сервис и языковая пара для перевода распознанного текста."),
         ["LblTranslateService"]   = New("Service",             "Сервис"),
         ["BtnChangelog"]          = New("Changelog",           "Список изменений"),
@@ -294,9 +288,6 @@ public static class Strings
         ["BtnInstall"]            = New("Install", "Установить"),
         ["BtnDelete"]             = New("Delete",  "Удалить"),
         ["TessInstalling"]        = New("Downloading...", "Загрузка..."),
-        ["TessInstalled"]         = New("Installed", "Установлено"),
-        ["TessNoLangs"]           = New("No languages installed - falling back to Windows OCR.", "Языки не установлены - используется Windows OCR."),
-        ["TessNotInstalledHint"]  = New("Install this language before you can select it.", "Установите язык, чтобы выбрать его."),
         ["ErrTessDownload"]       = New("Download failed.", "Ошибка загрузки."),
         ["LblRememberFolder"]     = New("Remember last Save As folder",                   "Запоминать последнюю папку «Сохранить как»"),
         ["HelperRemember"]        = New("New captures go to the folder you saved in last. Default: on.", "Новые захваты сохраняются в последнюю использованную папку. По умолчанию: вкл."),
@@ -333,12 +324,10 @@ public static class Strings
         ["LblLikeClipsy"]         = New("Like Clipsy?",                                    "Нравится Clipsy?"),
         ["LblLikeClipsyHint"]     = New("Star it on GitHub - that's enough.",              "Поставьте звезду на GitHub - этого достаточно."),
         ["LblGithubLine"]         = New("Source, issues, releases",                        "Исходники, баги, релизы."),
-        ["LblUpdateStatus"]       = New("You are on the latest version.",                  "Установлена последняя версия."),
         ["LblAuthorHeader"]       = New("Author",                                          "Автор"),
         ["LblMit"]                = New("CPIUL-1.0 license",                               "Лицензия CPIUL-1.0"),
         ["BtnStar"]               = New("Star",                                            "Star"),
         ["BtnOpen"]               = New("Open",                                            "Открыть"),
-        ["BtnSaveChanges"]        = New("Save changes",                                    "Сохранить"),
 
         // Hotkey row labels
         ["HkGroupGeneral"]        = New("Capture", "Захват"),
@@ -355,15 +344,16 @@ public static class Strings
         ["HkRecordSave"]          = New("Quick-save video recording",                       "Быстрое сохранение записи видео"),
         ["HkMicToggle"]           = New("Mute / unmute microphone",                        "Выкл/вкл микрофон"),
         ["HkPressKeys"]           = New("Press keys...",                                   "Нажмите клавиши..."),
+        ["DlgSelectFolder"]       = New("Select folder",                                   "Выберите папку"),
+        ["DlgSave"]               = New("Save",                                            "Сохранить"),
+        ["HkUnsupportedKey"]      = New("This key can't be used as a hotkey",              "Эту клавишу нельзя назначить"),
+        ["HkDuplicate"]           = New("{0} is already used for \"{1}\"",                 "{0} уже назначено на «{1}»"),
 
         // Notifications shown in Settings
         ["NotifySaved"]           = New("Settings saved.",                                 "Настройки сохранены."),
         ["NotifyReset"]           = New("Settings reset to defaults.",                     "Настройки сброшены по умолчанию."),
         ["NotifyUnsaved"]         = New("You have unsaved changes.",                       "Есть несохранённые изменения."),
-        ["NotifyUpdateChecking"]  = New("Checking for updates...",                         "Проверка обновлений..."),
-        ["NotifyUpdateUpToDate"]  = New("You are on the latest version.",                  "Установлена последняя версия."),
         ["NotifyUpdateAvailable"] = New("Update available: {0}",                           "Доступно обновление: {0}"),
-        ["NotifyUpdateFailed"]    = New("Update check failed.",                            "Проверка обновлений не удалась."),
         ["NotifySaveFailed"]      = New("Could not save settings.",                        "Не удалось сохранить настройки."),
 
         // Notification settings labels
@@ -384,17 +374,12 @@ public static class Strings
         ["ToastOpenFolder"]         = New("Open folder",                                   "Открыть папку"),
         ["ToastDownload"]           = New("Download update",                               "Скачать обновление"),
         ["ToastSkipVersion"]        = New("Skip this version",                             "Пропустить эту версию"),
-        ["ToastUpdateDownloading"]  = New("Downloading update…",                           "Скачивание обновления…"),
-        ["ToastUpdateReady"]        = New("Update ready to install",                       "Обновление готово к установке"),
         ["ToastInstallNow"]         = New("Install now",                                   "Установить сейчас"),
         ["ToastUpdateDownloadFailed"] = New("Update download failed — opening release page", "Не удалось скачать обновление — открываю страницу релиза"),
         ["ToastGetFfmpeg"]          = New("Get FFmpeg in settings",                        "Скачать FFmpeg в настройках"),
         ["WarnSavedAsMp4"]          = New("{0} export needs FFmpeg — saved as MP4 instead ({1}). Install FFmpeg in settings.",
                                           "Для экспорта в {0} нужен FFmpeg — сохранено как MP4 ({1}). Установите FFmpeg в настройках."),
         // Legacy keys kept for compatibility
-        ["ToastOpen"]               = New("Open",                                          "Открыть"),
-        ["ToastSkip"]               = New("Skip",                                          "Пропустить"),
-        ["ToastUpdate"]             = New("Update",                                        "Обновить"),
 
         // Bitrate label
         ["BitrateMbps"]           = New("{0} Mbps",                                        "{0} Мбит/с"),
