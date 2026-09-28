@@ -9,7 +9,7 @@ The script is plain text — no IDE required.
 installer/
   Clipsy.iss      Inno Setup script
   build.ps1       Orchestrator: dotnet publish + ISCC compile
-  sync_version.ps1 Version sync helper used by build.bat
+  sync_version.ps1 Version sync helper used by build.ps1
   output/         Generated .exe lands here
   README.md       This file
 ```
@@ -24,19 +24,7 @@ installer/
 
 ## Build
 
-Easiest — double-click `BuildInstaller.cmd` at the repo root. The
-wrapper resolves its own path, so it works from any directory.
-
 From a shell:
-
-```
-BuildInstaller.cmd
-BuildInstaller.cmd -Version 0.2.0
-BuildInstaller.cmd -Configuration Debug
-BuildInstaller.cmd -SkipInnoInstall      :: refuse auto-install
-```
-
-Or call PowerShell directly:
 
 ```
 powershell -ExecutionPolicy Bypass -File installer\build.ps1
@@ -69,8 +57,9 @@ you can install Inno Setup manually and re-run.
 - Run-at-sign-in registry entry under HKCU\…\Run by default, unless the user has opted out or `/NOAUTOSTART` is supplied
 - Registers an Add/Remove Programs entry that points the uninstaller at
   the installed directory
-- Uninstall removes the install folder plus `%LOCALAPPDATA%\Clipsy`
-  (settings.json, cached state)
+- Uninstall asks a running Clipsy to quit, then removes the install folder plus
+  `%LOCALAPPDATA%\Clipsy` (settings, downloaded models, FFmpeg) and `HKCU\Software\Clipsy`,
+  unless `/KEEPDATA` is passed
 
 ## Command-line install and uninstall
 
@@ -109,15 +98,14 @@ The wrappers return `0` once the setup/uninstaller process was launched, `2` for
   bootstrapper and Microsoft.UI.Xaml DLLs, no WinAppSDK runtime
   prerequisite
 
-Result is ~80–120 MB of files in `Clipsy\bin\publish\win-x64\`. Inno
-Setup compresses it with LZMA2/ultra64 down to ~30–50 MB.
+After publishing, the script removes `.pdb` symbols, API doc XML and
+WinUI language folders other than English/Russian, and adds `clipsy-cli.exe`.
+Inno Setup compresses the result with LZMA2/ultra64 to about 40 MB.
 
 ## Notes
 
-- Tessdata for the Tesseract OCR engine is not bundled in this phase.
-  When tessdata files ship, drop them into
-  `Clipsy\Assets\tessdata\` before publishing and the `Files` section
-  in `Clipsy.iss` (`recursesubdirs`) will pick them up automatically.
+- OCR models (Tesseract languages, PP-OCRv5) and FFmpeg are not bundled;
+  Clipsy downloads them on demand from pinned, checksum-verified sources.
 - The installer is per-machine by default. To switch to per-user, change
   `PrivilegesRequired=admin` to `lowest` in `Clipsy.iss`.
 - Signing is not configured. For a signed installer, add

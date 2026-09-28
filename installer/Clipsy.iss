@@ -3,7 +3,7 @@
 
 #define ClipsyName "Clipsy"
 #ifndef ClipsyVersion
-#define ClipsyVersion "1.0.5"
+#define ClipsyVersion "1.0.6"
 #endif
 #define ClipsyPublisher "Sidiusz"
 #define ClipsyURL "https://github.com/Sidiusz/Clipsy"
@@ -49,7 +49,11 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "{#ClipsyPublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ClipsyPublishDir}\*"; DestDir: "{app}"; Excludes: "*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+; Files an older version shipped but this one doesn't (debug symbols, retired binaries).
+Type: files; Name: "{app}\*.pdb"
 
 [Icons]
 Name: "{group}\{#ClipsyName}"; Filename: "{app}\{#ClipsyExeName}"
@@ -59,27 +63,24 @@ Name: "{autodesktop}\{#ClipsyName}"; Filename: "{app}\{#ClipsyExeName}"; Tasks: 
 [Registry]
 ; Autostart uses the current user Run key; no elevation is required.
 
-; WER LocalDumps: capture a full minidump even on native __fastfail
-; (0xc0000409) crashes that bypass the in-app exception filter. Dumps land
-; next to debug.log so a silent vanish always leaves post-mortem evidence.
+; WER LocalDumps: a minidump even for native __fastfail (0xc0000409) crashes that bypass the
+; in-app filter. Mini, not full: a full dump holds screenshots and clipboard contents.
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\{#ClipsyExeName}"; \
     ValueType: expandsz; ValueName: "DumpFolder"; ValueData: "%LOCALAPPDATA%\Clipsy\CrashDumps"; \
     Flags: uninsdeletekey; Check: IsAdminInstallMode
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\{#ClipsyExeName}"; \
-    ValueType: dword; ValueName: "DumpType"; ValueData: "$00000002"; Check: IsAdminInstallMode
+    ValueType: dword; ValueName: "DumpType"; ValueData: "$00000001"; Check: IsAdminInstallMode
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\{#ClipsyExeName}"; \
-    ValueType: dword; ValueName: "DumpCount"; ValueData: "$00000005"; Check: IsAdminInstallMode
+    ValueType: dword; ValueName: "DumpCount"; ValueData: "$00000003"; Check: IsAdminInstallMode
 
 [Run]
 Filename: "{app}\{#ClipsyExeName}"; Parameters: "{code:AutostartInitParameters}"; Flags: runhidden runasoriginaluser
+; Silent installs (updates, CLI) relaunch too unless /NOLAUNCH; never elevated.
 Filename: "{app}\{#ClipsyExeName}"; Description: "{cm:LaunchProgram,{#ClipsyName}}"; \
-    Flags: nowait postinstall skipifsilent; Check: ShouldLaunchAfterInstall
+    Flags: nowait postinstall runasoriginaluser; Check: ShouldLaunchAfterInstall
 
 [UninstallRun]
 Filename: "{app}\{#ClipsyExeName}"; Parameters: "autostart-init --remove"; Flags: runhidden; RunOnceId: "ClipsyAutostartCleanup"
-
-[UninstallDelete]
-Type: filesandordirs; Name: "{localappdata}\Clipsy"; Check: ShouldDeleteUserData
 
 [Code]
 const
@@ -109,11 +110,6 @@ begin
   Result := not HasSwitch('NOLAUNCH');
 end;
 
-function ShouldDeleteUserData(): Boolean;
-begin
-  Result := not HasSwitch('KEEPDATA');
-end;
-
 function AutostartInitParameters(Param: String): String;
  begin
   Result := 'autostart-init';
@@ -129,6 +125,24 @@ begin
        ewWaitUntilTerminated, ResultCode);
 end;
 
+// Ask a running Clipsy to exit cleanly (it finishes a recording first) before files are replaced;
+// Restart Manager (CloseApplications) is the fallback.
+procedure QuitRunningClipsy;
+var
+  ResultCode: Integer;
+  Exe: String;
+begin
+  Exe := ExpandConstant('{app}\{#ClipsyExeName}');
+  if FileExists(Exe) then
+    Exec(Exe, 'quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  QuitRunningClipsy;
+  Result := '';
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
@@ -138,5 +152,14 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
+  begin
+    QuitRunningClipsy;
     DeleteLegacyAutostartTask;
+  end;
+  // [UninstallDelete] Check functions run at install time, so /KEEPDATA must be read here.
+  if (CurUninstallStep = usPostUninstall) and not HasSwitch('KEEPDATA') then
+  begin
+    DelTree(ExpandConstant('{localappdata}\Clipsy'), True, True, True);
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\Clipsy');
+  end;
 end;

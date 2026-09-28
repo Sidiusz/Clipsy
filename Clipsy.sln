@@ -1,8 +1,12 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.10.0.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Clipsy", "Clipsy\Clipsy.csproj", "{B0E8F4A9-1A21-4F1B-9E1C-1A7A2C3E9D11}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clipsy.Tests", "Clipsy.Tests\Clipsy.Tests.csproj", "{DD481809-7B3D-431C-9EA2-87108B30B4B2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clipsy.Cli", "Clipsy.Cli\Clipsy.Cli.csproj", "{59E804B6-9639-4C0A-A099-ECFD9128397B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -24,6 +28,20 @@ Global
 		{B0E8F4A9-1A21-4F1B-9E1C-1A7A2C3E9D11}.Release|ARM64.ActiveCfg = Release|ARM64
 		{B0E8F4A9-1A21-4F1B-9E1C-1A7A2C3E9D11}.Release|ARM64.Build.0 = Release|ARM64
 		{B0E8F4A9-1A21-4F1B-9E1C-1A7A2C3E9D11}.Release|ARM64.Deploy.0 = Release|ARM64
+		{DD481809-7B3D-431C-9EA2-87108B30B4B2}.Debug|x64.ActiveCfg = Debug|x64
+		{DD481809-7B3D-431C-9EA2-87108B30B4B2}.Debug|x64.Build.0 = Debug|x64
+		{DD481809-7B3D-431C-9EA2-87108B30B4B2}.Debug|ARM64.ActiveCfg = Debug|x64
+		{DD481809-7B3D-431C-9EA2-87108B30B4B2}.Release|x64.ActiveCfg = Release|x64
+		{DD481809-7B3D-431C-9EA2-87108B30B4B2}.Release|x64.Build.0 = Release|x64
+		{DD481809-7B3D-431C-9EA2-87108B30B4B2}.Release|ARM64.ActiveCfg = Release|x64
+		{59E804B6-9639-4C0A-A099-ECFD9128397B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{59E804B6-9639-4C0A-A099-ECFD9128397B}.Debug|x64.Build.0 = Debug|Any CPU
+		{59E804B6-9639-4C0A-A099-ECFD9128397B}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{59E804B6-9639-4C0A-A099-ECFD9128397B}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{59E804B6-9639-4C0A-A099-ECFD9128397B}.Release|x64.ActiveCfg = Release|Any CPU
+		{59E804B6-9639-4C0A-A099-ECFD9128397B}.Release|x64.Build.0 = Release|Any CPU
+		{59E804B6-9639-4C0A-A099-ECFD9128397B}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{59E804B6-9639-4C0A-A099-ECFD9128397B}.Release|ARM64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

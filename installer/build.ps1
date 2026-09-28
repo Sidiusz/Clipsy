@@ -3,8 +3,9 @@
     Build the Clipsy installer.
 
 .DESCRIPTION
-    Publishes the WinUI 3 app self-contained for win-x64 and then compiles
-    the Inno Setup script into installer\output\Clipsy-Setup-<ver>.exe.
+    Publishes the WinUI 3 app (plus the clipsy-cli console shim) self-contained for
+    win-x64, compiles installer\output\Clipsy-Setup-<ver>.exe, and writes the portable
+    zip and SHA256SUMS.txt next to it.
     Auto-installs Inno Setup 6 if it is not already on the machine, using
     winget when available, otherwise a direct download from jrsoftware.org.
 
@@ -22,8 +23,6 @@
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File installer\build.ps1
     powershell -ExecutionPolicy Bypass -File installer\build.ps1 -Version 0.2.0
-
-    Or double-click BuildInstaller.cmd at the repo root.
 #>
 [CmdletBinding()]
 param(
@@ -35,11 +34,11 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot   = Resolve-Path (Join-Path $PSScriptRoot "..")
 $project    = Join-Path $repoRoot "Clipsy\Clipsy.csproj"
+$cliProject = Join-Path $repoRoot "Clipsy.Cli\Clipsy.Cli.csproj"
 $publishDir = Join-Path $repoRoot "Clipsy\bin\publish\win-x64"
 $iss        = Join-Path $PSScriptRoot "Clipsy.iss"
 $outputDir  = Join-Path $PSScriptRoot "output"
 $versionFile = Join-Path $repoRoot "version"
-$legacyVersionTxt = Join-Path $PSScriptRoot "version.txt"
 $syncScript = Join-Path $PSScriptRoot "sync_version.ps1"
 
 function Resolve-Version {
@@ -49,11 +48,6 @@ function Resolve-Version {
 
     if (Test-Path -LiteralPath $versionFile) {
         $fileVersion = (Get-Content -LiteralPath $versionFile -Raw).Trim()
-        if ($fileVersion) { return $fileVersion }
-    }
-
-    if (Test-Path -LiteralPath $legacyVersionTxt) {
-        $fileVersion = (Get-Content -LiteralPath $legacyVersionTxt -Raw).Trim()
         if ($fileVersion) { return $fileVersion }
     }
 
@@ -169,6 +163,26 @@ Write-Host "Publishing Clipsy ($Configuration / win-x64)..." -ForegroundColor Cy
     -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit $LASTEXITCODE" }
 
+# Console shim shares Clipsy's self-contained runtime: publish it aside, copy only its own files.
+$cliStage = Join-Path ([System.IO.Path]::GetTempPath()) ("clipsy-cli-" + [guid]::NewGuid().ToString("N"))
+& dotnet publish $cliProject -c $Configuration -r win-x64 --self-contained true -o $cliStage
+if ($LASTEXITCODE -ne 0) { throw "clipsy-cli publish failed with exit $LASTEXITCODE" }
+foreach ($f in "clipsy-cli.exe", "clipsy-cli.dll", "clipsy-cli.deps.json", "clipsy-cli.runtimeconfig.json") {
+    Copy-Item (Join-Path $cliStage $f) $publishDir -Force
+}
+Remove-Item -Recurse -Force $cliStage
+
+# Trim what users don't need: debug symbols (~110 MB, mostly SkiaSharp), API doc XML next to
+# assemblies, and WinUI resource folders for languages Clipsy isn't translated into.
+Get-ChildItem $publishDir -Recurse -Filter *.pdb | Remove-Item -Force
+Get-ChildItem $publishDir -Filter *.xml | Where-Object {
+    Test-Path (Join-Path $publishDir ($_.BaseName + ".dll"))
+} | Remove-Item -Force
+Get-ChildItem $publishDir -Directory | Where-Object {
+    (Test-Path (Join-Path $_.FullName "Microsoft.ui.xaml.dll.mui")) -and
+    ($_.Name -notmatch '^(en|ru)(-|$)')
+} | Remove-Item -Recurse -Force
+
 # ---------- Inno Setup ----------
 
 $iscc = Find-Iscc
@@ -201,6 +215,14 @@ $zipPath = Join-Path $outputDir "Clipsy-$Version-win-x64.zip"
 Write-Host "Creating portable archive $zipPath ..." -ForegroundColor Cyan
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $zipPath -CompressionLevel Optimal
+
+$sumsPath = Join-Path $outputDir "SHA256SUMS.txt"
+$artifacts = @("Clipsy-Setup-$Version.exe", "Clipsy-$Version-win-x64.zip")
+$lines = foreach ($name in $artifacts) {
+    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $outputDir $name)).Hash.ToLowerInvariant()
+    "$hash  $name"
+}
+[System.IO.File]::WriteAllLines($sumsPath, [string[]]$lines)
 
 Write-Host "Done. Output: $outputDir" -ForegroundColor Green
 Get-ChildItem $outputDir | Format-Table Name, Length, LastWriteTime

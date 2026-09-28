@@ -20,8 +20,8 @@ param(
 $ErrorActionPreference = "Stop"
 $full = "$Version.0"
 
-$rootVersionFile = Join-Path $Root 'version'
-Set-Content -LiteralPath $rootVersionFile -Value $Version -Encoding ascii
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText((Join-Path $Root 'version'), $Version + [Environment]::NewLine, $utf8NoBom)
 
 function Update-File {
     param(
@@ -34,61 +34,29 @@ function Update-File {
 
     if (-not (Test-Path -LiteralPath $Path)) { return }
 
-    $content = Get-Content -LiteralPath $Path -Raw
+    $content = [System.IO.File]::ReadAllText($Path)
     $updated = & $Transform $content
     if ($updated -ne $content) {
-        Set-Content -LiteralPath $Path -Value $updated -Encoding utf8
+        # No BOM: Windows PowerShell's -Encoding utf8 would add one.
+        [System.IO.File]::WriteAllText($Path, $updated, $utf8NoBom)
     }
 }
 
 $manifest = Join-Path $Root 'Clipsy\app.manifest'
 Update-File $manifest { param($text)
-    $text = $text -replace '^<\?xml\s+version="[^"]+"\s+encoding="UTF-8"\s+standalone="yes"\?>', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    $text = $text -replace 'manifestVersion="[^"]+"', 'manifestVersion="1.0"'
-    $text = $text -replace '(<assemblyIdentity[^>]*\sversion=")[^"]+("[^>]*>)', ('${1}' + $full + '${2}')
-    return $text
-}
-
-$packageManifest = Join-Path $Root 'Clipsy\Package.appxmanifest'
-Update-File $packageManifest { param($text)
-    $text = $text -replace '(<Identity[^>]*\sVersion=")[^"]+("[^>]*>)', ('${1}' + $full + '${2}')
-    return $text
+    $text -replace '(<assemblyIdentity[^>]*\sversion=")[^"]+("[^>]*>)', ('${1}' + $full + '${2}')
 }
 
 $csproj = Join-Path $Root 'Clipsy\Clipsy.csproj'
 Update-File $csproj { param($text)
-    if ($text -match '<Version>.*?</Version>') {
-        $text = $text -replace '<Version>.*?</Version>', ('<Version>' + $Version + '</Version>')
-    } else {
-        $marker = '    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>' + [Environment]::NewLine
-        $insert = $marker + '    <Version>' + $Version + '</Version>' + [Environment]::NewLine + '    <AssemblyVersion>' + $full + '</AssemblyVersion>' + [Environment]::NewLine + '    <FileVersion>' + $full + '</FileVersion>' + [Environment]::NewLine + '    <InformationalVersion>' + $Version + '</InformationalVersion>' + [Environment]::NewLine
-        if ($text.Contains($marker)) {
-            $text = $text.Replace($marker, $insert)
-        }
-    }
-    if ($text -match '<AssemblyVersion>.*?</AssemblyVersion>') {
-        $text = $text -replace '<AssemblyVersion>.*?</AssemblyVersion>', ('<AssemblyVersion>' + $full + '</AssemblyVersion>')
-    }
-    if ($text -match '<FileVersion>.*?</FileVersion>') {
-        $text = $text -replace '<FileVersion>.*?</FileVersion>', ('<FileVersion>' + $full + '</FileVersion>')
-    }
-    if ($text -match '<InformationalVersion>.*?</InformationalVersion>') {
-        $text = $text -replace '<InformationalVersion>.*?</InformationalVersion>', ('<InformationalVersion>' + $Version + '</InformationalVersion>')
-    }
-    return $text
+    $text = $text -replace '<Version>.*?</Version>', ('<Version>' + $Version + '</Version>')
+    $text = $text -replace '<AssemblyVersion>.*?</AssemblyVersion>', ('<AssemblyVersion>' + $full + '</AssemblyVersion>')
+    $text = $text -replace '<FileVersion>.*?</FileVersion>', ('<FileVersion>' + $full + '</FileVersion>')
+    $text -replace '<InformationalVersion>.*?</InformationalVersion>', ('<InformationalVersion>' + $Version + '</InformationalVersion>')
 }
-
-$settings = Join-Path $Root 'Clipsy\Views\Settings\SettingsWindow.xaml.cs'
-Update-File $settings { param($text) $text -replace 'return v == null \? "[^"]+" : \$"\{v\.Major\}\.\{v\.Minor\}\.\{v\.Build\}";', 'return UpdateService.CurrentVersion();' }
-
-$updateService = Join-Path $Root 'Clipsy\Services\UpdateService.cs'
-Update-File $updateService { param($text) $text -replace 'Clipsy/\d+(?:\.\d+)* \(\+github\.com/Sidiusz/Clipsy\)', ('Clipsy/' + $Version + ' (+github.com/Sidiusz/Clipsy)') }
 
 $installerScript = Join-Path $Root 'installer\Clipsy.iss'
 Update-File $installerScript { param($text) $text -replace '(#define ClipsyVersion ")([^"]+)(")', ('${1}' + $Version + '${3}') }
-
-$legacyVersionTxt = Join-Path $Root 'installer\version.txt'
-Update-File $legacyVersionTxt { param($text) ($Version + [Environment]::NewLine) }
 
 Write-Host ('Version synced to ' + $Version + ' / ' + $full)
 exit 0
