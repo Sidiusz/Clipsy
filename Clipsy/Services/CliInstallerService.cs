@@ -35,7 +35,13 @@ internal static class CliInstallerService
         if (silent && verySilent)
             return new CliResult(2, "Use only one of --silent or --very-silent.");
 
-        setup ??= FindSetupExecutable();
+        if (setup == null)
+        {
+            setup = FindSetupExecutable(out var found);
+            // An old installer lying next to a newer build must not be picked up implicitly.
+            if (setup != null && UpdateService.TryParseVersion(UpdateService.CurrentVersion(), out var current) && found < current)
+                return new CliResult(2, $"The only setup found ({Path.GetFileName(setup)}) is older than the installed {current}. Pass its path explicitly to downgrade.");
+        }
         if (string.IsNullOrWhiteSpace(setup) || !File.Exists(setup))
             return new CliResult(2, "Setup executable not found. Pass its path or --setup PATH.");
 
@@ -75,17 +81,26 @@ internal static class CliInstallerService
         return LaunchDetached(uninstaller, switches, "uninstaller");
     }
 
-    private static string? FindSetupExecutable()
+    // Highest version by file name (Clipsy-Setup-1.2.3.exe), not newest by date.
+    private static string? FindSetupExecutable(out Version version)
     {
+        version = new Version(0, 0, 0);
         foreach (var folder in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory }
                      .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             try
             {
-                var found = Directory.GetFiles(folder, "Clipsy-Setup-*.exe")
-                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                var best = Directory.GetFiles(folder, "Clipsy-Setup-*.exe")
+                    .Select(f => (Path: f, Ok: UpdateService.TryParseVersion(
+                        Path.GetFileNameWithoutExtension(f)["Clipsy-Setup-".Length..], out var v), Version: v))
+                    .Where(x => x.Ok)
+                    .OrderByDescending(x => x.Version)
                     .FirstOrDefault();
-                if (found != null) return found;
+                if (best.Path != null)
+                {
+                    version = best.Version;
+                    return best.Path;
+                }
             }
             catch { }
         }

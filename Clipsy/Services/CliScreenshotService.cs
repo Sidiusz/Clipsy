@@ -48,15 +48,26 @@ internal static class CliScreenshotService
         if (targetModes > 1) return new CliResult(2, "Use only one of --all, --monitor or --region.");
         if (noSave && !clipboard) return new CliResult(2, "--no-save requires --clipboard.");
 
-        try { global::WinRT.ComWrappersSupport.InitializeComWrappers(); } catch { }
-        var frame = new ScreenFreezeService().Capture(cursor);
-        var target = ResolveTarget(frame, all, monitor, region);
-        if (target.Width <= 0 || target.Height <= 0)
-            return new CliResult(2, "Capture target is outside the virtual desktop.");
+        // Validate everything before touching the screen; bad arguments are exit code 2.
         var settings = SettingsService.Instance.Settings;
         var format = ResolveFormat(formatArg, outPath, settings.ScreenshotFormat, out var formatError);
         if (formatError != null) return new CliResult(2, formatError);
         var ext = ScreenshotRenderer.ExtensionFor(format);
+        Rectangle target;
+        try
+        {
+            target = ResolveTarget(ScreenFreezeService.GetVirtualScreenBounds(), ScreenFreezeService.EnumerateMonitors(), all, monitor, region);
+        }
+        catch (ArgumentException ex)
+        {
+            return new CliResult(2, ex.Message);
+        }
+        if (target.Width <= 0 || target.Height <= 0)
+            return new CliResult(2, "Capture target is outside the virtual desktop.");
+
+        try { global::WinRT.ComWrappersSupport.InitializeComWrappers(); } catch { }
+        var frame = new ScreenFreezeService().Capture(cursor);
+        target = Rectangle.Intersect(target, frame.VirtualBounds);
 
         string? finalPath = null;
         if (!noSave)
@@ -86,12 +97,13 @@ internal static class CliScreenshotService
             clipboard,
         });
     }
-    private static Rectangle ResolveTarget(ScreenFreezeService.FrozenFrame frame, bool all, string? monitor, string? region)
+    private static Rectangle ResolveTarget(Rectangle virtualBounds, IReadOnlyList<ScreenFreezeService.MonitorInfo> monitors,
+        bool all, string? monitor, string? region)
     {
         Rectangle target;
         if (all)
         {
-            target = frame.VirtualBounds;
+            target = virtualBounds;
         }
         else if (region != null)
         {
@@ -100,30 +112,31 @@ internal static class CliScreenshotService
         }
         else
         {
-            target = ResolveMonitor(frame, monitor ?? "cursor").Bounds;
+            target = ResolveMonitor(monitors, monitor ?? "cursor").Bounds;
         }
-        return Rectangle.Intersect(target, frame.VirtualBounds);
+        return Rectangle.Intersect(target, virtualBounds);
     }
 
-    private static ScreenFreezeService.MonitorInfo ResolveMonitor(ScreenFreezeService.FrozenFrame frame, string value)
+    private static ScreenFreezeService.MonitorInfo ResolveMonitor(IReadOnlyList<ScreenFreezeService.MonitorInfo> monitors, string value)
     {
+        if (monitors.Count == 0) throw new ArgumentException("No monitors are available.");
         if (value.Equals("primary", StringComparison.OrdinalIgnoreCase))
-            return frame.Monitors.FirstOrDefault(m => m.IsPrimary) ?? frame.Monitors[0];
+            return monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors[0];
         if (value.Equals("cursor", StringComparison.OrdinalIgnoreCase))
         {
             if (GetCursorPos(out var p))
             {
-                var hit = frame.Monitors.FirstOrDefault(m => m.Bounds.Contains(p.X, p.Y));
+                var hit = monitors.FirstOrDefault(m => m.Bounds.Contains(p.X, p.Y));
                 if (hit != null) return hit;
             }
-            return frame.Monitors.FirstOrDefault(m => m.IsPrimary) ?? frame.Monitors[0];
+            return monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors[0];
         }
         if (int.TryParse(value, out int index))
         {
-            var found = frame.Monitors.FirstOrDefault(m => m.Index == index);
+            var found = monitors.FirstOrDefault(m => m.Index == index);
             if (found != null) return found;
         }
-        throw new ArgumentException($"Unknown monitor: {value}. Use cursor, primary or a zero-based monitor index.");
+        throw new ArgumentException($"Unknown monitor: {value}. Use cursor, primary or a zero-based monitor index (0-{monitors.Count - 1}).");
     }
     private static ScreenshotRenderer.OutputFormat ResolveFormat(
         string? explicitFormat, string? outPath, string fallback, out string? error)
@@ -156,13 +169,10 @@ internal static class CliScreenshotService
     private static string ResolveOutputPath(string? requested, string extension)
     {
         if (string.IsNullOrWhiteSpace(requested))
-        {
-            var folder = SettingsService.Instance.GetEffectiveScreenshotFolder();
-            return Path.Combine(folder, SaveDialogService.MakeTimestampName("Clipsy", extension));
-        }
+            return SaveDialogService.UniquePath(SettingsService.Instance.GetEffectiveScreenshotFolder(), "Clipsy", extension);
         string expanded = Environment.ExpandEnvironmentVariables(requested);
         if (Directory.Exists(expanded) || Path.EndsInDirectorySeparator(expanded))
-            return Path.Combine(Path.GetFullPath(expanded), SaveDialogService.MakeTimestampName("Clipsy", extension));
+            return SaveDialogService.UniquePath(Path.GetFullPath(expanded), "Clipsy", extension);
         string full = Path.GetFullPath(expanded);
         return string.IsNullOrEmpty(Path.GetExtension(full)) ? full + extension : full;
     }

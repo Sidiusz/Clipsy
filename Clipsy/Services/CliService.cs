@@ -36,22 +36,30 @@ public static class CliService
             AttachParentConsole();
             WriteResult(new CliResult(2, $"Unknown command: {args[0]}"), false);
             WriteHelp();
+            RestoreConsoleCodePage();
             exitCode = 2;
             return true;
         }
 
         AttachParentConsole();
-        bool json = args.Any(a => string.Equals(a, "--json", StringComparison.OrdinalIgnoreCase));
-        var tail = args.Skip(1).Where(a => !string.Equals(a, "--json", StringComparison.OrdinalIgnoreCase)).ToArray();
-        var result = Execute(command, tail);
-        WriteResult(result, json);
-        exitCode = result.Code;
+        try
+        {
+            bool json = args.Any(a => string.Equals(a, "--json", StringComparison.OrdinalIgnoreCase));
+            var tail = args.Skip(1).Where(a => !string.Equals(a, "--json", StringComparison.OrdinalIgnoreCase)).ToArray();
+            var result = Execute(command, tail);
+            WriteResult(result, json);
+            exitCode = result.Code;
+        }
+        finally
+        {
+            RestoreConsoleCodePage();
+        }
         return true;
     }
 
     private static readonly HashSet<string> KnownCommands = new(StringComparer.OrdinalIgnoreCase)
     {
-        "help", "--help", "-h", "version", "status", "capture", "open-settings",
+        "help", "--help", "-h", "version", "status", "capture", "open-settings", "quit",
         "screenshot", "config", "install", "uninstall", "autostart-init",
     };
     private static CliResult Execute(string command, string[] args)
@@ -65,6 +73,7 @@ public static class CliService
                 "status" => Status(),
                 "capture" => ExecuteUiCommand("capture"),
                 "open-settings" => ExecuteUiCommand("open-settings"),
+                "quit" => Quit(),
                 "screenshot" => CliScreenshotService.Execute(args),
                 "config" => ExecuteConfig(args),
                 "install" => CliInstallerService.Install(args),
@@ -116,7 +125,29 @@ public static class CliService
         if (SingleInstanceService.TrySendRequest(SerializeRequest("config", args), out var response))
             return DeserializeResponse(response);
 
+        // Writing settings.json behind a running app would be overwritten by its next save.
+        if (SingleInstanceService.Probe(out _) != SingleInstanceService.ProbeResult.NoAnswer)
+            return new CliResult(3, "Clipsy is running but did not answer. Try again.");
         return CliConfigService.Execute(args);
+    }
+
+    // Graceful shutdown (finishes a recording); waits for the process so installers can replace files.
+    private static CliResult Quit()
+    {
+        if (SingleInstanceService.Probe(out int pid) == SingleInstanceService.ProbeResult.NoAnswer)
+            return new CliResult(0, "not running", new { running = false });
+        if (!SingleInstanceService.TrySendRequest(SerializeRequest("quit", Array.Empty<string>()), out var response))
+            return new CliResult(3, "Clipsy did not answer.");
+        var result = DeserializeResponse(response);
+        if (!result.Ok || pid == 0) return result;
+        try
+        {
+            using var p = Process.GetProcessById(pid);
+            if (!p.WaitForExit(TimeSpan.FromMinutes(2)))
+                return new CliResult(4, "Clipsy is still shutting down.");
+        }
+        catch (ArgumentException) { } // already gone
+        return new CliResult(0, "stopped", new { running = false });
     }
 
     private static CliResult ExecuteUiCommand(string command)
@@ -190,6 +221,7 @@ public static class CliService
         Console.Out.WriteLine("  Clipsy.exe version [--json]");
         Console.Out.WriteLine("  Clipsy.exe capture");
         Console.Out.WriteLine("  Clipsy.exe open-settings");
+        Console.Out.WriteLine("  Clipsy.exe quit");
         Console.Out.WriteLine("  Clipsy.exe screenshot [--monitor cursor|primary|N | --all | --region x,y,w,h]");
         Console.Out.WriteLine("                       [--out PATH] [--format png|jpg|webp] [--clipboard] [--no-save]");
         Console.Out.WriteLine("                       [--cursor|--no-cursor] [--json]");
@@ -214,21 +246,38 @@ public static class CliService
         var writer = result.Ok ? Console.Out : Console.Error;
         writer.WriteLine(result.Message);
     }
+    private static uint _originalOutputCp;
+
+    // The console (and its code page) is shared with the calling shell: switch it to UTF-8 only
+    // for our output and put it back afterwards. Redirected output (pipes, clipsy-cli) is plain UTF-8.
     private static void AttachParentConsole()
     {
         try
         {
-            AttachConsole(ATTACH_PARENT_PROCESS);
-            Console.OutputEncoding = new UTF8Encoding(false);
-            Console.InputEncoding = Encoding.UTF8;
+            if (AttachConsole(ATTACH_PARENT_PROCESS))
+            {
+                _originalOutputCp = GetConsoleOutputCP();
+                SetConsoleOutputCP(65001);
+            }
             Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true });
             Console.SetError(new StreamWriter(Console.OpenStandardError(), new UTF8Encoding(false)) { AutoFlush = true });
         }
         catch { }
     }
 
+    private static void RestoreConsoleCodePage()
+    {
+        if (_originalOutputCp != 0) SetConsoleOutputCP(_originalOutputCp);
+    }
+
     private const uint ATTACH_PARENT_PROCESS = 0xFFFFFFFF;
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool AttachConsole(uint processId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetConsoleOutputCP();
+
+    [DllImport("kernel32.dll")]
+    private static extern bool SetConsoleOutputCP(uint codePage);
 }
