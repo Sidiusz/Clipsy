@@ -30,7 +30,8 @@ public static class CrashHandler
             // Keep the delegate rooted for the process lifetime; if it gets
             // GC'd the native side calls into freed memory.
             _filter = NativeFilter;
-            SetUnhandledExceptionFilter(_filter);
+            _previousFilter = SetUnhandledExceptionFilter(_filter);
+            PruneDumps();
         }
         catch (Exception ex)
         {
@@ -40,6 +41,8 @@ public static class CrashHandler
 
     // Rooted reference — do not inline.
     private static TopLevelExceptionFilter? _filter;
+    private static IntPtr _previousFilter;
+    private const int KeepDumps = 3;
 
     private static int NativeFilter(IntPtr exceptionInfo)
     {
@@ -70,6 +73,11 @@ public static class CrashHandler
             // Never throw from inside the crash filter.
         }
 
+        if (_previousFilter != IntPtr.Zero)
+        {
+            try { return Marshal.GetDelegateForFunctionPointer<TopLevelExceptionFilter>(_previousFilter)(exceptionInfo); }
+            catch { }
+        }
         // Let the default handler (WER) also run, then the process terminates.
         return EXCEPTION_CONTINUE_SEARCH;
     }
@@ -92,6 +100,23 @@ public static class CrashHandler
         }
         catch { }
         return "?";
+    }
+
+    private static void PruneDumps()
+    {
+        try
+        {
+            var dir = new DirectoryInfo(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clipsy"));
+            if (!dir.Exists) return;
+            var dumps = dir.GetFiles("crash_*.dmp");
+            Array.Sort(dumps, (a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
+            for (int i = KeepDumps; i < dumps.Length; i++)
+            {
+                try { dumps[i].Delete(); } catch { }
+            }
+        }
+        catch { }
     }
 
     private static string WriteDump(IntPtr exceptionInfo)
@@ -187,7 +212,8 @@ public static class CrashHandler
         // Trailing ExceptionInformation[15] omitted — we only read code/address.
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    // dbghelp.h declares this under pshpack4: the pointer sits at offset 4 on x64.
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
     private struct MINIDUMP_EXCEPTION_INFORMATION
     {
         public uint ThreadId;

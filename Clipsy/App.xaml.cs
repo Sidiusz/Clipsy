@@ -14,6 +14,7 @@ public partial class App : Application
     public MainWindow? HostWindow { get; private set; }
     public HotkeyService? Hotkey { get; private set; }
 
+    private Microsoft.UI.Dispatching.DispatcherQueue? _uiQueue;
     private Clipsy.Views.TrayMenuWindow? _trayMenu;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _updateTimer;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _idleTimer;
@@ -63,10 +64,12 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         Strings.Initialize();
-        AutostartService.MigrateLegacyScheduledTask();
+        AutostartService.MigrateLegacyScheduledTaskInBackground();
         HostWindow = new MainWindow();
+        _uiQueue = HostWindow.DispatcherQueue;
         HostWindow.CaptureRequested += OnCaptureRequested;
         HostWindow.MenuRequested    += OnMenuRequested;
+        HostWindow.SessionEnding    += () => _uiQueue?.TryEnqueue(OnExitRequested);
 
         // Activate the host to start the XAML island; offscreen tool-window so
         // invisible, but must be active or the TaskbarIcon commands never wire.
@@ -83,10 +86,9 @@ public partial class App : Application
         _trayMenu.UpdateStatusClicked         += () => UpdateManager.PrimaryAction();
         _trayMenu.ExitClicked                 += OnExitRequested;
         UpdateManager.Init(HostWindow.DispatcherQueue);
-        ThemeService.Register(HostWindow.Content as Microsoft.UI.Xaml.FrameworkElement);
         ToastService.Prewarm();
 
-        SingleInstanceService.StartServer(HandleCliRequest);
+        SingleInstanceService.SetRequestHandler(HandleCliRequest);
 
         Hotkey = new HotkeyService(HostWindow.DispatcherQueue);
         RegisterHotkeys();
@@ -98,6 +100,7 @@ public partial class App : Application
 
         _ = CheckUpdatesIfDueAsync();
         StartUpdateTimer();
+        RecordingController.RecoverOrphanedRecordings();
 
         // Warm the capture pipeline off-thread so the first PrintScreen doesn't
         // pay JIT + XAML cold init + first BitBlt at once.
@@ -128,10 +131,15 @@ public partial class App : Application
         var dq = HostWindow?.DispatcherQueue;
         if (dq == null) return;
         ProcessWatchdog.Pulse();
+        SingleInstanceService.MarkUiAlive();
         _watchdogTimer = dq.CreateTimer();
         _watchdogTimer.Interval = TimeSpan.FromSeconds(5);
         _watchdogTimer.IsRepeating = true;
-        _watchdogTimer.Tick += (_, _) => ProcessWatchdog.Pulse();
+        _watchdogTimer.Tick += (_, _) =>
+        {
+            ProcessWatchdog.Pulse();
+            SingleInstanceService.MarkUiAlive();
+        };
         _watchdogTimer.Start();
     }
 
@@ -195,6 +203,13 @@ public partial class App : Application
                 return new CliResult(0, "settings opened", new { opened = true });
             case "config":
                 return CliConfigService.Execute(request.Args);
+            case "quit":
+                _uiQueue?.TryEnqueue(ExitApp);
+                return new CliResult(0, "exiting");
+            case "activate":
+                NotificationService.Post(NotificationLevel.Info, Strings.Get("AlreadyRunningTitle"),
+                    Strings.Get("AlreadyRunningBody"), ToastCategory.Hint);
+                return new CliResult(0, "already running");
             default:
                 return new CliResult(2, $"Unsupported live command: {request.Command}");
         }
@@ -214,11 +229,12 @@ public partial class App : Application
         CaptureOverlayHost.RequestOverlay();
     }
 
+    // Runs on the hotkey thread: must not touch WinUI objects directly.
     private void OnCaptureHotkeyRequested()
     {
         if (RecordingController.IsRecording)
         {
-            HostWindow?.DispatcherQueue.TryEnqueue(() => RecordingController.Current?.StopFromHotkey());
+            _uiQueue?.TryEnqueue(() => RecordingController.Current?.StopFromHotkey());
             return;
         }
         CaptureOverlayHost.RequestOverlay();
@@ -272,8 +288,24 @@ public partial class App : Application
         RecordingController.Current?.ToggleMic();
     }
 
-    private void OnExitRequested()
+    private bool _exiting;
+
+    /// <summary>Full shutdown path (recording finalize, watchdog, tray) for callers outside App.</summary>
+    public void ExitApp() => OnExitRequested();
+
+    private async void OnExitRequested()
     {
+        if (_exiting) return;
+        _exiting = true;
+        // Finish the recording first: the watchdog kills the process ~10 s after a clean-exit mark.
+        try
+        {
+            if (RecordingController.Current is { } recording)
+                await recording.StopForExitAsync(TimeSpan.FromSeconds(90));
+        }
+        catch (Exception ex) { Diagnostics.Log("Exit: finishing recording failed", ex); }
+
+        SingleInstanceService.StopServer();
         ProcessWatchdog.MarkCleanExit();
         _watchdogTimer?.Stop();
         CaptureOverlayHost.Shutdown();
@@ -286,71 +318,26 @@ public partial class App : Application
         Application.Current.Exit();
     }
 
-    private void OnRecordRequested()
-    {
-        // Reuses the same capture overlay — user picks a region, then the
-        // record button on the floating toolbar starts recording.
-        if (RecordingController.IsRecording)
-        {
-            RecordingController.Current?.StopFromHotkey();
-            return;
-        }
-        CaptureOverlayHost.RequestOverlay();
-    }
-
     private void OnOpenVideoFolderRequested()
-    {
-        try
-        {
-            var s = SettingsService.Instance;
-            var folder = string.IsNullOrEmpty(s.Settings.VideoFolder)
-                ? s.DefaultVideoFolder
-                : s.Settings.VideoFolder!;
-            if (System.IO.Directory.Exists(folder))
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = folder,
-                    UseShellExecute = true,
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] OpenVideoFolder failed: {ex.Message}");
-        }
-    }
+        => OpenFolder(() => SettingsService.Instance.GetEffectiveVideoFolder());
 
     private void OnOpenFolderRequested()
+        => OpenFolder(() => SettingsService.Instance.GetEffectiveScreenshotFolder());
+
+    private static void OpenFolder(Func<string> resolve)
     {
         try
         {
-            var s = SettingsService.Instance;
-            var folder = string.IsNullOrEmpty(s.Settings.ScreenshotFolder)
-                ? s.DefaultScreenshotFolder
-                : s.Settings.ScreenshotFolder!;
-            if (System.IO.Directory.Exists(folder))
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = folder,
-                    UseShellExecute = true,
-                });
-            }
+                FileName = resolve(),
+                UseShellExecute = true,
+            });
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] OpenFolder failed: {ex.Message}");
+            Diagnostics.Log("Open folder failed", ex);
+            NotificationService.Error("ErrOpenFolder");
         }
-    }
-
-    private void OnAboutRequested()
-    {
-        // Reuse Settings with the Info pane preselected.
-        var dq = HostWindow?.DispatcherQueue;
-        if (dq != null)
-            dq.TryEnqueue(() => Clipsy.Views.Settings.SettingsWindow.ShowOrActivate());
-        else
-            Clipsy.Views.Settings.SettingsWindow.ShowOrActivate();
     }
 }
