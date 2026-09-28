@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Geometry;
@@ -17,6 +18,7 @@ public sealed class DrawingController
     private readonly List<DrawElement> _elements = new();
     private readonly Stack<HistoryOp> _undo = new();
     private readonly Stack<HistoryOp> _redo = new();
+    private DrawElement[]? _editBefore;
 
     private static readonly CanvasStrokeStyle RoundStroke = new()
     {
@@ -85,7 +87,12 @@ public sealed class DrawingController
         PaintActiveSegment(start, start);
     }
 
-    public void SetActiveThickness(double thickness) => _activeThickness = thickness;
+    // Already-painted segments keep the old width; rebuild from the element at the end.
+    public void SetActiveThickness(double thickness)
+    {
+        _activeThickness = thickness;
+        _activeMissedPaint = true;
+    }
 
     public void AppendActiveStroke(Point pt)
     {
@@ -119,9 +126,9 @@ public sealed class DrawingController
     public void EndActiveStroke(StrokeElement e)
     {
         _activeOpen = false;
+        var before = _elements.ToArray();
         _elements.Add(e);
-        _undo.Push(new HistoryOp(HistoryKind.Add, e));
-        _redo.Clear();
+        PushListChange(before);
         if (_activeMissedPaint) InvalidateCommitted();
     }
 
@@ -171,25 +178,38 @@ public sealed class DrawingController
 
     public void Add(DrawElement e)
     {
+        var before = _elements.ToArray();
         _elements.Add(e);
-        _undo.Push(new HistoryOp(HistoryKind.Add, e));
-        _redo.Clear();
+        PushListChange(before);
         InvalidateCommitted();
     }
 
-    public void Remove(DrawElement e)
+    /// <summary>Groups the changes of one gesture (e.g. an erase drag) into a single undo step.</summary>
+    public void BeginEdit() => _editBefore ??= _elements.ToArray();
+
+    public void EndEdit()
     {
-        if (!_elements.Remove(e)) return;
-        _undo.Push(new HistoryOp(HistoryKind.Remove, e));
+        var before = _editBefore;
+        _editBefore = null;
+        if (before != null && !before.SequenceEqual(_elements)) PushListChange(before);
+    }
+
+    public void RecordMove(DrawElement e, double dx, double dy)
+    {
+        if (Math.Abs(dx) < 0.01 && Math.Abs(dy) < 0.01) return;
+        _undo.Push(new MoveOp(e, dx, dy));
         _redo.Clear();
-        InvalidateCommitted();
     }
 
     public bool Undo()
     {
         if (_undo.Count == 0) return false;
         var op = _undo.Pop();
-        ApplyInverse(op);
+        switch (op)
+        {
+            case ListOp l: SetElements(l.Before); break;
+            case MoveOp m: m.Element.Offset(-m.Dx, -m.Dy); break;
+        }
         _redo.Push(op);
         InvalidateCommitted();
         return true;
@@ -199,46 +219,57 @@ public sealed class DrawingController
     {
         if (_redo.Count == 0) return false;
         var op = _redo.Pop();
-        Apply(op);
+        switch (op)
+        {
+            case ListOp l: SetElements(l.After); break;
+            case MoveOp m: m.Element.Offset(m.Dx, m.Dy); break;
+        }
         _undo.Push(op);
         InvalidateCommitted();
         return true;
     }
 
+    /// <summary>Removes every element as one undoable step.</summary>
+    public bool ClearDrawings()
+    {
+        if (_elements.Count == 0) return false;
+        var before = _elements.ToArray();
+        _elements.Clear();
+        _selected = null;
+        PushListChange(before);
+        InvalidateCommitted();
+        return true;
+    }
+
+    /// <summary>Resets elements and history (new capture session).</summary>
     public void ClearAll()
     {
         _elements.Clear();
         _undo.Clear();
         _redo.Clear();
+        _editBefore = null;
+        _selected = null;
         InvalidateCommitted();
-    }
-
-    public DrawElement? HitTestTopmost(Point p, double radius)
-    {
-        for (int i = _elements.Count - 1; i >= 0; i--)
-        {
-            if (_elements[i].HitTest(p, radius)) return _elements[i];
-        }
-        return null;
     }
 
     public bool WholeStrokeErase(Point cursor, double radius)
     {
+        var before = _editBefore == null ? _elements.ToArray() : null;
         bool changed = false;
         for (int i = _elements.Count - 1; i >= 0; i--)
         {
-            var el = _elements[i];
-            if (!el.HitTest(cursor, radius)) continue;
+            if (!_elements[i].HitTest(cursor, radius)) continue;
             _elements.RemoveAt(i);
             changed = true;
         }
-        if (changed) { _redo.Clear(); InvalidateCommitted(); }
+        if (changed) CommitErase(before);
         return changed;
     }
 
     // Pencil strokes split around the eraser; shapes/text removed whole on touch.
     public bool PartialErase(Point cursor, double radius)
     {
+        var before = _editBefore == null ? _elements.ToArray() : null;
         bool changed = false;
         for (int i = _elements.Count - 1; i >= 0; i--)
         {
@@ -262,47 +293,72 @@ public sealed class DrawingController
                     break;
             }
         }
-        if (changed)
-        {
-            _redo.Clear();
-            InvalidateCommitted();
-        }
+        if (changed) CommitErase(before);
         return changed;
+    }
+
+    private void CommitErase(DrawElement[]? standaloneBefore)
+    {
+        if (_selected != null && !_elements.Contains(_selected)) _selected = null;
+        if (standaloneBefore != null) PushListChange(standaloneBefore);
+        InvalidateCommitted();
     }
 
     private static List<StrokeElement>? SplitStrokeAroundEraser(StrokeElement stroke, Point cursor, double radius)
     {
         double reach = radius + stroke.Thickness * 0.5;
-        double r2 = reach * reach;
-        var keep = new bool[stroke.Points.Count];
-        bool anyHit = false;
-        for (int i = 0; i < stroke.Points.Count; i++)
-        {
-            var p = stroke.Points[i];
-            var dx = p.X - cursor.X;
-            var dy = p.Y - cursor.Y;
-            bool hit = dx * dx + dy * dy <= r2;
-            keep[i] = !hit;
-            if (hit) anyHit = true;
-        }
+        var src = stroke.Points;
+        if (src.Count == 0) return null;
+        bool anyHit = DistanceSq(src[0], cursor) <= reach * reach;
+        for (int i = 1; i < src.Count && !anyHit; i++)
+            anyHit = SegmentDistanceSq(src[i - 1], src[i], cursor) <= reach * reach;
         if (!anyHit) return null;
+
+        // Densify long segments so the eraser can cut through their middle.
+        double step = Math.Max(1.0, reach * 0.5);
+        var pts = new List<Point>(src.Count * 2) { src[0] };
+        for (int i = 1; i < src.Count; i++)
+        {
+            var a = src[i - 1];
+            var b = src[i];
+            double len = Math.Sqrt(DistanceSq(a, b));
+            int n = (int)(len / step);
+            for (int k = 1; k < n; k++)
+            {
+                double t = k / (double)n;
+                pts.Add(new Point(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t));
+            }
+            pts.Add(b);
+        }
 
         var results = new List<StrokeElement>();
         var run = new List<Point>();
-        for (int i = 0; i < stroke.Points.Count; i++)
+        foreach (var p in pts)
         {
-            if (keep[i])
+            if (DistanceSq(p, cursor) > reach * reach)
             {
-                run.Add(stroke.Points[i]);
+                run.Add(p);
+                continue;
             }
-            else
-            {
-                if (run.Count >= 2) results.Add(CloneStrokeWithPoints(stroke, run));
-                run = new List<Point>();
-            }
+            if (run.Count >= 2) results.Add(CloneStrokeWithPoints(stroke, run));
+            run = new List<Point>();
         }
         if (run.Count >= 2) results.Add(CloneStrokeWithPoints(stroke, run));
         return results;
+    }
+
+    private static double DistanceSq(Point a, Point b)
+    {
+        double dx = a.X - b.X, dy = a.Y - b.Y;
+        return dx * dx + dy * dy;
+    }
+
+    private static double SegmentDistanceSq(Point a, Point b, Point p)
+    {
+        double vx = b.X - a.X, vy = b.Y - a.Y;
+        double len2 = vx * vx + vy * vy;
+        double t = len2 < 1e-9 ? 0 : Math.Clamp(((p.X - a.X) * vx + (p.Y - a.Y) * vy) / len2, 0, 1);
+        return DistanceSq(new Point(a.X + vx * t, a.Y + vy * t), p);
     }
 
     private static StrokeElement CloneStrokeWithPoints(StrokeElement orig, List<Point> pts)
@@ -362,6 +418,9 @@ public sealed class DrawingController
             try { DrawOne(cds, el); } catch { } // a bad font must not blank the cache
         }
     }
+
+    /// <summary>Single source of truth for element rendering: the overlay and saved files both use it.</summary>
+    internal static void Render(CanvasDrawingSession ds, DrawElement el) => DrawOne(ds, el);
 
     private static void DrawOne(CanvasDrawingSession ds, DrawElement el)
     {
@@ -445,7 +504,8 @@ public sealed class DrawingController
         return first;
     }
 
-    private static (Point, Point) ArrowHead(Point a, Point b, double thickness)
+    // Head scales with the brush but never outgrows the shaft; ~26° per side.
+    internal static (Point, Point) ArrowHead(Point a, Point b, double thickness)
     {
         double dx = b.X - a.X, dy = b.Y - a.Y;
         double len = Math.Sqrt(dx * dx + dy * dy);
@@ -462,18 +522,20 @@ public sealed class DrawingController
 
     private static Vector2 V(Point p) => new((float)p.X, (float)p.Y);
 
-    private void Apply(HistoryOp op)
+    private void PushListChange(DrawElement[] before)
     {
-        if (op.Kind == HistoryKind.Add) _elements.Add(op.Element);
-        else _elements.Remove(op.Element);
+        _undo.Push(new ListOp(before, _elements.ToArray()));
+        _redo.Clear();
     }
 
-    private void ApplyInverse(HistoryOp op)
+    private void SetElements(DrawElement[] elements)
     {
-        if (op.Kind == HistoryKind.Add) _elements.Remove(op.Element);
-        else _elements.Add(op.Element);
+        _elements.Clear();
+        _elements.AddRange(elements);
+        if (_selected != null && !_elements.Contains(_selected)) _selected = null;
     }
 
-    private enum HistoryKind { Add, Remove }
-    private readonly record struct HistoryOp(HistoryKind Kind, DrawElement Element);
+    private abstract record HistoryOp;
+    private sealed record ListOp(DrawElement[] Before, DrawElement[] After) : HistoryOp;
+    private sealed record MoveOp(DrawElement Element, double Dx, double Dy) : HistoryOp;
 }

@@ -37,6 +37,10 @@ public sealed partial class CaptureOverlayWindow
         EnsureSwatchBrush().Color = _colorBeforeFlyout;
     }
 
+    // Light-dismiss skips Cancel: drop the preview so the swatch shows the real colour.
+    private void OnColorFlyoutClosed(object sender, object e)
+        => EnsureSwatchBrush().Color = _drawing.Settings.Color;
+
     private void OnColorPickerPreviewChanged(Color color)
         => EnsureSwatchBrush().Color = Color.FromArgb(0xFF, color.R, color.G, color.B);
 
@@ -228,24 +232,4 @@ public sealed partial class CaptureOverlayWindow
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int X, Y; }
 
-    private static Color ParseHexColor(string hex)
-    {
-        var s = hex.TrimStart('#');
-        if (s.Length == 8)
-        {
-            byte a = System.Convert.ToByte(s.Substring(0, 2), 16);
-            byte r = System.Convert.ToByte(s.Substring(2, 2), 16);
-            byte g = System.Convert.ToByte(s.Substring(4, 2), 16);
-            byte b = System.Convert.ToByte(s.Substring(6, 2), 16);
-            return Color.FromArgb(a, r, g, b);
-        }
-        if (s.Length == 6)
-        {
-            byte r = System.Convert.ToByte(s.Substring(0, 2), 16);
-            byte g = System.Convert.ToByte(s.Substring(2, 2), 16);
-            byte b = System.Convert.ToByte(s.Substring(4, 2), 16);
-            return Color.FromArgb(0xFF, r, g, b);
-        }
-        return Microsoft.UI.Colors.Red;
-    }
 }

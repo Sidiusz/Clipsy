@@ -16,8 +16,6 @@ using WinRT.Interop;
 
 namespace Clipsy.Views;
 
-public enum TrayUpdateStatus { Idle, Checking, Available, UpToDate, Failed }
-
 public sealed partial class TrayMenuWindow : Window
 {
     public event Action? CaptureClicked;
@@ -39,8 +37,7 @@ public sealed partial class TrayMenuWindow : Window
     private readonly Dictionary<Grid, ItemParts> _parts = new();
 
     private const int MenuW      = 264;
-    private const int MenuH_Base = 266;   // without update row
-    private const int MenuH_Row  = 20;    // extra height when update row is visible
+    private const int MenuH_Base = 266;
 
     public TrayMenuWindow()
     {
@@ -55,6 +52,10 @@ public sealed partial class TrayMenuWindow : Window
 
         Activated += OnActivated;
         Closed += (_, _) => PrepareForShutdown();
+        RootGrid.KeyDown += (_, e) =>
+        {
+            if (e.Key == Windows.System.VirtualKey.Escape) { HideMenu(); e.Handled = true; }
+        };
         WarmUp();
 
         // Re-localize when language flips so the next tray-menu open shows
@@ -104,13 +105,14 @@ public sealed partial class TrayMenuWindow : Window
     {
         if (_closed) return;
 
-        double scale = GetDpiScale();
-        int w = (int)(MenuW * scale);
-        int h = (int)(CurrentMenuH * scale);
-
         GetCursorPos(out POINT pt);
 
         IntPtr hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        // Scale for the monitor under the cursor, not the one the menu last sat on.
+        double scale = GetDpiForMonitor(hMon, 0, out uint dpiX, out _) == 0 && dpiX > 0 ? dpiX / 96.0 : GetDpiScale();
+        int w = (int)Math.Round(MenuW * scale);
+        int h = (int)Math.Round(MeasureMenuHeight() * scale);
+
         var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
         GetMonitorInfo(hMon, ref mi);
         var work = mi.rcWork;
@@ -128,7 +130,10 @@ public sealed partial class TrayMenuWindow : Window
 
         try
         {
-            _appWindow.MoveAndResize(new RectInt32(x, y, w, h));
+            var rect = new RectInt32(x, y, w, h);
+            _appWindow.MoveAndResize(rect);
+            // Crossing to a monitor with another DPI rescales the window once; re-apply the exact rect.
+            if (_appWindow.Size.Width != w || _appWindow.Size.Height != h) _appWindow.MoveAndResize(rect);
         }
         catch (Exception ex)
         {
@@ -250,9 +255,18 @@ public sealed partial class TrayMenuWindow : Window
 
     // ─── Window setup ───
 
-    // Update button now sits beside the header text (right column), not
-    // below the version — header height stays constant regardless of status.
     private int CurrentMenuH => MenuH_Base;
+
+    // Honors text scaling (Accessibility > Text size), which grows rows past the design height.
+    private double MeasureMenuHeight()
+    {
+        try
+        {
+            RootGrid.Measure(new Windows.Foundation.Size(MenuW, double.PositiveInfinity));
+            return Math.Max(MenuH_Base, Math.Ceiling(RootGrid.DesiredSize.Height));
+        }
+        catch { return MenuH_Base; }
+    }
 
     private void ConfigureWindow()
     {
@@ -303,7 +317,15 @@ public sealed partial class TrayMenuWindow : Window
         VideoFolderTxt.Text      = Strings.Get("TrayOpenVideos");
         SettingsTxt.Text         = Strings.Get("TraySettings");
         ExitTxt.Text             = Strings.Get("TrayExit");
+        CaptureShortcut.Text     = FormatBinding(SettingsService.Instance.Settings.HotkeyCapture);
         HeaderVersion.Text       = $"v{UpdateService.CurrentVersion()}";
+    }
+
+    private static string FormatBinding(string? binding)
+    {
+        if (string.IsNullOrWhiteSpace(binding)) return string.Empty;
+        return binding.Replace("PrintScreen", "PrtSc", StringComparison.OrdinalIgnoreCase)
+                      .Replace("Snapshot", "PrtSc", StringComparison.OrdinalIgnoreCase);
     }
 
     // ─── Hide on deactivation ───
@@ -427,6 +449,7 @@ public sealed partial class TrayMenuWindow : Window
     [DllImport("user32.dll")]  private static extern uint  GetDpiForWindow(IntPtr h);
     [DllImport("user32.dll")]  private static extern IntPtr MonitorFromPoint(POINT pt, uint f);
     [DllImport("user32.dll")]  private static extern bool  GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
+    [DllImport("shcore.dll")]  private static extern int   GetDpiForMonitor(IntPtr hMon, int type, out uint dpiX, out uint dpiY);
     [DllImport("dwmapi.dll")]  private static extern int   DwmSetWindowAttribute(IntPtr h, int attr, ref int v, int size);
     [DllImport("dwmapi.dll", EntryPoint = "DwmSetWindowAttribute")]
     private static extern int DwmSetWindowAttributeU(IntPtr h, int attr, ref uint v, int size);

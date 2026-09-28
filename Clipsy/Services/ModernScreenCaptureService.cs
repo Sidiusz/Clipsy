@@ -23,6 +23,9 @@ internal static class ModernScreenCaptureService
 
     public static bool IsSupported => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041) && GraphicsCaptureSession.IsSupported();
 
+    // Device creation costs tens of ms; captures run on one worker thread, so keep it.
+    private static IDirect3DDevice? _device;
+
     public static ScreenFreezeService.FrozenFrame Capture(bool includeCursor)
     {
         if (!IsSupported) throw new NotSupportedException("Windows Graphics Capture is not supported.");
@@ -40,19 +43,29 @@ internal static class ModernScreenCaptureService
         if (bounds.Width <= 0 || bounds.Height <= 0 || targets.Count == 0)
             throw new InvalidOperationException("No monitors are available for capture.");
 
-        using var device = CreateDirect3DDevice();
+        var device = _device ??= CreateDirect3DDevice();
         int stride = checked(bounds.Width * 4);
         var pixels = new byte[checked(stride * bounds.Height)];
         var monitors = new List<ScreenFreezeService.MonitorInfo>(targets.Count);
 
-        foreach (var target in targets)
+        try
         {
-            var captured = await CaptureMonitorAsync(device, target.Handle, includeCursor);
-            CopyMonitor(captured, pixels, stride, bounds, target.Info.Bounds);
-            monitors.Add(target.Info);
+            foreach (var target in targets)
+            {
+                var captured = await CaptureMonitorAsync(device, target.Handle, includeCursor);
+                CopyMonitor(captured, pixels, stride, bounds, target.Info.Bounds);
+                monitors.Add(target.Info);
+            }
+        }
+        catch
+        {
+            // Device may be lost (driver reset); rebuild on the next capture.
+            _device = null;
+            device.Dispose();
+            throw;
         }
 
-        for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 0xFF;
+        ScreenFreezeService.ForceOpaque(pixels);
         return new ScreenFreezeService.FrozenFrame
         {
             PixelBytes = pixels,

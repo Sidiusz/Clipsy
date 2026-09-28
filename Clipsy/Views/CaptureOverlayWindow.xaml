@@ -22,6 +22,8 @@
           PointerPressed="OnRootPointerPressed"
           PointerMoved="OnRootPointerMoved"
           PointerReleased="OnRootPointerReleased"
+          PointerCaptureLost="OnRootPointerCaptureLost"
+          PointerCanceled="OnRootPointerCaptureLost"
           PointerWheelChanged="OnRootPointerWheelChanged"
           RightTapped="OnRootRightTapped">
 
@@ -319,7 +321,8 @@
                                  Stroke="White" StrokeThickness="1.5" />
                         <Button.Flyout>
                             <Flyout x:Name="ColorFlyout" Placement="Left"
-                                    Opened="OnColorFlyoutOpened">
+                                    Opened="OnColorFlyoutOpened"
+                                    Closed="OnColorFlyoutClosed">
                                 <views:ColorPickerPanel x:Name="ColorPickerCtl" />
                             </Flyout>
                         </Button.Flyout>
@@ -511,7 +514,7 @@
                 BorderThickness="1"
                 CornerRadius="12"
                 Padding="18,10"
-                HorizontalAlignment="Left"
+                HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 Margin="0,72,0,0"
                 Opacity="0"
@@ -523,20 +526,13 @@
                 <TranslateTransform x:Name="HintTranslate" Y="-56" />
             </Border.RenderTransform>
             <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
-                <!-- HintText carries the localized string set from code-behind
-                     (was Hint.Text on the old TextBlock). -->
                 <TextBlock x:Name="HintText"
                            Text="Drag to select"
                            Foreground="{ThemeResource ClipsyTextBrush}"
                            FontSize="14" FontWeight="SemiBold" />
                 <Border Width="1" Background="{ThemeResource ClipsyBorderBrush}" />
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <Border Style="{StaticResource ClipsyKbd}">
-                        <TextBlock Text="Ctrl" Style="{StaticResource ClipsyMono}" />
-                    </Border>
-                    <Border Style="{StaticResource ClipsyKbd}">
-                        <TextBlock Text="A" Style="{StaticResource ClipsyMono}" />
-                    </Border>
+                    <StackPanel x:Name="HintSelectAllKeys" Orientation="Horizontal" Spacing="6" />
                     <TextBlock x:Name="HintFullScreenLabel" Text="full screen"
                                Foreground="{ThemeResource ClipsyText2Brush}" FontSize="12" />
                 </StackPanel>

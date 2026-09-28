@@ -57,37 +57,30 @@ public sealed class ScreenFreezeService
         var bounds = GetVirtualScreenBounds();
         var monitors = EnumerateMonitors();
 
-        using var bmp = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
-        using (var g = Graphics.FromImage(bmp))
+        int w = bounds.Width, h = bounds.Height;
+        int stride = w * 4;
+        var pixels = GC.AllocateUninitializedArray<byte>(stride * h);
+        // GDI+ writes straight into the managed buffer: one full-frame allocation, no copy.
+        var handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+        try
         {
+            using var bmp = new Bitmap(w, h, stride, PixelFormat.Format32bppArgb, handle.AddrOfPinnedObject());
+            using var g = Graphics.FromImage(bmp);
             g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
             g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
             g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.None;
 
-            g.CopyFromScreen(bounds.X, bounds.Y, 0, 0, bmp.Size, CopyPixelOperation.SourceCopy);
+            g.CopyFromScreen(bounds.X, bounds.Y, 0, 0, new Size(w, h), CopyPixelOperation.SourceCopy);
 
             if (includeCursor)
                 DrawCursorOnto(g, bounds.X, bounds.Y);
         }
-
-        int w = bmp.Width, h = bmp.Height;
-        int stride = w * 4;
-        var pixels = new byte[stride * h];
-        var data = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-        try
-        {
-            if (data.Stride == stride)
-                Marshal.Copy(data.Scan0, pixels, 0, pixels.Length);
-            else
-                for (int y = 0; y < h; y++)
-                    Marshal.Copy(data.Scan0 + y * data.Stride, pixels, y * stride, stride);
-        }
-        finally { bmp.UnlockBits(data); }
+        finally { handle.Free(); }
 
         // CopyFromScreen leaves alpha at 0; force opaque so the premultiplied
         // WriteableBitmap shows the frame instead of full transparency.
-        for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 0xFF;
+        ForceOpaque(pixels);
 
         return new FrozenFrame
         {
@@ -99,16 +92,10 @@ public sealed class ScreenFreezeService
         };
     }
 
-    // Rebuilds a GDI bitmap from the raw buffer for the eyedropper/renderer
-    // (off the launch hot path). Caller owns the returned bitmap.
-    public static Bitmap CreateBitmap(FrozenFrame f)
+    internal static void ForceOpaque(byte[] bgra)
     {
-        var bmp = new Bitmap(f.PixelWidth, f.PixelHeight, PixelFormat.Format32bppArgb);
-        var data = bmp.LockBits(new Rectangle(0, 0, f.PixelWidth, f.PixelHeight),
-            ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
-        try { Marshal.Copy(f.PixelBytes, 0, data.Scan0, f.PixelBytes.Length); }
-        finally { bmp.UnlockBits(data); }
-        return bmp;
+        var px = MemoryMarshal.Cast<byte, uint>(bgra.AsSpan());
+        for (int i = 0; i < px.Length; i++) px[i] |= 0xFF000000u;
     }
 
     public static Rectangle GetVirtualScreenBounds()
@@ -120,7 +107,7 @@ public sealed class ScreenFreezeService
         return new Rectangle(x, y, w, h);
     }
 
-    private static IReadOnlyList<MonitorInfo> EnumerateMonitors()
+    internal static IReadOnlyList<MonitorInfo> EnumerateMonitors()
     {
         var list = new List<MonitorInfo>();
         int idx = 0;
@@ -177,12 +164,21 @@ public sealed class ScreenFreezeService
         var ci = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
         if (!GetCursorInfo(ref ci) || (ci.flags & CURSOR_SHOWING) == 0)
             return;
+        // ptScreenPos is the hotspot; DrawIconEx wants the top-left corner.
+        int hotX = 0, hotY = 0;
+        if (GetIconInfo(ci.hCursor, out var ii))
+        {
+            hotX = ii.xHotspot;
+            hotY = ii.yHotspot;
+            if (ii.hbmMask != IntPtr.Zero) DeleteObject(ii.hbmMask);
+            if (ii.hbmColor != IntPtr.Zero) DeleteObject(ii.hbmColor);
+        }
         var hdc = g.GetHdc();
         try
         {
             DrawIconEx(hdc,
-                ci.ptScreenPos.X - originX,
-                ci.ptScreenPos.Y - originY,
+                ci.ptScreenPos.X - originX - hotX,
+                ci.ptScreenPos.Y - originY - hotY,
                 ci.hCursor, 0, 0, 0, IntPtr.Zero, DI_NORMAL);
         }
         finally
@@ -190,6 +186,19 @@ public sealed class ScreenFreezeService
             g.ReleaseHdc(hdc);
         }
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ICONINFO
+    {
+        [MarshalAs(UnmanagedType.Bool)] public bool fIcon;
+        public int xHotspot;
+        public int yHotspot;
+        public IntPtr hbmMask;
+        public IntPtr hbmColor;
+    }
+
+    [DllImport("user32.dll")] private static extern bool GetIconInfo(IntPtr hIcon, out ICONINFO info);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
 
     private const int CURSOR_SHOWING = 0x0001;
     private const uint DI_NORMAL = 0x0003;

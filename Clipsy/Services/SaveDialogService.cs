@@ -51,17 +51,16 @@ public static class SaveDialogService
 
     [DllImport("ole32.dll")] private static extern int OleInitialize(IntPtr pvReserved);
     [DllImport("ole32.dll")] private static extern void OleUninitialize();
-    [DllImport("ole32.dll")] private static extern void CoTaskMemFree(IntPtr pv);
 
     // Win32 folder picker. WinRT FolderPicker is broker-hosted and refuses
     // elevated callers, so it can't be used while Clipsy runs as admin.
-    public static Task<string?> PickFolderAsync(IntPtr hwnd)
+    public static Task<string?> PickFolderAsync(IntPtr hwnd, string? initialDir, string title)
     {
         var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var th = new System.Threading.Thread(() =>
         {
             int oleHr = OleInitialize(IntPtr.Zero);
-            try { tcs.TrySetResult(PickFolderSync(hwnd)); }
+            try { tcs.TrySetResult(PickFolderSync(hwnd, initialDir, title)); }
             catch (Exception ex) { Diagnostics.Log("SaveDialogService folder STA thread", ex); tcs.TrySetResult(null); }
             finally { if (oleHr >= 0) OleUninitialize(); }
         });
@@ -72,51 +71,86 @@ public static class SaveDialogService
         return tcs.Task;
     }
 
-    private static string? PickFolderSync(IntPtr hwnd)
+    private static string? PickFolderSync(IntPtr hwnd, string? initialDir, string title)
     {
-        var bi = new BROWSEINFO
-        {
-            hwndOwner = hwnd,
-            lpszTitle = "Select folder",
-            ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX,
-        };
-        IntPtr pidl = SHBrowseForFolderW(ref bi);
-        if (pidl == IntPtr.Zero) return null;
+        var dialog = (IFileOpenDialog)new FileOpenDialogCom();
         try
         {
-            var sb = new StringBuilder(260);
-            return SHGetPathFromIDListW(pidl, sb) ? sb.ToString() : null;
+            dialog.GetOptions(out uint options);
+            dialog.SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+            dialog.SetTitle(title);
+            if (!string.IsNullOrEmpty(initialDir) && Directory.Exists(initialDir))
+            {
+                var iid = typeof(IShellItem).GUID;
+                if (SHCreateItemFromParsingName(initialDir, IntPtr.Zero, ref iid, out var folder) == 0)
+                {
+                    dialog.SetFolder(folder);
+                    Marshal.ReleaseComObject(folder);
+                }
+            }
+            if (dialog.Show(hwnd) != 0) return null; // cancelled
+            dialog.GetResult(out var item);
+            try
+            {
+                item.GetDisplayName(SIGDN_FILESYSPATH, out var path);
+                return string.IsNullOrEmpty(path) ? null : path;
+            }
+            finally { Marshal.ReleaseComObject(item); }
         }
-        finally { CoTaskMemFree(pidl); }
+        finally { Marshal.ReleaseComObject(dialog); }
     }
 
-    private const uint BIF_RETURNONLYFSDIRS = 0x0001;
-    private const uint BIF_EDITBOX          = 0x0010;
-    private const uint BIF_NEWDIALOGSTYLE   = 0x0040;
+    private const uint FOS_PICKFOLDERS     = 0x00000020;
+    private const uint FOS_FORCEFILESYSTEM = 0x00000040;
+    private const uint FOS_PATHMUSTEXIST   = 0x00000800;
+    private const uint SIGDN_FILESYSPATH   = 0x80058000;
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct BROWSEINFO
+    [ComImport, Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")]
+    private class FileOpenDialogCom { }
+
+    [ComImport, Guid("d57c7288-d4ad-4768-be02-9d969532d960"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IFileOpenDialog
     {
-        public IntPtr hwndOwner;
-        public IntPtr pidlRoot;
-        public IntPtr pszDisplayName;
-        [MarshalAs(UnmanagedType.LPWStr)] public string? lpszTitle;
-        public uint ulFlags;
-        public IntPtr lpfn;
-        public IntPtr lParam;
-        public int iImage;
+        [PreserveSig] int Show(IntPtr parent);
+        void SetFileTypes(uint cFileTypes, IntPtr rgFilterSpec);
+        void SetFileTypeIndex(uint iFileType);
+        void GetFileTypeIndex(out uint piFileType);
+        void Advise(IntPtr pfde, out uint pdwCookie);
+        void Unadvise(uint dwCookie);
+        void SetOptions(uint fos);
+        void GetOptions(out uint pfos);
+        void SetDefaultFolder(IShellItem psi);
+        void SetFolder(IShellItem psi);
+        void GetFolder(out IShellItem ppsi);
+        void GetCurrentSelection(out IShellItem ppsi);
+        void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string pszName);
+        void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string pszName);
+        void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string pszTitle);
+        void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string pszText);
+        void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string pszLabel);
+        void GetResult(out IShellItem ppsi);
+        void AddPlace(IShellItem psi, int fdap);
+        void SetDefaultExtension([MarshalAs(UnmanagedType.LPWStr)] string pszDefaultExtension);
+        void Close(int hr);
+        void SetClientGuid(ref Guid guid);
+        void ClearClientData();
+        void SetFilter(IntPtr pFilter);
+        void GetResults(out IntPtr ppenum);
+        void GetSelectedItems(out IntPtr ppsai);
+    }
+
+    [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellItem
+    {
+        void BindToHandler(IntPtr pbc, ref Guid bhid, ref Guid riid, out IntPtr ppv);
+        void GetParent(out IShellItem ppsi);
+        void GetDisplayName(uint sigdnName, [MarshalAs(UnmanagedType.LPWStr)] out string ppszName);
+        void GetAttributes(uint sfgaoMask, out uint psfgaoAttribs);
+        void Compare(IShellItem psi, uint hint, out int piOrder);
     }
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    private static extern IntPtr SHBrowseForFolderW(ref BROWSEINFO lpbi);
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool SHGetPathFromIDListW(IntPtr pidl, StringBuilder pszPath);
-
-    // Convenience for PNG-only callers (kept for any existing call sites).
-    public static Task<SavePickResult?> PickPngSaveAsync(IntPtr hwnd, string initialDir, string suggestedName)
-        => PickSaveAsync(hwnd, initialDir, suggestedName,
-            new List<SaveFilter> { new("PNG image (*.png)", "*.png") }, ".png");
+    private static extern int SHCreateItemFromParsingName(string pszPath, IntPtr pbc, ref Guid riid, out IShellItem ppv);
 
     private static SavePickResult? PickSync(
         IntPtr hwnd,
@@ -146,7 +180,7 @@ public static class SaveDialogService
                 lpstrFile = fileBuf,
                 nMaxFile = bufCh,
                 lpstrInitialDir = !string.IsNullOrEmpty(initialDir) && Directory.Exists(initialDir) ? initialDir : null,
-                lpstrTitle = "Save",
+                lpstrTitle = Clipsy.Localization.Strings.Get("DlgSave"),
                 Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER | OFN_NOCHANGEDIR,
                 lpstrDefExt = defaultExt.TrimStart('.'),
             };
@@ -206,6 +240,18 @@ public static class SaveDialogService
         }
         sb.Append('\0'); // double-null terminator
         return sb.ToString();
+    }
+
+    /// <summary>Free path in <paramref name="folder"/>: "prefix_yyyyMMdd_HHmmss.ext", then "_2", "_3"... when taken.</summary>
+    public static string UniquePath(string folder, string prefix, string extension, bool timestamp = true)
+    {
+        Directory.CreateDirectory(folder);
+        var ext = extension.StartsWith('.') ? extension : "." + extension;
+        var baseName = timestamp ? Path.GetFileNameWithoutExtension(MakeTimestampName(prefix, ext)) : prefix;
+        var path = Path.Combine(folder, baseName + ext);
+        for (int i = 2; File.Exists(path); i++)
+            path = Path.Combine(folder, $"{baseName}_{i}{ext}");
+        return path;
     }
 
     public static string MakeTimestampName(string prefix, string extension)
