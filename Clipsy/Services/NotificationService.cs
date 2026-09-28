@@ -8,10 +8,6 @@ public enum NotificationLevel { Info, Warning, Error }
 
 public static class NotificationService
 {
-    public sealed record Notification(NotificationLevel Level, string Title, string Body);
-
-    public static event Action<Notification>? Posted;
-
     public static void Post(
         NotificationLevel level,
         string title,
@@ -27,7 +23,6 @@ public static class NotificationService
         bool    persistent          = false,
         int     dismissSeconds      = 0)
     {
-        Posted?.Invoke(new Notification(level, title, body ?? string.Empty));
         int duration = dismissSeconds > 0
             ? Math.Clamp(dismissSeconds, 1, 30)
             : Math.Clamp(SettingsService.Instance.Settings.NotificationDurationSeconds, 1, 30);
@@ -60,9 +55,6 @@ public static class NotificationService
 
     public static void Info(string bodyKey)
         => Post(NotificationLevel.Info,    "Clipsy", Strings.Get(bodyKey), ToastCategory.Hint);
-
-    public static void InfoText(string title, string body)
-        => Post(NotificationLevel.Info, title, body, ToastCategory.Hint);
 
     // ── Screenshot saved ─────────────────────────────────────────
 
@@ -100,10 +92,10 @@ public static class NotificationService
 
     // ── Video saved as MP4 fallback (AVI/MKV needs FFmpeg) ───────
 
-    public static void VideoSavedAsMp4(string fileName, long sizeKb, string filePath, string requestedFmt)
+    public static void VideoSavedAsMp4(string fileName, long sizeKb, string filePath, string requestedFmt, bool ffmpegMissing)
     {
         var body = string.Format(
-            Strings.Get("WarnSavedAsMp4"),
+            Strings.Get(ffmpegMissing ? "WarnSavedAsMp4" : "WarnConvertFailedMp4"),
             requestedFmt.ToUpperInvariant(),
             $"{fileName} · {FormatSize(sizeKb)}");
 
@@ -112,13 +104,30 @@ public static class NotificationService
             Strings.Get("ToastVideoSaved"),
             body,
             ToastCategory.Video,
-            action1Icon:    "\xE713",  // Settings gear
-            action1Tooltip: Strings.Get("ToastGetFfmpeg"),
-            action1:        OpenVideoSettings,
+            action1Icon:    ffmpegMissing ? "\xE713" : null,  // Settings gear
+            action1Tooltip: ffmpegMissing ? Strings.Get("ToastGetFfmpeg") : null,
+            action1:        ffmpegMissing ? OpenVideoSettings : null,
             action2Icon:    "\xE838",  // Folder
             action2Tooltip: Strings.Get("ToastOpenFolder"),
             action2:        () => OpenFolder(filePath));
     }
+
+    public static void VideoKeptAfterFailure(string filePath)
+        => Post(NotificationLevel.Error, "Clipsy",
+            string.Format(Strings.Get("ErrVideoKept"), filePath),
+            ToastCategory.Error,
+            action2Icon: "\xE838",
+            action2Tooltip: Strings.Get("ToastOpenFolder"),
+            action2: () => OpenFolder(filePath),
+            persistent: true);
+
+    public static void VideoRecovered(string filePath)
+        => Post(NotificationLevel.Info, Strings.Get("ToastVideoSaved"),
+            Strings.Get("ToastVideoRecovered"),
+            ToastCategory.Video,
+            action2Icon: "\xE838",
+            action2Tooltip: Strings.Get("ToastOpenFolder"),
+            action2: () => OpenFolder(filePath));
 
     private static void OpenVideoSettings()
     {
