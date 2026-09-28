@@ -72,13 +72,6 @@ public class Win32BorderOverlay
         InvalidateRect(_hwnd, IntPtr.Zero, false);
     }
 
-    public void SetZOrder(bool topmost)
-    {
-        if (!_created) return;
-        var insertAfter = topmost ? HWND_TOPMOST : HWND_BOTTOM;
-        SetWindowPos(_hwnd, insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
-
     public void Destroy()
     {
         if (!_created) return;
@@ -179,7 +172,6 @@ public class Win32BorderOverlay
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOSIZE = 0x0001;
-    private static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
 
     [DllImport("gdi32.dll")] private static extern IntPtr CreateSolidBrush(uint crColor);
     [DllImport("user32.dll")] private static extern int FillRect(IntPtr hDC, ref RECT lprc, IntPtr hbr);

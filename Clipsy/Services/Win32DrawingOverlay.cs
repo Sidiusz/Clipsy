@@ -375,16 +375,27 @@ public sealed class Win32DrawingOverlay
         _kbProcDelegate = null;
     }
 
+    // Ctrl+Z undoes a stroke only while the pointer is over the drawing area; elsewhere it
+    // belongs to the app being recorded (the overlay never has keyboard focus).
     private IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && wParam.ToInt64() == WM_KEYDOWN_MSG)
+        try
         {
-            var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-            if (data.vkCode == VK_Z && (GetKeyState(VK_CONTROL) & 0x8000) != 0)
+            if (nCode >= 0 && wParam.ToInt64() == WM_KEYDOWN_MSG)
             {
-                _engine.Undo();
-                return new IntPtr(1);
+                var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+                if (data.vkCode == VK_Z && (GetKeyState(VK_CONTROL) & 0x8000) != 0
+                    && GetCursorPos(out var pt)
+                    && pt.X >= _x && pt.X < _x + _w && pt.Y >= _y && pt.Y < _y + _h)
+                {
+                    _engine.Undo();
+                    return new IntPtr(1);
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("Draw overlay keyboard hook", ex);
         }
         return CallNextHookEx(_kbHook, nCode, wParam, lParam);
     }
@@ -426,6 +437,7 @@ public sealed class Win32DrawingOverlay
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT pt);
     [StructLayout(LayoutKind.Sequential)] private struct SIZE { public int cx, cy; }
 
     [StructLayout(LayoutKind.Sequential)]

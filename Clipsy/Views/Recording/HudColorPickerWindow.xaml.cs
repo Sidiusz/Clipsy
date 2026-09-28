@@ -27,7 +27,6 @@ public sealed partial class HudColorPickerWindow : Window
     private bool _repositioning;
 
     public event Action<byte, byte, byte>? ColorConfirmed;
-    public event Action? ColorCanceled;
 
     public HudColorPickerWindow()
     {
@@ -41,7 +40,7 @@ public sealed partial class HudColorPickerWindow : Window
         Root.SizeChanged += OnRootSizeChanged;
 
         ColorPickerCtl.ColorConfirmed += c  => { ColorConfirmed?.Invoke(c.R, c.G, c.B); HideWindow(); };
-        ColorPickerCtl.ColorCanceled  += () => { ColorCanceled?.Invoke(); HideWindow(); };
+        ColorPickerCtl.ColorCanceled  += HideWindow;
     }
 
     // ─── Public API ───

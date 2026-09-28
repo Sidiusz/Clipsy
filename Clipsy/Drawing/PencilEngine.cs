@@ -123,19 +123,18 @@ public sealed class PencilEngine
         Changed?.Invoke();
     }
 
-    private void SaveHistory()
-    {
-        var snapshot = new List<Stroke>(_strokes.Count);
-        foreach (var s in _strokes)
-            snapshot.Add(new Stroke { Color = s.Color, Thickness = s.Thickness, Points = new List<System.Drawing.PointF>(s.Points) });
-        _history.Push(snapshot);
-    }
+    // Committed strokes are never mutated (erasing replaces them), so a shallow copy is a full snapshot.
+    private void SaveHistory() => _history.Push(new List<Stroke>(_strokes));
+
+    private List<Stroke>? _eraseSnapshot;
+    private bool _eraseChanged;
 
     public void BeginErase(float x, float y, bool wholeStroke)
     {
         _erasing = true;
         _eraseWholeStroke = wholeStroke;
-        if (_strokes.Count > 0) SaveHistory();
+        _eraseSnapshot = new List<Stroke>(_strokes);
+        _eraseChanged = false;
         EraseAt(x, y);
     }
 
@@ -149,14 +148,18 @@ public sealed class PencilEngine
     {
         if (!_erasing) return;
         _erasing = false;
-        // History was saved in EraseAt on first hit; nothing to do here.
+        // One undo step per erase gesture, and none if it touched nothing.
+        if (_eraseChanged && _eraseSnapshot != null) _history.Push(_eraseSnapshot);
+        _eraseSnapshot = null;
         Changed?.Invoke();
     }
 
     private void EraseAt(float x, float y)
     {
         bool changed = _eraseWholeStroke ? EraseWhole(x, y) : EraseSplit(x, y);
-        if (changed) Changed?.Invoke();
+        if (!changed) return;
+        _eraseChanged = true;
+        Changed?.Invoke();
     }
 
     private bool EraseWhole(float x, float y)
