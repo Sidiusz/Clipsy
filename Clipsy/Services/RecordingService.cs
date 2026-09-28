@@ -23,15 +23,15 @@ public sealed class RecordingService : IDisposable
 
     public event Action<string>? RecordingComplete;
     public event Action<string>? RecordingFailed;
-    public event Action<RecorderStatus>? StatusChanged;
 
     public string TempPath => _tempPath;
 
+    public static string TempDirectory => Path.Combine(Path.GetTempPath(), "Clipsy");
+
     public void Start(int x, int y, int width, int height, string? overrideCodec = null)
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "Clipsy");
-        Directory.CreateDirectory(tempDir);
-        _tempPath = Path.Combine(tempDir, $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.mp4");
+        Directory.CreateDirectory(TempDirectory);
+        _tempPath = Path.Combine(TempDirectory, $"recording_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.mp4");
 
         bool captureVideoCursor = SettingsService.Instance.Settings.CaptureVideoCursor;
         BuildSources(x, y, width, height, captureVideoCursor);
@@ -41,15 +41,17 @@ public sealed class RecordingService : IDisposable
         var (outW, outH) = ResolveOutputSize(s.VideoResolution, width, height);
         int bitrate = s.VideoBitrateMbps * 1_000_000;
 
+        // Quality mode ignores Bitrate, which made the bitrate setting a no-op; H.265 has no VBR mode.
         IVideoEncoder encoder = (overrideCodec ?? s.VideoCodec) switch
         {
-            "H.265" => new H265VideoEncoder(),
+            "H.265" => new H265VideoEncoder { BitrateMode = H265BitrateControlMode.CBR },
             _ => new H264VideoEncoder
             {
-                BitrateMode = H264BitrateControlMode.Quality,
+                BitrateMode = H264BitrateControlMode.UnconstrainedVBR,
                 EncoderProfile = H264Profile.High,
             },
         };
+        bool mic = s.MicrophoneEnabled;
 
         var options = new RecorderOptions
         {
@@ -75,12 +77,14 @@ public sealed class RecordingService : IDisposable
                 IsLowLatencyEnabled = false,
                 IsMp4FastStartEnabled = true,
             },
+            // The input device is opened whenever the mic feature is on; mute is volume 0, so
+            // unmuting mid-recording works even if the recording started muted.
             AudioOptions = new AudioOptions
             {
                 IsAudioEnabled = true,
-                IsInputDeviceEnabled = s.MicrophoneEnabled && !s.MicrophoneMuted,
-                AudioInputDevice = s.MicrophoneEnabled && !string.IsNullOrEmpty(s.MicrophoneDevice)
-                    ? s.MicrophoneDevice : null,
+                IsInputDeviceEnabled = mic,
+                InputVolume = mic && !s.MicrophoneMuted ? 1f : 0f,
+                AudioInputDevice = mic ? ResolveInputDevice(s.MicrophoneDevice) : null,
                 IsOutputDeviceEnabled = true,
                 Bitrate = AudioBitrate.bitrate_128kbps,
                 Channels = AudioChannels.Stereo,
@@ -95,8 +99,21 @@ public sealed class RecordingService : IDisposable
         _recorder = Recorder.CreateRecorder(options);
         _recorder.OnRecordingComplete += OnComplete;
         _recorder.OnRecordingFailed += OnFailed;
-        _recorder.OnStatusChanged += OnStatus;
         _recorder.Record(_tempPath);
+    }
+
+    // A saved device that's gone (unplugged headset) would fail the whole recording; use the default.
+    private static string? ResolveInputDevice(string? saved)
+    {
+        if (string.IsNullOrEmpty(saved)) return null;
+        try
+        {
+            foreach (var d in Recorder.GetSystemAudioDevices(AudioDeviceSource.InputDevices))
+                if (string.Equals(d.DeviceName, saved, StringComparison.OrdinalIgnoreCase)) return saved;
+            Diagnostics.Log("Recording: saved microphone not found; using the default device.");
+        }
+        catch (Exception ex) { Diagnostics.Log("Recording: audio device query failed", ex); }
+        return null;
     }
 
     // Each monitor occupies its physical position inside one virtual-desktop canvas.
@@ -190,12 +207,12 @@ public sealed class RecordingService : IDisposable
         try
         {
             var builder = _recorder.GetDynamicOptionsBuilder();
-            builder.SetDynamicAudioOptions(new DynamicAudioOptions { IsInputDeviceEnabled = !muted });
+            builder.SetDynamicAudioOptions(new DynamicAudioOptions { IsInputDeviceEnabled = true, InputVolume = muted ? 0f : 1f });
             builder.Apply();
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] SetMicMuted failed: {ex.Message}");
+            Diagnostics.Log("SetMicMuted failed", ex);
         }
     }
 
@@ -231,7 +248,7 @@ public sealed class RecordingService : IDisposable
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] UpdateRegion dynamic apply failed: {ex.Message}");
+            Diagnostics.Log("UpdateRegion dynamic apply failed", ex);
         }
     }
 
@@ -250,8 +267,6 @@ public sealed class RecordingService : IDisposable
         return r.Width > 0 && r.Height > 0;
     }
 
-    public RecorderStatus Status => _recorder?.Status ?? RecorderStatus.Idle;
-
     private void OnComplete(object? sender, RecordingCompleteEventArgs e)
     {
         RecordingComplete?.Invoke(e.FilePath);
@@ -262,18 +277,12 @@ public sealed class RecordingService : IDisposable
         RecordingFailed?.Invoke(e.Error);
     }
 
-    private void OnStatus(object? sender, RecordingStatusEventArgs e)
-    {
-        StatusChanged?.Invoke(e.Status);
-    }
-
     public void Dispose()
     {
         if (_recorder != null)
         {
             _recorder.OnRecordingComplete -= OnComplete;
             _recorder.OnRecordingFailed -= OnFailed;
-            _recorder.OnStatusChanged -= OnStatus;
             _recorder.Dispose();
             _recorder = null;
             _sources.Clear();

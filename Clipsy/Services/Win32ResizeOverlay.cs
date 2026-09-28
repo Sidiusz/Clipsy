@@ -88,13 +88,6 @@ public sealed class Win32ResizeOverlay
         }
     }
 
-    public void SetZOrder(bool topmost)
-    {
-        if (!_created) return;
-        var insertAfter = topmost ? HWND_TOPMOST : HWND_BOTTOM;
-        SetWindowPos(_hwnd, insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
-
     public void Destroy()
     {
         if (!_created) return;
@@ -358,7 +351,6 @@ public sealed class Win32ResizeOverlay
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOSIZE = 0x0001;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-    private static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
     private const uint IDC_ARROW = 32512;
     private const uint IDC_SIZEALL = 32646;
     private const uint IDC_SIZENWSE = 32642;

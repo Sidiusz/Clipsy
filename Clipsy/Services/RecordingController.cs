@@ -1,6 +1,7 @@
 using System;
-using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Clipsy.Views.Recording;
 using Microsoft.UI.Dispatching;
@@ -8,36 +9,51 @@ using ScreenRecorderLib;
 
 namespace Clipsy.Services;
 
-/// <summary>Owns the recording session (region border + HUD, RecordingService,
-/// stop/stop-and-save). Singleton — only one recording at a time.</summary>
+/// <summary>Owns the recording session (region border + HUD, RecordingService, stop/save).
+/// Singleton: one recording (including its finalizing/saving phase) at a time.</summary>
 public sealed class RecordingController
 {
+    private enum StopMode { Save, SaveAs, Discard }
+
     private static RecordingController? _current;
     public static RecordingController? Current => _current;
 
-    public static bool IsRecording => _current != null;
+    /// <summary>Capturing right now; hotkeys stop the recording instead of opening the overlay.</summary>
+    public static bool IsRecording => _current is { _stopping: false };
+
+    /// <summary>A session exists, possibly still finalizing/saving the previous recording.</summary>
+    public static bool IsBusy => _current != null;
+
+    // Codec fallback is only safe before anything worth keeping was recorded.
+    private const long FallbackWindowMs = 3000;
 
     private readonly DispatcherQueue _ui;
+    private readonly TaskCompletionSource _finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Win32BorderOverlay? _border;
     private RecordingHudWindow? _hud;
     private Win32DrawingOverlay? _drawWin;
     private Win32ResizeOverlay? _resizeWin;
     private RecordingService? _service;
-    private FFmpegRecordingService? _ffmpegRec;
     private bool _h265FallbackAttempted;
-    private string _outputFmt = "mp4";  // user-chosen container for the final file
-    private string _nativeFmt = "mp4";  // actual container of the temp recording
+    private long _startedTick;
+    private string _outputFmt = "mp4";   // user-chosen container for the final file
+    private string? _transcodeCodec;     // VP9/AV1: recorded as H.264, re-encoded on save
     private int _x, _y, _w, _h;
-    private bool _stopAndSave;
+    private StopMode _stopMode;
     private bool _stopping;
-    private bool _micMuted = false;
+    private bool _micMuted;
+    private IntPtr _hudHwnd;
     private (byte R, byte G, byte B) _drawColor = (0xFF, 0x00, 0x00);
 
     private RecordingController(DispatcherQueue ui) { _ui = ui; }
 
     public static bool TryStart(int x, int y, int w, int h)
     {
-        if (_current != null) return false;
+        if (_current != null)
+        {
+            NotificationService.Info("RecordBusy");
+            return false;
+        }
         var ui = DispatcherQueue.GetForCurrentThread()
             ?? throw new InvalidOperationException("Recording must be started from the UI thread.");
         var c = new RecordingController(ui);
@@ -57,16 +73,112 @@ public sealed class RecordingController
         }
     }
 
-    public void StopFromHotkey()
+    public void StopFromHotkey() => Stop(StopMode.Save);
+
+    /// <summary>Stops and saves (if still recording) and waits for the file to be written.</summary>
+    public async Task StopForExitAsync(TimeSpan timeout)
+    {
+        if (!_stopping) Stop(StopMode.Save);
+        await Task.WhenAny(_finished.Task, Task.Delay(timeout));
+    }
+
+    private void Start(int x, int y, int w, int h)
+    {
+        _x = x; _y = y; _w = w; _h = h;
+
+        var settingsService = SettingsService.Instance;
+        var settings = settingsService.Settings;
+        if (!settings.MicrophoneStateInitialized)
+        {
+            settings.MicrophoneMuted = true;
+            settings.MicrophoneStateInitialized = true;
+            settingsService.SaveState();
+        }
+
+        // ScreenRecorderLib always writes H.264/H.265 MP4; VP9/AV1 are produced from it on save.
+        bool wantsTranscode = settings.VideoCodec is "VP9" or "AV1";
+        if (wantsTranscode && !FFmpegService.Instance.IsAvailable)
+        {
+            NotificationService.Warning("WarnNoFfmpeg");
+            wantsTranscode = false;
+        }
+        _transcodeCodec = wantsTranscode ? settings.VideoCodec : null;
+        _outputFmt = wantsTranscode ? "mkv" : settings.VideoFormat ?? "mp4";
+
+        _border = new Win32BorderOverlay();
+        _border.Create(x, y, w, h);
+
+        _hud = new RecordingHudWindow();
+        _hud.PauseRequested += () => _service?.Pause();
+        _hud.ResumeRequested += () => _service?.Resume();
+        _hud.StopRequested += () => Stop(StopMode.Save);
+        _hud.StopSaveRequested += () => Stop(StopMode.SaveAs);
+        _hud.CancelRequested += () => Stop(StopMode.Discard);
+        _hud.LockChanged += OnLockChanged;
+        _hud.DrawToggled += OnDrawToggled;
+        _hud.DrawColorChanged += OnDrawColorChanged;
+        _hud.MicMuteToggled += OnMicMuteToggled;
+
+        _micMuted = settings.MicrophoneEnabled && settings.MicrophoneMuted;
+        _hud.InitMic(settings.MicrophoneEnabled, _micMuted);
+        _hud.PositionBelowRegion(x, y, w, h);
+        _hud.Activate();
+        _hud.Start();
+
+        // Exclude the HUD + region border from capture (WDA_EXCLUDEFROMCAPTURE); the draw overlay stays visible.
+        try
+        {
+            Recorder.SetExcludeFromCapture(_hud.Hwnd, true);
+            if (_border.Hwnd != IntPtr.Zero)
+                Recorder.SetExcludeFromCapture(_border.Hwnd, true);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("SetExcludeFromCapture failed", ex);
+        }
+
+        StartService(overrideCodec: null);
+    }
+
+    private void StartService(string? overrideCodec)
+    {
+        _service = new RecordingService();
+        _service.RecordingComplete += OnRecordingComplete;
+        _service.RecordingFailed += OnRecordingFailed;
+        _startedTick = Environment.TickCount64;
+        _service.Start(_x, _y, _w, _h, overrideCodec);
+    }
+
+    private void Stop(StopMode mode)
     {
         if (_stopping) return;
+        Diagnostics.Log($"Recording stop: {mode}");
         _stopping = true;
-        _stopAndSave = true;
-        _saveAsDialog = false;
-        _hud?.Shutdown();
+        _stopMode = mode;
+        _hudHwnd = _hud?.Hwnd ?? IntPtr.Zero;
+        try { _hud?.Shutdown(); } catch (Exception ex) { Diagnostics.Log("Recording stop: HUD shutdown", ex); }
         DestroyVisualOverlays();
-        _service?.Stop();
-        _ffmpegRec?.Stop();
+        try
+        {
+            if (_service != null) _service.Stop();
+            else Cleanup(discardTemp: true);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("Recording stop: service", ex);
+            Cleanup(discardTemp: mode == StopMode.Discard);
+            return;
+        }
+        _ = WatchStopAsync();
+    }
+
+    // The recorder normally reports completion within seconds; never stay "busy" forever.
+    // The temp file is kept, so the next start recovers it if it's playable.
+    private async Task WatchStopAsync()
+    {
+        if (await Task.WhenAny(_finished.Task, Task.Delay(TimeSpan.FromSeconds(60))) == _finished.Task) return;
+        Diagnostics.Log("Recorder did not report completion after Stop; releasing the session.");
+        _ui.TryEnqueue(() => Cleanup(discardTemp: false));
     }
 
     // Tear down the topmost border + draw overlay the moment recording stops,
@@ -81,192 +193,28 @@ public sealed class RecordingController
         _resizeWin = null;
     }
 
-    private void Start(int x, int y, int w, int h)
-    {
-        _x = x; _y = y; _w = w; _h = h;
-
-        var settingsService = SettingsService.Instance;
-        var settings = settingsService.Settings;
-        if (!settings.MicrophoneStateInitialized)
-        {
-            settings.MicrophoneMuted = true;
-            settings.MicrophoneStateInitialized = true;
-            settingsService.Save();
-        }
-        var codec = settings.VideoCodec;
-        bool isFfmpegCodec = codec == "VP9" || codec == "AV1";
-        // Native container of the temp file (what the encoder actually writes).
-        _nativeFmt = isFfmpegCodec ? "mkv" : "mp4";
-        // Container the user wants on disk. For ffmpeg codecs we always stay
-        // in MKV; for H.264/H.265 we honour the format setting (mp4/avi/mkv/gif).
-        _outputFmt = isFfmpegCodec ? "mkv" : (settings.VideoFormat ?? "mp4");
-
-        _border = new Win32BorderOverlay();
-        _border.Create(x, y, w, h);
-
-        _hud = new RecordingHudWindow();
-        _hud.PauseRequested += OnPauseRequested;
-        _hud.ResumeRequested += OnResumeRequested;
-        _hud.StopRequested += OnStopRequested;
-        _hud.StopSaveRequested += OnStopSaveRequested;
-        _hud.CancelRequested += OnCancelRequested;
-        _hud.LockChanged += OnLockChanged;
-        _hud.DrawToggled += OnDrawToggled;
-        _hud.DrawColorChanged += OnDrawColorChanged;
-        _hud.MicMuteToggled += OnMicMuteToggled;
-
-        _micMuted = settings.MicrophoneEnabled && settings.MicrophoneMuted;
-        _hud.InitMic(settings.MicrophoneEnabled, _micMuted);
-        _hud.ConfigureCapabilities(!isFfmpegCodec, !isFfmpegCodec, !isFfmpegCodec);
-
-        int virtualScreenH = Services.ScreenFreezeService.GetVirtualScreenBounds().Height;
-        _hud.PositionBelowRegion(x, y, w, h, virtualScreenH);
-        _hud.Activate();
-        _hud.Start();
-
-        // Exclude the HUD + region border from capture (WDA_EXCLUDEFROMCAPTURE,
-        // works for WGC and gdigrab); the draw overlay stays visible.
-        try
-        {
-            Recorder.SetExcludeFromCapture(_hud.Hwnd, true);
-            if (_border != null && _border.Hwnd != IntPtr.Zero)
-                Recorder.SetExcludeFromCapture(_border.Hwnd, true);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Clipsy] SetExcludeFromCapture failed: {ex.Message}");
-        }
-
-        if (isFfmpegCodec)
-        {
-            // VP9 / AV1 — record natively via FFmpeg (gdigrab + wasapi loopback)
-            if (!FFmpegService.Instance.IsAvailable)
-            {
-                NotificationService.Warning("WarnNoFfmpeg");
-                Cleanup(discardTemp: true);
-                return;
-            }
-
-            _ffmpegRec = new FFmpegRecordingService();
-            _ffmpegRec.RecordingComplete += OnRecordingComplete;
-            _ffmpegRec.RecordingFailed   += OnFfmpegRecordingFailed;
-            try
-            {
-                _ffmpegRec.Start(x, y, w, h);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[Clipsy] FFmpeg recording start failed: {ex.Message}");
-                NotificationService.Error("ErrRecordFailed");
-                Cleanup(discardTemp: true);
-            }
-            return;
-        }
-
-        // H.264 / H.265 via ScreenRecorderLib.
-        _service = new RecordingService();
-        _service.RecordingComplete += OnRecordingComplete;
-        _service.RecordingFailed += OnRecordingFailed;
-        try
-        {
-            _service.Start(x, y, w, h);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Clipsy] Recording start failed: {ex.Message}");
-            NotificationService.Error("ErrRecordFailed");
-            Cleanup(discardTemp: true);
-        }
-    }
-
-    private void OnPauseRequested()  { _service?.Pause();  _ffmpegRec?.Pause();  }
-    private void OnResumeRequested() { _service?.Resume(); _ffmpegRec?.Resume(); }
-
-    private bool _saveAsDialog;
-    private IntPtr _hudHwnd; // captured before Shutdown so OfferSaveAsync has a valid owner
-
-    /// <summary>Stop button: silent save to the last/default video folder.</summary>
-    private void OnStopRequested()
-    {
-        Diagnostics.Log("RecordingController.OnStopRequested ENTER");
-        if (_stopping) { Diagnostics.Log("  already _stopping, skip"); return; }
-        _stopping = true;
-        _stopAndSave = true;
-        _saveAsDialog = false;
-        _hudHwnd = _hud?.Hwnd ?? IntPtr.Zero;
-        Diagnostics.Log($"  captured _hudHwnd=0x{_hudHwnd.ToInt64():X}");
-        try { _hud?.Shutdown(); Diagnostics.Log("  _hud.Shutdown OK"); }
-        catch (Exception ex) { Diagnostics.Log("OnStopRequested _hud.Shutdown", ex); }
-        DestroyVisualOverlays();
-        try { _service?.Stop(); Diagnostics.Log("  _service.Stop OK"); }
-        catch (Exception ex) { Diagnostics.Log("OnStopRequested _service.Stop", ex); }
-        try { _ffmpegRec?.Stop(); Diagnostics.Log("  _ffmpegRec.Stop OK"); }
-        catch (Exception ex) { Diagnostics.Log("OnStopRequested _ffmpegRec.Stop", ex); }
-    }
-
-    /// <summary>Save button: stop then open a Save As dialog.</summary>
-    private void OnStopSaveRequested()
-    {
-        Diagnostics.Log("RecordingController.OnStopSaveRequested ENTER");
-        if (_stopping) { Diagnostics.Log("  already _stopping, skip"); return; }
-        _stopping = true;
-        _stopAndSave = true;
-        _saveAsDialog = true;
-        _hudHwnd = _hud?.Hwnd ?? IntPtr.Zero;
-        Diagnostics.Log($"  captured _hudHwnd=0x{_hudHwnd.ToInt64():X}");
-        try { _hud?.Shutdown(); Diagnostics.Log("  _hud.Shutdown OK"); }
-        catch (Exception ex) { Diagnostics.Log("OnStopSaveRequested _hud.Shutdown", ex); }
-        DestroyVisualOverlays();
-        try { _service?.Stop(); Diagnostics.Log("  _service.Stop OK"); }
-        catch (Exception ex) { Diagnostics.Log("OnStopSaveRequested _service.Stop", ex); }
-        try { _ffmpegRec?.Stop(); Diagnostics.Log("  _ffmpegRec.Stop OK"); }
-        catch (Exception ex) { Diagnostics.Log("OnStopSaveRequested _ffmpegRec.Stop", ex); }
-    }
-
-    /// <summary>Cancel button: stop and discard temp file (no save, no dialog).</summary>
-    private void OnCancelRequested()
-    {
-        Diagnostics.Log("RecordingController.OnCancelRequested ENTER");
-        if (_stopping) { Diagnostics.Log("  already _stopping, skip"); return; }
-        _stopping = true;
-        _stopAndSave = false;     // OnRecordingComplete discards temp when false
-        _saveAsDialog = false;
-        _hudHwnd = _hud?.Hwnd ?? IntPtr.Zero;
-        try { _hud?.Shutdown(); Diagnostics.Log("  _hud.Shutdown OK"); }
-        catch (Exception ex) { Diagnostics.Log("OnCancelRequested _hud.Shutdown", ex); }
-        DestroyVisualOverlays();
-        try { _service?.Stop(); Diagnostics.Log("  _service.Stop OK"); }
-        catch (Exception ex) { Diagnostics.Log("OnCancelRequested _service.Stop", ex); }
-        try { _ffmpegRec?.Stop(); Diagnostics.Log("  _ffmpegRec.Stop OK"); }
-        catch (Exception ex) { Diagnostics.Log("OnCancelRequested _ffmpegRec.Stop", ex); }
-    }
-
     private void OnMicMuteToggled(bool muted)
     {
-        if (_ffmpegRec != null) return;
         _micMuted = muted;
         _service?.SetMicMuted(muted);
-        var settings = SettingsService.Instance;
-        settings.Settings.MicrophoneMuted = muted;
-        settings.Settings.MicrophoneStateInitialized = true;
-        settings.Save();
+        PersistMicState();
     }
 
     public void ToggleMic()
     {
-        var settings = SettingsService.Instance;
-        if (!settings.Settings.MicrophoneEnabled) return;
-        if (_ffmpegRec != null)
-        {
-            _hud?.ShowMicCapabilityMessage();
-            return;
-        }
+        if (!SettingsService.Instance.Settings.MicrophoneEnabled || _stopping) return;
         _micMuted = !_micMuted;
         _service?.SetMicMuted(_micMuted);
         _hud?.SetMicMuted(_micMuted);
+        PersistMicState();
+    }
+
+    private void PersistMicState()
+    {
+        var settings = SettingsService.Instance;
         settings.Settings.MicrophoneMuted = _micMuted;
         settings.Settings.MicrophoneStateInitialized = true;
-        settings.Save();
+        settings.SaveState();
     }
 
     private void OnDrawColorChanged(byte r, byte g, byte b)
@@ -284,7 +232,7 @@ public sealed class RecordingController
                 if (_resizeWin == null)
                 {
                     _resizeWin = new Win32ResizeOverlay();
-                    _resizeWin.RegionChanged += OnRegionChanged;
+                    _resizeWin.RegionChanged += ApplyRegionChange;
                     _resizeWin.Create(_x, _y, _w, _h);
                     try { Recorder.SetExcludeFromCapture(_resizeWin.Hwnd, true); } catch { }
                 }
@@ -298,13 +246,8 @@ public sealed class RecordingController
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Clipsy] Region lock toggle failed: {ex.Message}");
+            Diagnostics.Log("Region lock toggle failed", ex);
         }
-    }
-
-    private void OnRegionChanged(int x, int y, int w, int h)
-    {
-        ApplyRegionChange(x, y, w, h);
     }
 
     private void ApplyRegionChange(int x, int y, int w, int h)
@@ -316,16 +259,14 @@ public sealed class RecordingController
         try
         {
             _border?.MoveTo(_x, _y, _w, _h);
-            var screenH = ScreenFreezeService.GetVirtualScreenBounds().Height;
-            _hud?.PositionBelowRegion(_x, _y, _w, _h, screenH);
+            _hud?.PositionBelowRegion(_x, _y, _w, _h);
             _drawWin?.MoveTo(_x, _y, _w, _h);
             _resizeWin?.MoveTo(_x, _y, _w, _h);
             _service?.UpdateRegion(_x, _y, _w, _h);
-            _ffmpegRec?.UpdateRegion(_x, _y, _w, _h);
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Clipsy] Region update failed: {ex.Message}");
+            Diagnostics.Log("Region update failed", ex);
         }
     }
 
@@ -352,123 +293,72 @@ public sealed class RecordingController
             }
             else
             {
-                // Keep existing strokes; clear is explicit, not auto on toggle
-                // (RMB-drag erases; full clear needs a dedicated UI hook — TODO).
+                // Strokes stay when drawing is toggled off; RMB-drag erases them.
                 _drawWin?.SetActive(false);
                 _drawWin?.ClearExcludeRect();
             }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Clipsy] Draw overlay toggle failed: {ex.Message}");
+            Diagnostics.Log("Draw overlay toggle failed", ex);
         }
     }
 
     private void OnRecordingComplete(string filePath)
     {
-        Diagnostics.Log($"RecordingController.OnRecordingComplete fired: filePath='{filePath}', exists={System.IO.File.Exists(filePath)}, _stopAndSave={_stopAndSave}, _saveAsDialog={_saveAsDialog}");
+        Diagnostics.Log($"Recording complete: '{filePath}' exists={File.Exists(filePath)} mode={_stopMode} stopping={_stopping}");
         _ui.TryEnqueue(async () =>
         {
-            Diagnostics.Log("OnRecordingComplete UI continuation BEGIN");
             try
             {
-                if (_stopAndSave)
+                if (!_stopping)
+                    Diagnostics.Log("Recorder finished on its own; saving what was recorded.");
+                switch (_stopping ? _stopMode : StopMode.Save)
                 {
-                    if (_saveAsDialog)
-                    {
-                        Diagnostics.Log("  → OfferSaveAsync");
-                        await OfferSaveAsync(filePath);
-                        Diagnostics.Log("  ← OfferSaveAsync returned");
-                    }
-                    else
-                    {
-                        Diagnostics.Log("  → SilentSave");
-                        await SilentSaveAsync(filePath);
-                        Diagnostics.Log("  ← SilentSave returned");
-                    }
-                }
-                else
-                {
-                    Diagnostics.Log("  → discard temp");
-                    TryDelete(filePath);
+                    case StopMode.SaveAs: await OfferSaveAsync(filePath); break;
+                    case StopMode.Save: await SilentSaveAsync(filePath); break;
+                    default: TryDelete(filePath); break;
                 }
             }
             catch (Exception ex)
             {
-                Diagnostics.Log("OnRecordingComplete continuation", ex);
+                Diagnostics.Log("Recording save", ex);
+                await RescueAsync(filePath);
             }
             finally
             {
-                Diagnostics.Log("OnRecordingComplete → Cleanup");
-                try { Cleanup(discardTemp: false); Diagnostics.Log("Cleanup OK"); }
-                catch (Exception ex) { Diagnostics.Log("Cleanup", ex); }
+                try { Cleanup(discardTemp: false); }
+                catch (Exception ex) { Diagnostics.Log("Recording Cleanup", ex); }
             }
         });
     }
 
-    private async Task SilentSaveAsync(string tempPath)
-    {
-        Diagnostics.Log($"SilentSave ENTER tempPath='{tempPath}'");
-        try
-        {
-            var settings = SettingsService.Instance;
-            var folder = settings.Settings.RememberLastFolder && !string.IsNullOrEmpty(settings.Settings.LastVideoFolder)
-                ? settings.Settings.LastVideoFolder!
-                : (settings.Settings.VideoFolder ?? settings.DefaultVideoFolder);
-            Diagnostics.Log($"  folder='{folder}'");
-            Directory.CreateDirectory(folder);
-            var fmt = _outputFmt;
-            var name = SaveDialogService.MakeTimestampName("Clipsy", fmt);
-            var dest = Path.Combine(folder, name);
-            Diagnostics.Log($"  dest='{dest}' native='{_nativeFmt}' target='{fmt}'");
-            // Container swap or GIF conversion when the chosen format differs from
-            // the encoder's; may redirect to MP4 if AVI/MKV needs missing FFmpeg.
-            var actual = await ConvertOrCopyAsync(tempPath, dest, _nativeFmt, fmt);
-            Diagnostics.Log("  ConvertOrCopyAsync OK");
-            TryDelete(tempPath);
-            settings.Settings.LastVideoFolder = folder;
-            settings.Save();
-            NotifyVideoSaved(actual, dest, fmt);
-            Diagnostics.Log($"  AfterSaveAction.Run action='{settings.Settings.AfterSaveAction}'");
-            AfterSaveAction.Run(actual, settings.Settings.AfterSaveAction);
-            Diagnostics.Log("SilentSave EXIT OK");
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log("SilentSave", ex);
-            NotificationService.Error("ErrSaveFailed");
-        }
-    }
-
     private void OnRecordingFailed(string error)
     {
-        Diagnostics.Log($"RecordingController.OnRecordingFailed: {error}");
+        Diagnostics.Log($"Recording failed: {error}");
         _ui.TryEnqueue(() =>
         {
-            // H.265 → H.264 automatic fallback (hardware may not support H.265)
-            if (!_h265FallbackAttempted &&
-                SettingsService.Instance.Settings.VideoCodec == "H.265" &&
-                _service != null)
+            // H.265 → H.264 fallback, only right after start: later it would silently drop what was
+            // recorded, and after Stop it would start a hidden, unstoppable recording.
+            bool early = Environment.TickCount64 - _startedTick < FallbackWindowMs;
+            if (!_h265FallbackAttempted && !_stopping && early &&
+                SettingsService.Instance.Settings.VideoCodec == "H.265" && _service != null)
             {
                 _h265FallbackAttempted = true;
                 NotificationService.Warning("WarnCodecFallback");
-                // Output format stays mp4 (ScreenRecorderLib always records mp4)
+                var failedTemp = _service.TempPath;
                 try { _service.Dispose(); } catch { }
-                _service = new RecordingService();
-                _service.RecordingComplete += OnRecordingComplete;
-                _service.RecordingFailed   += OnRecordingFailed;
+                TryDelete(failedTemp);
                 try
                 {
-                    _service.Start(_x, _y, _w, _h, overrideCodec: "H.264");
+                    StartService(overrideCodec: "H.264");
+                    _hud?.RestartTimer();
+                    return;
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[Clipsy] H.264 fallback start failed: {ex.Message}");
-                    NotificationService.Error("ErrRecordFailed");
-                    try { Cleanup(discardTemp: true); }
-                    catch (Exception cex) { Diagnostics.Log("OnRecordingFailed fallback Cleanup", cex); }
+                    Diagnostics.Log("H.264 fallback start failed", ex);
                 }
-                return;
             }
 
             NotificationService.Error("ErrRecordRuntime");
@@ -477,49 +367,39 @@ public sealed class RecordingController
         });
     }
 
-    private void OnFfmpegRecordingFailed(string error)
+    private async Task SilentSaveAsync(string tempPath)
     {
-        Diagnostics.Log($"RecordingController.OnFfmpegRecordingFailed: {error}");
-        _ui.TryEnqueue(() =>
-        {
-            NotificationService.Error("ErrRecordRuntime");
-            try { Cleanup(discardTemp: true); }
-            catch (Exception ex) { Diagnostics.Log("OnFfmpegRecordingFailed Cleanup", ex); }
-        });
+        var settings = SettingsService.Instance;
+        var folder = settings.GetEffectiveVideoFolder();
+        var dest = SaveDialogService.UniquePath(folder, "Clipsy", _outputFmt);
+        var actual = await ConvertOrMoveAsync(tempPath, dest, _outputFmt);
+        settings.Settings.LastVideoFolder = folder;
+        settings.SaveState();
+        NotifyVideoSaved(actual, dest, _outputFmt);
+        AfterSaveAction.Run(actual, settings.Settings.AfterSaveAction);
     }
 
     private async Task OfferSaveAsync(string tempPath)
     {
-        Diagnostics.Log($"OfferSaveAsync ENTER tempPath='{tempPath}'");
         var settings = SettingsService.Instance;
-        var initialDir = settings.Settings.RememberLastFolder && !string.IsNullOrEmpty(settings.Settings.LastVideoFolder)
-            ? settings.Settings.LastVideoFolder!
-            : (settings.Settings.VideoFolder ?? settings.DefaultVideoFolder);
-        Directory.CreateDirectory(initialDir);
+        var initialDir = settings.GetEffectiveVideoFolder();
         var preferredFmt = _outputFmt;
         var name = SaveDialogService.MakeTimestampName("Clipsy", preferredFmt);
         // Prefer HostWindow over HUD hwnd: HUD is a TOOLWINDOW + NOACTIVATE +
-        // TRANSPARENT click-through window — invalid modal owner for common dialogs.
+        // click-through window — an invalid modal owner for common dialogs.
         var hwnd = App.Current?.HostWindow?.Hwnd ?? _hudHwnd;
 
-        // MP4/GIF work without FFmpeg; AVI/MKV need it for remux, so offer them
-        // only when present. Preferred format floats to the top.
+        // MP4/GIF work without FFmpeg; AVI/MKV need it, so offer them only when present.
         bool ffmpeg = FFmpegService.Instance.IsAvailable;
-        var filters = new System.Collections.Generic.List<SaveDialogService.SaveFilter>
-        {
-            new("MP4 video (*.mp4)",    "*.mp4"),
-        };
+        var filters = new System.Collections.Generic.List<SaveDialogService.SaveFilter> { new("MP4 video (*.mp4)", "*.mp4") };
         if (ffmpeg)
         {
             filters.Add(new("MKV video (*.mkv)", "*.mkv"));
             filters.Add(new("AVI video (*.avi)", "*.avi"));
         }
         filters.Add(new("GIF animation (*.gif)", "*.gif"));
-
         int preferredIdx = filters.FindIndex(f =>
-            SaveDialogService.ExtensionFromPattern(f.Pattern).TrimStart('.')
-                .Equals(preferredFmt, StringComparison.OrdinalIgnoreCase));
-        if (preferredIdx < 0) preferredIdx = 0;
+            SaveDialogService.ExtensionFromPattern(f.Pattern).Equals(preferredFmt, StringComparison.OrdinalIgnoreCase));
         if (preferredIdx > 0)
         {
             var picked = filters[preferredIdx];
@@ -527,158 +407,219 @@ public sealed class RecordingController
             filters.Insert(0, picked);
         }
 
-        Diagnostics.Log($"  hwnd=0x{hwnd.ToInt64():X}, initialDir='{initialDir}', suggested='{name}', preferred='{preferredFmt}'");
-        SaveDialogService.SavePickResult? pick = null;
+        SaveDialogService.SavePickResult? pick;
         try
         {
-            pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir!, name, filters, "." + preferredFmt);
-            Diagnostics.Log($"  PickSaveAsync returned pick={(pick == null ? "null" : $"'{pick.Path}' filter={pick.FilterIndex}")}");
+            pick = await SaveDialogService.PickSaveAsync(hwnd, initialDir, name, filters, "." + filters[0].Pattern[2..]);
         }
         catch (Exception ex)
         {
-            Diagnostics.Log("OfferSaveAsync PickSaveAsync", ex);
+            // The dialog failing is not the user cancelling: keep the recording.
+            Diagnostics.Log("Save As dialog failed; saving to the default folder", ex);
+            await SilentSaveAsync(tempPath);
+            return;
         }
         if (pick == null)
         {
-            TryDelete(tempPath);
-            Diagnostics.Log("OfferSaveAsync EXIT (no pick)");
+            TryDelete(tempPath); // user cancelled Save As = discard
             return;
         }
 
-        // Figure out chosen extension from filter index (fall back to file ext).
-        var chosenFilter = filters[System.Math.Max(0, pick.FilterIndex - 1)];
-        var chosenExt = SaveDialogService.ExtensionFromPattern(chosenFilter.Pattern); // ".mp4"/...
-        var chosenFmt = chosenExt.TrimStart('.').ToLowerInvariant();
+        var chosenFilter = filters[Math.Max(0, pick.FilterIndex - 1)];
+        var chosenFmt = SaveDialogService.ExtensionFromPattern(chosenFilter.Pattern);
         var dest = pick.Path;
-        if (!dest.EndsWith(chosenExt, StringComparison.OrdinalIgnoreCase))
-            dest = Path.ChangeExtension(dest, chosenExt);
+        if (!dest.EndsWith("." + chosenFmt, StringComparison.OrdinalIgnoreCase))
+            dest = Path.ChangeExtension(dest, "." + chosenFmt);
 
+        var actual = await ConvertOrMoveAsync(tempPath, dest, chosenFmt);
+        var dir = Path.GetDirectoryName(actual);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            settings.Settings.LastVideoFolder = dir;
+            settings.SaveState();
+        }
+        NotifyVideoSaved(actual, dest, chosenFmt);
+        AfterSaveAction.Run(actual, settings.Settings.AfterSaveAction);
+    }
+
+    /// <summary>Produces <paramref name="dest"/> from the temp MP4 and removes the temp file.
+    /// Returns the path actually written (an .mp4 next to dest when conversion isn't possible).</summary>
+    private async Task<string> ConvertOrMoveAsync(string src, string dest, string destFmt)
+    {
+        var ffmpeg = FFmpegService.Instance;
+        if (destFmt == "gif")
+        {
+            NotificationService.Info("VideoConverting");
+            bool ok = ffmpeg.IsAvailable && await ffmpeg.ConvertToGifAsync(src, dest) && NonEmpty(dest);
+            if (!ok)
+            {
+                var (nativeOk, truncated) = await NativeGifEncoder.ConvertMp4ToGifAsync(src, dest);
+                ok = nativeOk && NonEmpty(dest);
+                if (ok && truncated) NotificationService.Warning("WarnGifTruncated");
+            }
+            if (!ok) throw new InvalidOperationException("GIF conversion failed.");
+            TryDelete(src);
+            return dest;
+        }
+
+        if (destFmt == "mp4")
+        {
+            await MoveAsync(src, dest);
+            return dest;
+        }
+
+        bool converted = false;
+        if (ffmpeg.IsAvailable)
+        {
+            if (_transcodeCodec != null && destFmt == "mkv")
+            {
+                NotificationService.Info("VideoConverting");
+                converted = await ffmpeg.TranscodeAsync(src, dest, _transcodeCodec, SettingsService.Instance.Settings.VideoBitrateMbps) && NonEmpty(dest);
+                if (!converted) Diagnostics.Log($"{_transcodeCodec} transcode failed; remuxing H.264 instead");
+            }
+            if (!converted)
+                converted = await ffmpeg.RemuxAsync(src, dest) && NonEmpty(dest);
+        }
+        if (converted)
+        {
+            TryDelete(src);
+            return dest;
+        }
+
+        // Keep the MP4 rather than putting MP4 bytes behind an .avi/.mkv name.
+        TryDelete(dest);
+        var mp4 = SaveDialogService.UniquePath(Path.GetDirectoryName(dest)!, Path.GetFileNameWithoutExtension(dest), "mp4", timestamp: false);
+        await MoveAsync(src, mp4);
+        return mp4;
+    }
+
+    private static Task MoveAsync(string src, string dest)
+        => Task.Run(() => File.Move(src, dest, overwrite: true)); // copies + deletes across volumes, off the UI thread
+
+    /// <summary>Last resort after a failed save: move the recording where the user can find it.</summary>
+    private static async Task RescueAsync(string tempPath)
+    {
+        if (!File.Exists(tempPath))
+        {
+            NotificationService.Error("ErrSaveFailed");
+            return;
+        }
         try
         {
-            var actual = await ConvertOrCopyAsync(tempPath, dest, _nativeFmt, chosenFmt);
-            TryDelete(tempPath);
-            var dir = Path.GetDirectoryName(actual);
-            if (!string.IsNullOrEmpty(dir))
-            {
-                settings.Settings.LastVideoFolder = dir;
-                settings.Save();
-            }
-            NotifyVideoSaved(actual, dest, chosenFmt);
-            Diagnostics.Log($"  AfterSaveAction.Run action='{settings.Settings.AfterSaveAction}'");
-            AfterSaveAction.Run(actual, settings.Settings.AfterSaveAction);
-            Diagnostics.Log("OfferSaveAsync EXIT OK");
+            var folder = SettingsService.Instance.GetEffectiveVideoFolder();
+            var dest = SaveDialogService.UniquePath(folder, "Clipsy", "mp4");
+            await MoveAsync(tempPath, dest);
+            NotificationService.VideoKeptAfterFailure(dest);
         }
         catch (Exception ex)
         {
-            Diagnostics.Log("OfferSaveAsync save", ex);
-            NotificationService.Error("ErrSaveFailed");
+            Diagnostics.Log("Recording rescue failed", ex);
+            NotificationService.VideoKeptAfterFailure(tempPath);
         }
     }
 
-    /// <summary>Post the "saved" toast, noting the MP4 fallback when AVI/MKV was
-    /// redirected because FFmpeg is missing.</summary>
+    private static bool NonEmpty(string path) => File.Exists(path) && new FileInfo(path).Length > 0;
+
+    /// <summary>Post the "saved" toast, noting the MP4 fallback when conversion wasn't possible.</summary>
     private static void NotifyVideoSaved(string actualPath, string requestedPath, string requestedFmt)
     {
         long sizeKb = new FileInfo(actualPath).Length / 1024L;
         var fileName = Path.GetFileName(actualPath);
-
         if (!string.Equals(actualPath, requestedPath, StringComparison.OrdinalIgnoreCase))
-            NotificationService.VideoSavedAsMp4(fileName, sizeKb, actualPath, requestedFmt);
+            NotificationService.VideoSavedAsMp4(fileName, sizeKb, actualPath, requestedFmt, ffmpegMissing: !FFmpegService.Instance.IsAvailable);
         else
             NotificationService.VideoSaved(fileName, sizeKb, actualPath);
     }
 
-    private static async Task<string> ConvertOrCopyAsync(string src, string dest, string srcFmt, string destFmt)
-    {
-        if (string.Equals(srcFmt, destFmt, StringComparison.OrdinalIgnoreCase))
-        {
-            File.Copy(src, dest, overwrite: true);
-            return dest;
-        }
-        if (destFmt == "gif")
-        {
-            // FFmpeg first; fall back to NativeGifEncoder, error only if both fail.
-            bool ok = false;
-            if (FFmpegService.Instance.IsAvailable)
-            {
-                ok = await FFmpegService.Instance.ConvertToGifAsync(src, dest);
-                if (!GifOutputOk(dest, ok))
-                {
-                    Diagnostics.Log("ConvertOrCopyAsync gif via FFmpeg failed → NativeGifEncoder fallback");
-                    ok = false;
-                }
-            }
-
-            if (!GifOutputOk(dest, ok))
-            {
-                Diagnostics.Log("ConvertOrCopyAsync gif via NativeGifEncoder");
-                ok = await NativeGifEncoder.ConvertMp4ToGifAsync(src, dest);
-            }
-
-            if (!GifOutputOk(dest, ok))
-            {
-                Diagnostics.Log("ConvertOrCopyAsync gif conversion failed (ffmpeg + native)");
-                throw new InvalidOperationException("GIF conversion failed.");
-            }
-            return dest;
-        }
-
-        // Container swap (mp4 ↔ avi/mkv). FFmpeg does a clean stream copy.
-        if (FFmpegService.Instance.IsAvailable)
-        {
-            var args = $"-i \"{src}\" -c copy -y \"{dest}\"";
-            var ok = await FFmpegService.Instance.RunAsync(args);
-            if (ok && File.Exists(dest)) return dest;
-            Diagnostics.Log($"ConvertOrCopyAsync ffmpeg remux failed src='{src}' dest='{dest}'");
-        }
-
-        // No FFmpeg: a plain rename would put MP4 bytes in an AVI/MKV container,
-        // so keep the native MP4 and let the caller surface the notice.
-        if (destFmt is "avi" or "mkv")
-        {
-            var mp4Dest = Path.ChangeExtension(dest, ".mp4");
-            File.Copy(src, mp4Dest, overwrite: true);
-            Diagnostics.Log($"ConvertOrCopyAsync {destFmt} requested but FFmpeg missing → saved '{mp4Dest}'");
-            return mp4Dest;
-        }
-
-        File.Copy(src, dest, overwrite: true);
-        return dest;
-    }
-
-    private static bool GifOutputOk(string dest, bool ok)
-        => ok && File.Exists(dest) && new FileInfo(dest).Length > 0;
-
     private void Cleanup(bool discardTemp)
     {
-        Diagnostics.Log($"Cleanup ENTER discardTemp={discardTemp}");
         try
         {
-            try { _hud?.Shutdown(); Diagnostics.Log("  hud.Shutdown OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup hud.Shutdown", ex); }
-            try { _hud?.Close(); Diagnostics.Log("  hud.Close OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup hud.Close", ex); }
-            try { _border?.Destroy(); Diagnostics.Log("  border.Destroy OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup border.Destroy", ex); }
-            try { _drawWin?.Destroy(); Diagnostics.Log("  drawWin.Destroy OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup drawWin.Destroy", ex); }
-            try { _resizeWin?.Destroy(); Diagnostics.Log("  resizeWin.Destroy OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup resizeWin.Destroy", ex); }
-            try { _service?.Dispose(); Diagnostics.Log("  service.Dispose OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup service.Dispose", ex); }
-            try { _ffmpegRec?.Dispose(); Diagnostics.Log("  ffmpegRec.Dispose OK"); } catch (Exception ex) { Diagnostics.Log("Cleanup ffmpegRec.Dispose", ex); }
-            if (discardTemp)
-            {
-                var tempPath = _service?.TempPath ?? _ffmpegRec?.TempPath;
-                if (!string.IsNullOrEmpty(tempPath)) TryDelete(tempPath);
-            }
+            try { _hud?.Shutdown(); } catch (Exception ex) { Diagnostics.Log("Cleanup hud.Shutdown", ex); }
+            try { _hud?.Close(); } catch (Exception ex) { Diagnostics.Log("Cleanup hud.Close", ex); }
+            DestroyVisualOverlays();
+            var tempPath = _service?.TempPath;
+            try { _service?.Dispose(); } catch (Exception ex) { Diagnostics.Log("Cleanup service.Dispose", ex); }
+            if (discardTemp && !string.IsNullOrEmpty(tempPath)) TryDelete(tempPath);
         }
         finally
         {
-            _border = null;
             _hud = null;
-            _drawWin = null;
-            _resizeWin = null;
             _service = null;
-            _ffmpegRec = null;
-            _h265FallbackAttempted = false;
-            _stopping = false;
-            _current = null;
-            Diagnostics.Log("Cleanup EXIT");
+            _stopping = true;
+            if (ReferenceEquals(_current, this)) _current = null;
+            _finished.TrySetResult();
+        }
+    }
+
+    /// <summary>Recordings left in %TEMP% by a crash or kill: playable ones (MP4 with an index) are moved
+    /// to the video folder, broken week-old ones are removed.</summary>
+    public static void RecoverOrphanedRecordings()
+    {
+        Task.Run(() =>
+        {
+            try
+            {
+                var dir = RecordingService.TempDirectory;
+                if (!Directory.Exists(dir)) return;
+                int recovered = 0;
+                string? lastPath = null;
+                foreach (var file in Directory.GetFiles(dir, "recording_*.mp4"))
+                {
+                    var info = new FileInfo(file);
+                    if (info.Length == 0) { TryDelete(file); continue; }
+                    if (Mp4HasIndex(file))
+                    {
+                        var dest = SaveDialogService.UniquePath(SettingsService.Instance.GetEffectiveVideoFolder(), "Clipsy_recovered", "mp4");
+                        File.Move(file, dest);
+                        recovered++;
+                        lastPath = dest;
+                    }
+                    else if (DateTime.UtcNow - info.LastWriteTimeUtc > TimeSpan.FromDays(7))
+                    {
+                        TryDelete(file);
+                    }
+                }
+                foreach (var file in Directory.GetFiles(dir, "palette_*.png")) TryDelete(file);
+                if (recovered > 0 && lastPath != null)
+                {
+                    Diagnostics.Log($"Recovered {recovered} orphaned recording(s)");
+                    App.Current?.HostWindow?.DispatcherQueue.TryEnqueue(() => NotificationService.VideoRecovered(lastPath));
+                }
+            }
+            catch (Exception ex) { Diagnostics.Log("Orphaned recording recovery failed", ex); }
+        });
+    }
+
+    // An interrupted MP4 has no 'moov' box and can't be played; scan top-level boxes for it.
+    internal static bool Mp4HasIndex(string path)
+    {
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var header = new byte[16];
+            long pos = 0;
+            while (pos + 8 <= fs.Length)
+            {
+                fs.Position = pos;
+                if (fs.Read(header, 0, 8) < 8) return false;
+                long size = (uint)(header[0] << 24 | header[1] << 16 | header[2] << 8 | header[3]);
+                string type = System.Text.Encoding.ASCII.GetString(header, 4, 4);
+                if (size == 1)
+                {
+                    if (fs.Read(header, 8, 8) < 8) return false;
+                    size = (long)((ulong)header[8] << 56 | (ulong)header[9] << 48 | (ulong)header[10] << 40 | (ulong)header[11] << 32
+                         | (ulong)header[12] << 24 | (ulong)header[13] << 16 | (ulong)header[14] << 8 | header[15]);
+                }
+                if (type == "moov") return true;
+                if (size < 8) return false; // size 0 = "to end of file" (unfinished mdat)
+                pos += size;
+            }
+            return false;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -688,7 +629,7 @@ public sealed class RecordingController
         {
             if (File.Exists(path)) File.Delete(path);
         }
-        catch { /* ignore */ }
+        catch (Exception ex) { Diagnostics.Log($"Delete '{path}' failed: {ex.Message}"); }
     }
 
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]

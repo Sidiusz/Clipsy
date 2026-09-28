@@ -1,129 +1,145 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Media.Editing;
-using Windows.Media;
 using Windows.Storage;
 
 namespace Clipsy.Services;
 
-/// <summary>Dependency-free animated GIF encoder (fallback when FFmpeg is absent):
-/// MediaComposition frames → median-cut palette → optional dither → hand-written LZW.</summary>
+/// <summary>Dependency-free animated GIF encoder (fallback when FFmpeg is absent). Streams frames:
+/// a few sampled frames build one median-cut palette, then each frame is decoded, quantized,
+/// LZW-compressed and written before the next is read, so memory stays at one frame.</summary>
 public static class NativeGifEncoder
 {
-    // Cap on extracted frames to bound memory/time for long clips.
-    private const int MaxFrames = 600;
+    // Frame grabbing through MediaComposition is slow; bound the work for very long clips.
+    public const int MaxFrames = 3000;
+    private const int PaletteSampleFrames = 12;
 
-    public static async Task<bool> ConvertMp4ToGifAsync(string inputMp4, string outputGif)
+    /// <returns>Number of frames written (0 on failure); <paramref name="truncated"/> when MaxFrames cut the clip.</returns>
+    public static async Task<(bool Ok, bool Truncated)> ConvertMp4ToGifAsync(string inputMp4, string outputGif, CancellationToken ct = default)
     {
         try
         {
-            var s      = SettingsService.Instance.Settings;
-            int fps    = Math.Clamp(s.GifFps, 1, 50);
+            var s = SettingsService.Instance.Settings;
+            int fps = Math.Clamp(s.GifFps, 1, 50);
             int colors = Math.Clamp(s.GifColors, 2, 256);
             bool dither = s.GifDither;
 
-            var frames = await ExtractFramesAsync(inputMp4, fps);
-            if (frames.Count == 0)
-            {
-                Debug.WriteLine("[Clipsy] NativeGif: no frames extracted");
-                return false;
-            }
+            var file = await StorageFile.GetFileFromPathAsync(inputMp4);
+            var clip = await MediaClip.CreateFromFileAsync(file);
+            var composition = new MediaComposition();
+            composition.Clips.Add(clip);
 
-            try
-            {
-                await Task.Run(() => Encode(frames, outputGif, fps, colors, dither));
-            }
-            finally
-            {
-                foreach (var f in frames) f.Dispose();
-            }
+            int total = (int)Math.Floor(composition.Duration.TotalSeconds * fps);
+            bool truncated = total > MaxFrames;
+            int frameCount = Math.Max(1, Math.Min(total, MaxFrames));
+            TimeSpan At(int i) => TimeSpan.FromSeconds(i / (double)fps);
 
-            return File.Exists(outputGif) && new FileInfo(outputGif).Length > 0;
+            // Pass 1: palette from evenly spaced frames.
+            var samples = new List<byte[]>();
+            int width = 0, height = 0;
+            for (int k = 0; k < Math.Min(PaletteSampleFrames, frameCount); k++)
+            {
+                int index = (int)((long)k * frameCount / Math.Min(PaletteSampleFrames, frameCount));
+                using var bmp = await GrabFrameAsync(composition, At(index));
+                if (bmp == null) continue;
+                if (width == 0) { width = bmp.Width; height = bmp.Height; }
+                samples.Add(ReadRgb(bmp, width, height));
+            }
+            if (samples.Count == 0)
+            {
+                Diagnostics.Log("NativeGif: no frames extracted");
+                return (false, false);
+            }
+            var palette = MedianCut.BuildPalette(samples, colors);
+            samples.Clear();
+
+            // Pass 2: stream every frame.
+            await using var fs = new FileStream(outputGif, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16);
+            var gif = new GifWriter(fs, width, height, palette, dither);
+            int written = 0;
+            for (int i = 0; i < frameCount; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                using var bmp = await GrabFrameAsync(composition, At(i));
+                if (bmp == null) continue;
+                var rgb = ReadRgb(bmp, width, height);
+                int delay = FrameDelayCs(i, fps);
+                await Task.Run(() => gif.AddFrame(rgb, delay), ct);
+                written++;
+            }
+            gif.Finish();
+            if (truncated) Diagnostics.Log($"NativeGif: clip truncated to {MaxFrames} frames");
+            return (written > 0, truncated);
+        }
+        catch (OperationCanceledException)
+        {
+            return (false, false);
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Clipsy] NativeGif failed: {ex.Message}");
-            return false;
+            Diagnostics.Log("NativeGif failed", ex);
+            return (false, false);
         }
     }
 
-    // ─── Frame extraction ─────────────────────────────────────────────────────
-
-    private static async Task<List<Bitmap>> ExtractFramesAsync(string inputMp4, int fps)
+    private static async Task<Bitmap?> GrabFrameAsync(MediaComposition composition, TimeSpan at)
     {
-        var frames = new List<Bitmap>();
-
-        var file        = await StorageFile.GetFileFromPathAsync(inputMp4);
-        var clip        = await MediaClip.CreateFromFileAsync(file);
-        var composition = new MediaComposition();
-        composition.Clips.Add(clip);
-
-        var duration = composition.Duration;
-        var step     = TimeSpan.FromSeconds(1.0 / fps);
-
-        for (var t = TimeSpan.Zero; t < duration; t += step)
+        try
         {
-            try
-            {
-                var thumb = await composition.GetThumbnailAsync(
-                    t, 0, 0, VideoFramePrecision.NearestFrame);
-                if (thumb == null) continue;
-
-                using var stream = thumb.AsStreamForRead();
-                frames.Add(new Bitmap(stream));
-            }
-            catch
-            {
-                // Skip frames the decoder can't seek to.
-            }
-
-            if (frames.Count >= MaxFrames) break;
+            var thumb = await composition.GetThumbnailAsync(at, 0, 0, VideoFramePrecision.NearestFrame);
+            if (thumb == null) return null;
+            using var stream = thumb.AsStreamForRead();
+            return new Bitmap(stream);
         }
-
-        return frames;
+        catch
+        {
+            return null; // skip frames the decoder can't seek to
+        }
     }
 
-    // ─── Encode ─────────────────────────────────────────────────────────────
+    // Centisecond delays rounded cumulatively so playback speed doesn't drift (12 fps = 8,8,9,...).
+    internal static int FrameDelayCs(int index, int fps)
+        => Math.Max(2, (int)Math.Round((index + 1) * 100.0 / fps) - (int)Math.Round(index * 100.0 / fps));
 
-    private static void Encode(List<Bitmap> frames, string outputGif, int fps, int maxColors, bool dither)
+    internal static List<(byte R, byte G, byte B)> BuildPalette(List<byte[]> rgbFrames, int maxColors)
+        => MedianCut.BuildPalette(rgbFrames, maxColors);
+
+    /// <summary>Writes a looping GIF frame by frame with one global palette.</summary>
+    internal sealed class GifWriter
     {
-        int width  = frames[0].Width;
-        int height = frames[0].Height;
+        private readonly BinaryWriter _w;
+        private readonly int _width, _height, _paletteCount;
+        private readonly bool _dither;
+        private readonly Quantizer _quantizer;
 
-        // Pull raw RGB pixels for every frame (resampled to the first frame's
-        // size so the canvas is uniform).
-        var pixelFrames = new List<byte[]>(frames.Count); // each: width*height*3 (RGB)
-        foreach (var bmp in frames)
-            pixelFrames.Add(ReadRgb(bmp, width, height));
-
-        // Global palette across all frames.
-        var palette = MedianCut.BuildPalette(pixelFrames, maxColors);
-
-        // GIF delay is in centiseconds (1/100 s). Round and keep >=2 so players
-        // don't treat 0 as "as fast as possible".
-        int delayCs = Math.Max(2, (int)Math.Round(100.0 / fps));
-
-        using var fs = new FileStream(outputGif, FileMode.Create, FileAccess.Write);
-        using var w  = new BinaryWriter(fs);
-
-        WriteHeader(w, width, height, palette);
-        WriteLoopExtension(w);
-
-        foreach (var rgb in pixelFrames)
+        public GifWriter(Stream output, int width, int height, List<(byte R, byte G, byte B)> palette, bool dither)
         {
-            var indices = dither
-                ? Quantizer.MapDithered(rgb, width, height, palette)
-                : Quantizer.MapNearest(rgb, palette);
-
-            WriteFrame(w, width, height, indices, delayCs, palette.Count);
+            _w = new BinaryWriter(output, System.Text.Encoding.ASCII, leaveOpen: true);
+            _width = width;
+            _height = height;
+            _paletteCount = palette.Count;
+            _dither = dither;
+            _quantizer = new Quantizer(palette);
+            WriteHeader(_w, width, height, palette);
+            WriteLoopExtension(_w);
         }
 
-        w.Write((byte)0x3B); // trailer
+        public void AddFrame(byte[] rgb, int delayCs)
+        {
+            var indices = _dither ? _quantizer.MapDithered(rgb, _width, _height) : _quantizer.MapNearest(rgb);
+            WriteFrame(_w, _width, _height, indices, delayCs, _paletteCount);
+        }
+
+        public void Finish()
+        {
+            _w.Write((byte)0x3B); // trailer
+            _w.Flush();
+        }
     }
 
     /// <summary>Decode a bitmap into tightly packed RGB bytes at the target size.</summary>
@@ -136,10 +152,7 @@ public static class NativeGifEncoder
             g.DrawImage(src, 0, 0, width, height);
         }
 
-        var data = canvas.LockBits(
-            new Rectangle(0, 0, width, height),
-            ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-
+        var data = canvas.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         var rgb = new byte[width * height * 3];
         try
         {
@@ -153,10 +166,9 @@ public static class NativeGifEncoder
                     int dst = y * width * 3;
                     for (int x = 0; x < width; x++)
                     {
-                        // BGRA in memory.
-                        rgb[dst++] = row[x * 4 + 2]; // R
-                        rgb[dst++] = row[x * 4 + 1]; // G
-                        rgb[dst++] = row[x * 4 + 0]; // B
+                        rgb[dst++] = row[x * 4 + 2]; // BGRA in memory
+                        rgb[dst++] = row[x * 4 + 1];
+                        rgb[dst++] = row[x * 4 + 0];
                     }
                 }
             }
@@ -172,60 +184,152 @@ public static class NativeGifEncoder
 
     private static void WriteHeader(BinaryWriter w, int width, int height, List<(byte R, byte G, byte B)> palette)
     {
-        w.Write(new[] { (byte)'G', (byte)'I', (byte)'F', (byte)'8', (byte)'9', (byte)'a' });
-
+        w.Write("GIF89a"u8.ToArray());
         w.Write((ushort)width);
         w.Write((ushort)height);
-
         int gctSize = PaletteSizeExponent(palette.Count); // 2^(n+1) entries
-        // Global Color Table flag (0x80) | color resolution (7<<4) | GCT size
-        byte packed = (byte)(0x80 | (0x7 << 4) | gctSize);
-        w.Write(packed);
+        w.Write((byte)(0x80 | (0x7 << 4) | gctSize));      // global table | color resolution | size
         w.Write((byte)0);  // background color index
         w.Write((byte)0);  // pixel aspect ratio
-
         WriteColorTable(w, palette, gctSize);
     }
 
     private static void WriteLoopExtension(BinaryWriter w)
     {
-        w.Write((byte)0x21);           // extension introducer
-        w.Write((byte)0xFF);           // application extension
-        w.Write((byte)11);             // block size
-        w.Write(new[] { (byte)'N', (byte)'E', (byte)'T', (byte)'S', (byte)'C',
-                        (byte)'A', (byte)'P', (byte)'E', (byte)'2', (byte)'.', (byte)'0' });
-        w.Write((byte)3);              // sub-block size
-        w.Write((byte)1);              // loop sub-block id
-        w.Write((ushort)0);            // loop count: 0 = forever
-        w.Write((byte)0);              // block terminator
+        w.Write((byte)0x21);
+        w.Write((byte)0xFF);
+        w.Write((byte)11);
+        w.Write("NETSCAPE2.0"u8.ToArray());
+        w.Write((byte)3);
+        w.Write((byte)1);
+        w.Write((ushort)0); // loop forever
+        w.Write((byte)0);
     }
 
     private static void WriteFrame(BinaryWriter w, int width, int height, byte[] indices, int delayCs, int paletteCount)
     {
         // Graphic Control Extension (animation delay).
-        w.Write((byte)0x21);           // extension introducer
-        w.Write((byte)0xF9);           // graphic control label
-        w.Write((byte)4);              // block size
-        w.Write((byte)0x00);           // no transparency, disposal = 0
+        w.Write((byte)0x21);
+        w.Write((byte)0xF9);
+        w.Write((byte)4);
+        w.Write((byte)0x00);   // no transparency, disposal = 0
         w.Write((ushort)delayCs);
-        w.Write((byte)0);              // transparent color index
-        w.Write((byte)0);              // block terminator
+        w.Write((byte)0);
+        w.Write((byte)0);
 
         // Image descriptor.
         w.Write((byte)0x2C);
-        w.Write((ushort)0);            // left
-        w.Write((ushort)0);            // top
+        w.Write((ushort)0);
+        w.Write((ushort)0);
         w.Write((ushort)width);
         w.Write((ushort)height);
-        w.Write((byte)0);              // no local color table
+        w.Write((byte)0);      // no local color table
 
-        // LZW-compressed image data.
         int minCodeSize = Math.Max(2, PaletteSizeExponent(paletteCount) + 1);
-        var lzw = LzwEncoder.Encode(indices, minCodeSize);
-
         w.Write((byte)minCodeSize);
-        WriteSubBlocks(w, lzw);
-        w.Write((byte)0);              // block terminator
+        var blocks = new SubBlockWriter(w);
+        LzwEncoder.Encode(indices, minCodeSize, blocks.Add, blocks.Flush);
+        w.Write((byte)0);      // block terminator
+    }
+
+    private static void WriteColorTable(BinaryWriter w, List<(byte R, byte G, byte B)> palette, int sizeExponent)
+    {
+        int entries = 1 << (sizeExponent + 1);
+        for (int i = 0; i < entries; i++)
+        {
+            var c = i < palette.Count ? palette[i] : ((byte)0, (byte)0, (byte)0);
+            w.Write(c.Item1);
+            w.Write(c.Item2);
+            w.Write(c.Item3);
+        }
+    }
+
+    /// <summary>Smallest n where 2^(n+1) >= count, clamped to GIF's 0..7 range.</summary>
+    private static int PaletteSizeExponent(int count)
+    {
+        int n = 0;
+        while ((1 << (n + 1)) < count && n < 7) n++;
+        return n;
+    }
+
+    /// <summary>Buffers LZW bytes into GIF's 255-byte sub-blocks.</summary>
+    private sealed class SubBlockWriter(BinaryWriter w)
+    {
+        private readonly byte[] _block = new byte[255];
+        private int _count;
+
+        public void Add(byte b)
+        {
+            _block[_count++] = b;
+            if (_count == 255) Flush();
+        }
+
+        public void Flush()
+        {
+            if (_count == 0) return;
+            w.Write((byte)_count);
+            w.Write(_block, 0, _count);
+            _count = 0;
+        }
+    }
+
+    // ─── LZW (GIF variant) ────────────────────────────────────────────────────
+
+    internal static class LzwEncoder
+    {
+        // Dictionary keyed by (prefix code << 8 | next index): no string allocations per pixel.
+        internal static void Encode(byte[] indices, int minCodeSize, Action<byte> emit, Action flush)
+        {
+            int clearCode = 1 << minCodeSize;
+            int eoiCode = clearCode + 1;
+            int codeSize = minCodeSize + 1;
+            int nextCode = eoiCode + 1;
+            var table = new Dictionary<int, int>(4096);
+            int buffer = 0, bits = 0;
+
+            void Write(int code)
+            {
+                buffer |= code << bits;
+                bits += codeSize;
+                while (bits >= 8)
+                {
+                    emit((byte)buffer);
+                    buffer >>= 8;
+                    bits -= 8;
+                }
+            }
+
+            Write(clearCode);
+            if (indices.Length > 0)
+            {
+                int prefix = indices[0];
+                for (int i = 1; i < indices.Length; i++)
+                {
+                    int c = indices[i];
+                    int key = (prefix << 8) | c;
+                    if (table.TryGetValue(key, out int code))
+                    {
+                        prefix = code;
+                        continue;
+                    }
+                    Write(prefix);
+                    table[key] = nextCode++;
+                    if (nextCode > (1 << codeSize) && codeSize < 12) codeSize++;
+                    if (nextCode > 4095)
+                    {
+                        Write(clearCode);
+                        table.Clear();
+                        codeSize = minCodeSize + 1;
+                        nextCode = eoiCode + 1;
+                    }
+                    prefix = c;
+                }
+                Write(prefix);
+            }
+            Write(eoiCode);
+            if (bits > 0) emit((byte)buffer);
+            flush();
+        }
     }
 
     // ─── Palette: median cut ──────────────────────────────────────────────────
@@ -234,40 +338,29 @@ public static class NativeGifEncoder
     {
         public static List<(byte R, byte G, byte B)> BuildPalette(List<byte[]> frames, int maxColors)
         {
-            // Subsample pixels across all frames so the cut is fast on long clips.
-            var samples = new List<(byte R, byte G, byte B)>();
+            // Subsample pixels across the sampled frames so the cut stays fast.
             long totalPixels = 0;
             foreach (var f in frames) totalPixels += f.Length / 3;
+            int stride = (int)Math.Max(1, totalPixels / 40_000);
 
-            int target = 40_000;
-            int stride = (int)Math.Max(1, totalPixels / target);
-
-            int counter = 0;
+            var samples = new List<(byte R, byte G, byte B)>();
+            long counter = 0;
             foreach (var f in frames)
-            {
                 for (int i = 0; i + 2 < f.Length; i += 3)
-                {
-                    if (counter++ % stride == 0)
-                        samples.Add((f[i], f[i + 1], f[i + 2]));
-                }
-            }
-
+                    if (counter++ % stride == 0) samples.Add((f[i], f[i + 1], f[i + 2]));
             if (samples.Count == 0) return new() { (0, 0, 0) };
 
-            var boxes = new List<Box> { new Box(samples, 0, samples.Count) };
+            var boxes = new List<Box> { new(samples, 0, samples.Count) };
             while (boxes.Count < maxColors)
             {
-                // Split the box with the largest color spread.
-                int best = -1;
-                int bestRange = -1;
+                int best = -1, bestRange = -1;
                 for (int i = 0; i < boxes.Count; i++)
                 {
                     if (boxes[i].Count < 2) continue;
                     int range = boxes[i].LongestAxisRange();
                     if (range > bestRange) { bestRange = range; best = i; }
                 }
-                if (best < 0) break;
-
+                if (best < 0 || bestRange == 0) break;
                 var (a, b) = boxes[best].Split();
                 boxes[best] = a;
                 boxes.Add(b);
@@ -278,33 +371,23 @@ public static class NativeGifEncoder
             return palette;
         }
 
-        private sealed class Box
+        private sealed class Box(List<(byte R, byte G, byte B)> all, int start, int count)
         {
-            private readonly List<(byte R, byte G, byte B)> _all;
-            private int _start;
-            private int _count;
-
-            public Box(List<(byte R, byte G, byte B)> all, int start, int count)
-            {
-                _all = all; _start = start; _count = count;
-            }
-
-            public int Count => _count;
+            public int Count => count;
 
             private (int axis, int range) WidestAxis()
             {
                 byte rMin = 255, rMax = 0, gMin = 255, gMax = 0, bMin = 255, bMax = 0;
-                for (int i = _start; i < _start + _count; i++)
+                for (int i = start; i < start + count; i++)
                 {
-                    var (r, g, b) = _all[i];
+                    var (r, g, b) = all[i];
                     if (r < rMin) rMin = r; if (r > rMax) rMax = r;
                     if (g < gMin) gMin = g; if (g > gMax) gMax = g;
                     if (b < bMin) bMin = b; if (b > bMax) bMax = b;
                 }
                 int dr = rMax - rMin, dg = gMax - gMin, db = bMax - bMin;
                 if (dr >= dg && dr >= db) return (0, dr);
-                if (dg >= db) return (1, dg);
-                return (2, db);
+                return dg >= db ? (1, dg) : (2, db);
             }
 
             public int LongestAxisRange() => WidestAxis().range;
@@ -312,27 +395,21 @@ public static class NativeGifEncoder
             public (Box, Box) Split()
             {
                 int axis = WidestAxis().axis;
-                _all.Sort(_start, _count, Comparer<(byte R, byte G, byte B)>.Create((p, q) =>
-                    axis switch
-                    {
-                        0 => p.R.CompareTo(q.R),
-                        1 => p.G.CompareTo(q.G),
-                        _ => p.B.CompareTo(q.B),
-                    }));
-
-                int mid = _count / 2;
-                return (new Box(_all, _start, mid),
-                        new Box(_all, _start + mid, _count - mid));
+                all.Sort(start, count, Comparer<(byte R, byte G, byte B)>.Create((p, q) => axis switch
+                {
+                    0 => p.R.CompareTo(q.R),
+                    1 => p.G.CompareTo(q.G),
+                    _ => p.B.CompareTo(q.B),
+                }));
+                int mid = count / 2;
+                return (new Box(all, start, mid), new Box(all, start + mid, count - mid));
             }
 
             public (byte R, byte G, byte B) Average()
             {
                 long r = 0, g = 0, b = 0;
-                for (int i = _start; i < _start + _count; i++)
-                {
-                    r += _all[i].R; g += _all[i].G; b += _all[i].B;
-                }
-                int n = Math.Max(1, _count);
+                for (int i = start; i < start + count; i++) { r += all[i].R; g += all[i].G; b += all[i].B; }
+                int n = Math.Max(1, count);
                 return ((byte)(r / n), (byte)(g / n), (byte)(b / n));
             }
         }
@@ -340,48 +417,38 @@ public static class NativeGifEncoder
 
     // ─── Quantize frame → palette indices ─────────────────────────────────────
 
-    private static class Quantizer
+    private sealed class Quantizer(List<(byte R, byte G, byte B)> palette)
     {
-        public static byte[] MapNearest(byte[] rgb, List<(byte R, byte G, byte B)> palette)
+        // Palette is fixed for the whole GIF, so nearest-colour lookups are shared across frames.
+        private readonly Dictionary<int, byte> _cache = new();
+
+        public byte[] MapNearest(byte[] rgb)
         {
-            int px = rgb.Length / 3;
-            var indices = new byte[px];
-            var cache = new Dictionary<int, byte>();
-            for (int i = 0; i < px; i++)
-            {
-                int r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
-                indices[i] = Nearest(r, g, b, palette, cache);
-            }
+            var indices = new byte[rgb.Length / 3];
+            for (int i = 0; i < indices.Length; i++)
+                indices[i] = Nearest(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
             return indices;
         }
 
-        public static byte[] MapDithered(byte[] rgb, int width, int height, List<(byte R, byte G, byte B)> palette)
+        public byte[] MapDithered(byte[] rgb, int width, int height)
         {
             // Floyd–Steinberg on a float working copy of the RGB plane.
             var work = new float[rgb.Length];
             for (int i = 0; i < rgb.Length; i++) work[i] = rgb[i];
-
             var indices = new byte[width * height];
-            var cache = new Dictionary<int, byte>();
-
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
                     int p = (y * width + x) * 3;
-                    int r = Clamp(work[p]);
-                    int g = Clamp(work[p + 1]);
-                    int b = Clamp(work[p + 2]);
-
-                    byte idx = Nearest(r, g, b, palette, cache);
+                    int r = Clamp(work[p]), g = Clamp(work[p + 1]), b = Clamp(work[p + 2]);
+                    byte idx = Nearest(r, g, b);
                     indices[y * width + x] = idx;
-
                     var pal = palette[idx];
                     float er = r - pal.R, eg = g - pal.G, eb = b - pal.B;
-
-                    Spread(work, width, height, x + 1, y,     er, eg, eb, 7f / 16f);
+                    Spread(work, width, height, x + 1, y, er, eg, eb, 7f / 16f);
                     Spread(work, width, height, x - 1, y + 1, er, eg, eb, 3f / 16f);
-                    Spread(work, width, height, x,     y + 1, er, eg, eb, 5f / 16f);
+                    Spread(work, width, height, x, y + 1, er, eg, eb, 5f / 16f);
                     Spread(work, width, height, x + 1, y + 1, er, eg, eb, 1f / 16f);
                 }
             }
@@ -392,16 +459,15 @@ public static class NativeGifEncoder
         {
             if (x < 0 || x >= width || y < 0 || y >= height) return;
             int p = (y * width + x) * 3;
-            work[p]     += er * f;
+            work[p] += er * f;
             work[p + 1] += eg * f;
             work[p + 2] += eb * f;
         }
 
-        private static byte Nearest(int r, int g, int b, List<(byte R, byte G, byte B)> palette, Dictionary<int, byte> cache)
+        private byte Nearest(int r, int g, int b)
         {
             int key = (r << 16) | (g << 8) | b;
-            if (cache.TryGetValue(key, out var hit)) return hit;
-
+            if (_cache.TryGetValue(key, out var hit)) return hit;
             int best = 0, bestDist = int.MaxValue;
             for (int i = 0; i < palette.Count; i++)
             {
@@ -409,147 +475,11 @@ public static class NativeGifEncoder
                 int dist = dr * dr + dg * dg + db * db;
                 if (dist < bestDist) { bestDist = dist; best = i; if (dist == 0) break; }
             }
-            cache[key] = (byte)best;
+            if (_cache.Count > 1_000_000) _cache.Clear(); // dithering can produce millions of distinct colours
+            _cache[key] = (byte)best;
             return (byte)best;
         }
 
         private static int Clamp(float v) => v < 0 ? 0 : v > 255 ? 255 : (int)(v + 0.5f);
-    }
-
-    // ─── LZW (GIF variant) ────────────────────────────────────────────────────
-
-    private static class LzwEncoder
-    {
-        public static byte[] Encode(byte[] indices, int minCodeSize)
-        {
-            int clearCode = 1 << minCodeSize;
-            int eoiCode   = clearCode + 1;
-
-            var output = new List<byte>();
-            var bits = new BitWriter(output);
-
-            int codeSize = minCodeSize + 1;
-            var table = new Dictionary<string, int>();
-
-            void ResetTable()
-            {
-                table.Clear();
-                for (int i = 0; i < clearCode; i++)
-                    table[((char)i).ToString()] = i;
-                codeSize = minCodeSize + 1;
-            }
-
-            ResetTable();
-            int nextCode = eoiCode + 1;
-
-            bits.Write(clearCode, codeSize);
-
-            if (indices.Length > 0)
-            {
-                string current = ((char)indices[0]).ToString();
-                for (int i = 1; i < indices.Length; i++)
-                {
-                    char c = (char)indices[i];
-                    string combined = current + c;
-                    if (table.ContainsKey(combined))
-                    {
-                        current = combined;
-                    }
-                    else
-                    {
-                        bits.Write(table[current], codeSize);
-                        table[combined] = nextCode++;
-
-                        if (nextCode > (1 << codeSize) && codeSize < 12)
-                            codeSize++;
-
-                        if (nextCode > 4095)
-                        {
-                            bits.Write(clearCode, codeSize);
-                            ResetTable();
-                            nextCode = eoiCode + 1;
-                        }
-
-                        current = c.ToString();
-                    }
-                }
-                bits.Write(table[current], codeSize);
-            }
-
-            bits.Write(eoiCode, codeSize);
-            bits.Flush();
-            return output.ToArray();
-        }
-
-        private sealed class BitWriter
-        {
-            private readonly List<byte> _out;
-            private int _buffer;
-            private int _bits;
-
-            public BitWriter(List<byte> output) => _out = output;
-
-            public void Write(int code, int codeSize)
-            {
-                _buffer |= code << _bits;
-                _bits += codeSize;
-                while (_bits >= 8)
-                {
-                    _out.Add((byte)(_buffer & 0xFF));
-                    _buffer >>= 8;
-                    _bits -= 8;
-                }
-            }
-
-            public void Flush()
-            {
-                if (_bits > 0)
-                {
-                    _out.Add((byte)(_buffer & 0xFF));
-                    _buffer = 0;
-                    _bits = 0;
-                }
-            }
-        }
-    }
-
-    private static void WriteColorTable(BinaryWriter w, List<(byte R, byte G, byte B)> palette, int sizeExponent)
-    {
-        int entries = 1 << (sizeExponent + 1);
-        for (int i = 0; i < entries; i++)
-        {
-            if (i < palette.Count)
-            {
-                w.Write(palette[i].R);
-                w.Write(palette[i].G);
-                w.Write(palette[i].B);
-            }
-            else
-            {
-                w.Write((byte)0);
-                w.Write((byte)0);
-                w.Write((byte)0);
-            }
-        }
-    }
-
-    private static void WriteSubBlocks(BinaryWriter w, byte[] data)
-    {
-        int offset = 0;
-        while (offset < data.Length)
-        {
-            int chunk = Math.Min(255, data.Length - offset);
-            w.Write((byte)chunk);
-            w.Write(data, offset, chunk);
-            offset += chunk;
-        }
-    }
-
-    /// <summary>Smallest n where 2^(n+1) >= count, clamped to GIF's 1..7 range.</summary>
-    private static int PaletteSizeExponent(int count)
-    {
-        int n = 0;
-        while ((1 << (n + 1)) < count && n < 7) n++;
-        return n;
     }
 }

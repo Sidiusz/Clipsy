@@ -33,11 +33,6 @@ public sealed partial class RecordingHudWindow : Window
     private bool _paused;
     private bool _locked = true;
     private bool _micMuted = true;
-    private bool _canPause = true;
-    private bool _canResizeRegion = true;
-    private bool _canToggleMic = true;
-    private DispatcherTimer? _capabilityTipTimer;
-    private ToolTip? _openCapabilityTip;
     private Storyboard? _recPulse;
 
     public event Action? PauseRequested;
@@ -121,26 +116,6 @@ public sealed partial class RecordingHudWindow : Window
         else UpdateMicTooltip();
     }
 
-    public void ConfigureCapabilities(bool canPause, bool canResizeRegion, bool canToggleMic)
-    {
-        _canPause = canPause;
-        _canResizeRegion = canResizeRegion;
-        _canToggleMic = canToggleMic;
-
-        // Keep unsupported controls clickable so we can explain the limitation.
-        // The HUD and its tooltip popup are excluded from capture.
-        PauseBtn.IsEnabled = true;
-        LockBtn.IsEnabled = true;
-        MicBtn.IsEnabled = true;
-        PauseBtn.Opacity = canPause ? 1.0 : 0.45;
-        LockBtn.Opacity = canResizeRegion ? 1.0 : 0.45;
-        MicBtn.Opacity = canToggleMic ? 1.0 : 0.45;
-
-        ToolTipService.SetToolTip(PauseBtn, MakeTip(Strings.Get(canPause ? "TipPause" : "TipPauseUnsupportedFfmpeg")));
-        ToolTipService.SetToolTip(LockBtn, MakeTip(Strings.Get(canResizeRegion ? "TipLock" : "TipResizeUnsupportedFfmpeg")));
-        UpdateMicTooltip();
-    }
-
     public void SetMicMuted(bool muted)
     {
         _micMuted = muted;
@@ -159,43 +134,13 @@ public sealed partial class RecordingHudWindow : Window
     private void UpdateMicTooltip()
     {
         bool muted = MicBtn.IsChecked != true;
-        string text = !_canToggleMic
-            ? Strings.Get("TipMicUnsupportedFfmpeg")
-            : Strings.Get(muted ? "TipMicMuted" : "TipMicActive");
+        string text = Strings.Get(muted ? "TipMicMuted" : "TipMicActive");
         if (_micTip == null)
         {
             _micTip = MakeTip(text);
             ToolTipService.SetToolTip(MicBtn, _micTip);
         }
         else _micTip.Content = text;
-    }
-
-    public void ShowMicCapabilityMessage()
-    {
-        if (!_canToggleMic) ShowCapabilityTip(MicBtn);
-    }
-
-    private void ShowCapabilityTip(FrameworkElement anchor)
-    {
-        if (ToolTipService.GetToolTip(anchor) is not ToolTip tip) return;
-        if (_openCapabilityTip != null && !ReferenceEquals(_openCapabilityTip, tip))
-            _openCapabilityTip.IsOpen = false;
-        _openCapabilityTip = tip;
-        tip.IsOpen = true;
-        ExcludePopupsFromCapture();
-
-        _capabilityTipTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
-        _capabilityTipTimer.Stop();
-        _capabilityTipTimer.Tick -= OnCapabilityTipTimer;
-        _capabilityTipTimer.Tick += OnCapabilityTipTimer;
-        _capabilityTipTimer.Start();
-    }
-
-    private void OnCapabilityTipTimer(object? sender, object e)
-    {
-        _capabilityTipTimer?.Stop();
-        if (_openCapabilityTip != null) _openCapabilityTip.IsOpen = false;
-        _openCapabilityTip = null;
     }
 
     public IntPtr Hwnd => _hwnd;
@@ -214,13 +159,20 @@ public sealed partial class RecordingHudWindow : Window
         StartRecPulse();
     }
 
+    /// <summary>Restarts the elapsed time (the encoder was restarted, e.g. codec fallback).</summary>
+    public void RestartTimer()
+    {
+        _startedAt = DateTime.UtcNow;
+        _accumulated = TimeSpan.Zero;
+        TimerText.Text = "00:00";
+    }
+
     public void Shutdown()
     {
         _timer.Stop();
         _hideTimer.Stop();
-        _capabilityTipTimer?.Stop();
-        if (_openCapabilityTip != null) _openCapabilityTip.IsOpen = false;
-        _openCapabilityTip = null;
+        try { _colorPickerWin?.Close(); } catch (Exception ex) { Diagnostics.Log("HUD.Shutdown picker", ex); }
+        _colorPickerWin = null;
         _recPulse?.Stop();
         _recPulse = null;
         // Hide the topmost HUD immediately, else the toolbar lingers over the
@@ -249,16 +201,23 @@ public sealed partial class RecordingHudWindow : Window
         _recPulse.Begin();
     }
 
-    public void PositionBelowRegion(int regionX, int regionY, int regionW, int regionH, int virtualScreenH)
+    // Placement is in physical pixels on the region's monitor; the XAML size is DIPs of that monitor.
+    public void PositionBelowRegion(int regionX, int regionY, int regionW, int regionH)
     {
+        var region = new RECT { Left = regionX, Top = regionY, Right = regionX + regionW, Bottom = regionY + regionH };
+        IntPtr monitor = MonitorFromRect(ref region, MONITOR_DEFAULTTONEAREST);
+        var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        GetMonitorInfo(monitor, ref mi);
+        var vb = System.Drawing.Rectangle.FromLTRB(mi.rcWork.Left, mi.rcWork.Top, mi.rcWork.Right, mi.rcWork.Bottom);
+        double scale = GetDpiForMonitor(monitor, 0, out uint dpiX, out _) == 0 && dpiX > 0 ? dpiX / 96.0 : 1.0;
+
         Root.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var size = Root.DesiredSize;
-        int hudW = (int)System.Math.Ceiling(size.Width);
-        int hudH = (int)System.Math.Ceiling(size.Height);
+        int hudW = (int)System.Math.Ceiling(size.Width * scale);
+        int hudH = (int)System.Math.Ceiling(size.Height * scale);
 
-        var vb = Services.ScreenFreezeService.GetVirtualScreenBounds();
-        const int gap = 8;
-        const int edgePad = 8;
+        int gap = (int)(8 * scale);
+        int edgePad = (int)(8 * scale);
 
         // Default: centered below the region.
         int hudX = regionX + (regionW - hudW) / 2;
@@ -286,8 +245,24 @@ public sealed partial class RecordingHudWindow : Window
         if (hudX < vb.Left + edgePad) hudX = vb.Left + edgePad;
         if (hudX + hudW > vb.Right - edgePad) hudX = vb.Right - edgePad - hudW;
 
-        _appWindow.MoveAndResize(new RectInt32(hudX, hudY, hudW, hudH));
+        var rect = new RectInt32(hudX, hudY, hudW, hudH);
+        _appWindow.MoveAndResize(rect);
+        // Crossing monitors of different DPI rescales the window once; re-apply the exact rect.
+        if (_appWindow.Size.Width != hudW || _appWindow.Size.Height != hudH) _appWindow.MoveAndResize(rect);
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromRect(ref RECT rect, uint flags);
+    [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
+    [DllImport("shcore.dll")] private static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
 
     private void SetWindowExStyle()
     {
@@ -365,11 +340,6 @@ public sealed partial class RecordingHudWindow : Window
 
     private void OnPauseClick(object sender, RoutedEventArgs e)
     {
-        if (!_canPause)
-        {
-            ShowCapabilityTip(PauseBtn);
-            return;
-        }
         _paused = !_paused;
         if (_paused)
         {
@@ -394,12 +364,6 @@ public sealed partial class RecordingHudWindow : Window
 
     private void OnLockDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if (!_canResizeRegion)
-        {
-            ShowCapabilityTip(LockBtn);
-            e.Handled = true;
-            return;
-        }
         _locked = !_locked;
         ApplyLockVisual();
         LockChanged?.Invoke(_locked);
@@ -413,12 +377,6 @@ public sealed partial class RecordingHudWindow : Window
 
     private void OnMicToggle(object sender, RoutedEventArgs e)
     {
-        if (!_canToggleMic)
-        {
-            SetMicMuted(_micMuted);
-            ShowCapabilityTip(MicBtn);
-            return;
-        }
         bool muted = MicBtn.IsChecked != true;
         SetMicMuted(muted);
         MicMuteToggled?.Invoke(muted);
