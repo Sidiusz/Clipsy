@@ -13,12 +13,25 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Fail in seconds, not after a full build, when the tag and the repo disagree.
+      - name: Check release inputs
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME
+          $notes = ".github/release-notes/$version.md"
+          if (-not (Test-Path $notes)) { throw "Missing $notes" }
+          $fileVersion = (Get-Content version -Raw).Trim()
+          if ($fileVersion -ne $version) { throw "Tag $version does not match the 'version' file ($fileVersion)" }
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
-          dotnet-version: '8.0.x'
+          global-json-file: global.json
+
+      - name: Test
+        run: dotnet test Clipsy.Tests/Clipsy.Tests.csproj -c Release -p:Platform=x64
 
       - name: Build release artifacts
         shell: powershell
@@ -32,5 +45,6 @@ jobs:
           $version = $env:GITHUB_REF_NAME
           $installer = "installer/output/Clipsy-Setup-$version.exe"
           $portable = "installer/output/Clipsy-$version-win-x64.zip"
+          $sums = "installer/output/SHA256SUMS.txt"
           $notes = ".github/release-notes/$version.md"
-          gh release create $version $installer $portable --title $version --notes-file $notes
+          gh release create $version $installer $portable $sums --title $version --notes-file $notes
