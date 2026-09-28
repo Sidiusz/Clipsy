@@ -47,7 +47,6 @@ public sealed partial class SettingsWindow
 
         // One row, one action (Install/Delete): an installed language is used
         // automatically, so there's no separate "selected" checkbox.
-        CheckBox? cb = null; // signature compatibility with DownloadTessLangAsync
         var nameBlock = new TextBlock
         {
             Text = lang.DisplayName,
@@ -95,7 +94,11 @@ public sealed partial class SettingsWindow
         {
             if (TessdataService.IsInstalled(lang.Code))
             {
-                TessdataService.Delete(lang.Code);
+                if (!TessdataService.Delete(lang.Code))
+                {
+                    ShowNotification("ErrDeleteFailed", "error");
+                    return;
+                }
                 _tessSelectedCodes.Remove(lang.Code);
                 MarkChanged();
                 var idx = TessLangList.Children.IndexOf(grid);
@@ -103,7 +106,7 @@ public sealed partial class SettingsWindow
             }
             else
             {
-                _ = DownloadTessLangAsync(lang, grid, btn, progress, cb);
+                _ = DownloadTessLangAsync(lang, grid, btn, progress);
             }
         };
 
@@ -128,7 +131,7 @@ public sealed partial class SettingsWindow
         return panel;
     }
 
-    private async Task DownloadTessLangAsync(TessdataLang lang, Grid row, Button btn, ProgressBar progressBar, CheckBox? cb)
+    private async Task DownloadTessLangAsync(TessdataLang lang, Grid row, Button btn, ProgressBar progressBar)
     {
         if (_tessDownloadCts.TryGetValue(lang.Code, out var existing))
         {
@@ -245,11 +248,13 @@ public sealed partial class SettingsWindow
         grid.Children.Add(progress);
         grid.Children.Add(btn);
 
-        btn.Click += (_, _) =>
+        btn.Click += async (_, _) =>
         {
             if (PpOcrV5Service.IsModelInstalled(model.Key))
             {
-                PpOcrV5Service.DeleteModel(model.Key);
+                btn.IsEnabled = false;
+                await PpOcrV5Service.DeleteModelAsync(model.Key);
+                if (_windowClosed) return;
                 var idx = PpOcrModelList.Children.IndexOf(grid);
                 if (idx >= 0)
                     PpOcrModelList.Children[idx] = CreatePpOcrModelRow(model);

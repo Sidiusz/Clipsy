@@ -5,6 +5,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using RapidOCRSharpOnnx.Configurations;
 using RapidOCRSharpOnnx.Inference;
@@ -16,191 +17,6 @@ using Windows.Media.Ocr;
 using Windows.Storage.Streams;
 
 namespace Clipsy.Services;
-
-public sealed record OcrWord(string Text, Rect BoundsPixels);
-
-public interface IOcrEngine
-{
-    Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes);
-}
-
-/// <summary>Default OCR engine (Windows.Media.Ocr): local, languages via FoD,
-/// returns word boxes in the bitmap's pixel space.</summary>
-public sealed class WinRtOcrEngine : IOcrEngine
-{
-    public async Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes)
-    {
-        var ras = new InMemoryRandomAccessStream();
-        using (var writer = new DataWriter(ras.GetOutputStreamAt(0)))
-        {
-            writer.WriteBytes(pngBytes);
-            await writer.StoreAsync();
-            await writer.FlushAsync();
-            writer.DetachStream();
-        }
-        ras.Seek(0);
-        var decoder = await BitmapDecoder.CreateAsync(ras);
-        using var soft = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
-
-        var engine = OcrEngine.TryCreateFromUserProfileLanguages();
-        if (engine == null)
-        {
-            return Array.Empty<OcrWord>();
-        }
-        var result = await engine.RecognizeAsync(soft);
-        var words = new List<OcrWord>();
-        foreach (var line in result.Lines)
-        {
-            foreach (var w in line.Words)
-            {
-                words.Add(new OcrWord(w.Text, w.BoundingRect));
-            }
-        }
-        return words;
-    }
-}
-
-/// <summary>Tesseract OCR engine (user-downloaded tessdata via TessdataService);
-/// falls back silently if no language files are installed.</summary>
-public sealed class TesseractOcrEngine : IOcrEngine
-{
-    public Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes)
-    {
-        return Task.Run<IReadOnlyList<OcrWord>>(() =>
-        {
-            try
-            {
-                var langs = TessdataService.InstalledSelectedCodes();
-                if (langs.Count == 0)
-                    throw new InvalidOperationException("No Tesseract language files installed.");
-
-                // Grayscale + auto-invert dark-theme captures: Tesseract expects
-                // dark text on a light background; light-on-dark garbles badly.
-                var prepped = Preprocess(pngBytes);
-                using var srcPix = Tesseract.Pix.LoadFromMemory(prepped);
-
-                // Upscale so the longest side reaches ~2400px (Tesseract likes
-                // ~300dpi); bounds come back scaled, so divide them back after.
-                float scaleUp = 1f;
-                int longest = Math.Max(srcPix.Width, srcPix.Height);
-                if (longest > 0 && longest < 2400)
-                    scaleUp = Math.Min(3f, 2400f / longest);
-
-                bool scaled = scaleUp > 1.01f;
-                Tesseract.Pix pix = scaled ? srcPix.Scale(scaleUp, scaleUp) : srcPix;
-                try
-                {
-                    // Best mean-confidence single language: a combined eng+rus pass
-                    // transliterates Cyrillic lookalikes to Latin (ракета -> paketa).
-                    List<OcrWord>? best = null;
-                    float bestConf = -1f;
-                    foreach (var lang in langs)
-                    {
-                        var (w, conf) = RunSingle(lang, pix, scaleUp);
-                        if (conf > bestConf) { bestConf = conf; best = w; }
-                    }
-                    return best ?? new List<OcrWord>();
-                }
-                finally
-                {
-                    if (scaled) pix.Dispose();
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[Clipsy] Tesseract failed: {ex.Message}");
-                return new List<OcrWord>();
-            }
-        });
-    }
-
-    // Grayscale, then invert if the image is mostly dark (light-on-dark UI), so
-    // Tesseract gets dark text on a light background. Geometry is unchanged.
-    private static byte[] Preprocess(byte[] png)
-    {
-        try
-        {
-            using var ms = new MemoryStream(png);
-            using var src = new Bitmap(ms);
-            int w = src.Width, h = src.Height;
-            using var gray = new Bitmap(w, h, PixelFormat.Format24bppRgb);
-            using (var g = Graphics.FromImage(gray))
-            {
-                var cm = new ColorMatrix(new[]
-                {
-                    new[] { 0.299f, 0.299f, 0.299f, 0f, 0f },
-                    new[] { 0.587f, 0.587f, 0.587f, 0f, 0f },
-                    new[] { 0.114f, 0.114f, 0.114f, 0f, 0f },
-                    new[] { 0f, 0f, 0f, 1f, 0f },
-                    new[] { 0f, 0f, 0f, 0f, 1f },
-                });
-                using var ia = new ImageAttributes();
-                ia.SetColorMatrix(cm);
-                g.DrawImage(src, new Rectangle(0, 0, w, h), 0, 0, w, h, GraphicsUnit.Pixel, ia);
-            }
-
-            var data = gray.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadWrite, PixelFormat.Format24bppRgb);
-            try
-            {
-                int bytes = Math.Abs(data.Stride) * h;
-                var buf = new byte[bytes];
-                Marshal.Copy(data.Scan0, buf, 0, bytes);
-
-                long sum = 0;
-                for (int i = 0; i < bytes; i += 3) sum += buf[i];
-                long count = bytes / 3;
-                double mean = count > 0 ? (double)sum / count : 255;
-
-                if (mean < 110) // dark background → invert
-                {
-                    for (int i = 0; i < bytes; i++) buf[i] = (byte)(255 - buf[i]);
-                    Marshal.Copy(buf, 0, data.Scan0, bytes);
-                }
-            }
-            finally { gray.UnlockBits(data); }
-
-            using var outMs = new MemoryStream();
-            gray.Save(outMs, ImageFormat.Png);
-            return outMs.ToArray();
-        }
-        catch
-        {
-            return png; // preprocessing is best-effort
-        }
-    }
-
-    private static (List<OcrWord> words, float confidence) RunSingle(string lang, Tesseract.Pix pix, float scaleUp)
-    {
-        var words = new List<OcrWord>();
-        try
-        {
-            using var engine = new Tesseract.TesseractEngine(TessdataService.StorageDir, lang, Tesseract.EngineMode.Default);
-            using var page = engine.Process(pix);
-            float conf = page.GetMeanConfidence();
-
-            double inv = 1.0 / scaleUp;
-            using var iter = page.GetIterator();
-            iter.Begin();
-            do
-            {
-                if (iter.TryGetBoundingBox(Tesseract.PageIteratorLevel.Word, out var r))
-                {
-                    var text = iter.GetText(Tesseract.PageIteratorLevel.Word)?.Trim();
-                    if (!string.IsNullOrEmpty(text))
-                        words.Add(new OcrWord(text,
-                            new Rect(r.X1 * inv, r.Y1 * inv, (r.X2 - r.X1) * inv, (r.Y2 - r.Y1) * inv)));
-                }
-            }
-            while (iter.Next(Tesseract.PageIteratorLevel.Word));
-            return (words, conf);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Tesseract lang '{lang}' failed: {ex.Message}");
-            return (words, -1f);
-        }
-    }
-}
 
 public sealed class PpOcrV5Engine : IOcrEngine
 {
@@ -238,20 +54,21 @@ public sealed class PpOcrV5Engine : IOcrEngine
         }
     }
 
-    public async Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes)
+    public async Task<IReadOnlyList<OcrWord>> RecognizeAsync(byte[] pngBytes, CancellationToken ct = default)
     {
         if (!PpOcrV5Service.IsReady)
-            return Array.Empty<OcrWord>();
+            throw new OcrUnavailableException("PP-OCRv5 models are not installed.");
 
         IReadOnlyList<OcrWord> hints;
         try
         {
             hints = await new WinRtOcrEngine()
-                .RecognizeAsync(pngBytes)
+                .RecognizeAsync(pngBytes, ct)
                 .ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            Diagnostics.Log($"PP-OCRv5: Windows OCR hints unavailable ({ex.Message})");
             hints = Array.Empty<OcrWord>();
         }
 
@@ -259,6 +76,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
         {
             lock (Sync)
             {
+                ct.ThrowIfCancellationRequested();
                 try
                 {
                     EnsureInitialized();
@@ -302,12 +120,20 @@ public sealed class PpOcrV5Engine : IOcrEngine
                         }
                     }
 
-                    var detected = _detector!.TextDetect(detectorInput).Data;
-                    var detectorBounds = GetDetectorBounds(
-                        detected,
-                        detectorScale);
-                    detected?.ImgCropList?.Dispose();
-                    scaledDetectorImage?.Dispose();
+                    IReadOnlyList<Rect> detectorBounds;
+                    try
+                    {
+                        var detected = _detector!.TextDetect(detectorInput).Data;
+                        detectorBounds = GetDetectorBounds(
+                            detected,
+                            detectorScale);
+                        detected?.ImgCropList?.Dispose();
+                    }
+                    finally
+                    {
+                        scaledDetectorImage?.Dispose();
+                    }
+                    ct.ThrowIfCancellationRequested();
 
                     var expandedHints = rawHints
                         .Select(h =>
@@ -402,13 +228,12 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
                     if (usableHints.Length > 0)
                     {
-                        using var hintCrops = BuildCrops(
+                        var resultsByModel = RecognizeWordsPerModel(
                             image,
-                            usableHints.Select(h => h.BoundsPixels).ToArray(),
-                            padFraction: 0.04);
-
-                        var resultsByModel =
-                            RecognizeWithModels(hintCrops, requiredModels.Values);
+                            usableHints,
+                            wordModels,
+                            requiredModels.Values,
+                            ct);
 
                         for (int i = 0; i < usableHints.Length; i++)
                         {
@@ -466,6 +291,14 @@ public sealed class PpOcrV5Engine : IOcrEngine
                                 chosen = original;
                             }
 
+                            chosen = PreferLineScriptLookalike(
+                                chosen,
+                                i,
+                                wordModels[i],
+                                resultsByModel,
+                                hintLines,
+                                usableHints);
+
                             chosen = ReconcileBoundaryPunctuation(
                                 original,
                                 chosen);
@@ -497,7 +330,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
                             .ToArray();
 
                         var recoveryResults =
-                            RecognizeWithModels(recoveryCrops, recoveryModels);
+                            RecognizeWithModels(recoveryCrops, recoveryModels, ct);
 
                         for (int i = 0; i < recoveryRegions.Count; i++)
                         {
@@ -610,21 +443,56 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
                     return Deduplicate(MergeAdjacentFragments(image, words));
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[Clipsy] PP-OCRv5 failed: {ex.Message}");
-                    Reset();
-                    return Array.Empty<OcrWord>();
+                    Diagnostics.Log("PP-OCRv5 failed; returning Windows OCR result", ex);
+                    // Only a failing ONNX session needs a reload; heuristic bugs don't.
+                    if (ex is Microsoft.ML.OnnxRuntime.OnnxRuntimeException or DllNotFoundException or SEHException)
+                        Reset();
+                    if (hints.Count > 0) return hints;
+                    throw;
                 }
             }
-        }).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
+    }
+
+    // Each model reads only the words assigned to it: a CJK line never goes through the EN model.
+    // Result arrays stay indexed by word; slots a model didn't read are left default.
+    private static Dictionary<string, RapidOCRSharpOnnx.Models.RecResult[]> RecognizeWordsPerModel(
+        OpenCvSharp.Mat image,
+        IReadOnlyList<OcrWord> words,
+        IReadOnlyList<PpOcrV5RecognizerSpec>[] wordModels,
+        IEnumerable<PpOcrV5RecognizerSpec> models,
+        CancellationToken ct)
+    {
+        var results = new Dictionary<string, RapidOCRSharpOnnx.Models.RecResult[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var model in models.DistinctBy(m => m.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            ct.ThrowIfCancellationRequested();
+            int[] indices = Enumerable.Range(0, words.Count)
+                .Where(i => wordModels[i].Any(m => string.Equals(m.Key, model.Key, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+            if (indices.Length == 0) continue;
+
+            using var crops = BuildCrops(image, indices.Select(i => words[i].BoundsPixels).ToArray(), padFraction: 0.04);
+            var subset = GetRecognizer(model).TextRecognize(crops).Data;
+            var full = new RapidOCRSharpOnnx.Models.RecResult[words.Count];
+            for (int k = 0; k < indices.Length && k < subset.Length; k++)
+                full[indices[k]] = subset[k];
+            results[model.Key] = full;
+        }
+        return results;
     }
 
     private static Dictionary<string, RapidOCRSharpOnnx.Models.RecResult[]>
         RecognizeWithModels(
             DisposableList<RapidOCRSharpOnnx.Inference.PPOCR_Rec.Models.ImageIndex> crops,
-            IEnumerable<PpOcrV5RecognizerSpec> models)
+            IEnumerable<PpOcrV5RecognizerSpec> models,
+            CancellationToken ct)
     {
         var results =
             new Dictionary<string, RapidOCRSharpOnnx.Models.RecResult[]>(
@@ -634,6 +502,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
                      .GroupBy(m => m.Key, StringComparer.OrdinalIgnoreCase)
                      .Select(g => g.First()))
         {
+            ct.ThrowIfCancellationRequested();
             results[model.Key] = GetRecognizer(model)
                 .TextRecognize(crops)
                 .Data;
@@ -659,7 +528,8 @@ public sealed class PpOcrV5Engine : IOcrEngine
                 image.Height,
                 padFraction);
 
-            var crop = new OpenCvSharp.Mat(image, cropRect).Clone();
+            using var roi = new OpenCvSharp.Mat(image, cropRect);
+            var crop = roi.Clone();
             crops.Add(
                 new RapidOCRSharpOnnx.Inference.PPOCR_Rec.Models.ImageIndex(
                     crop,
@@ -997,17 +867,19 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
         string result = candidate;
 
+        // When both engines see boundary punctuation but disagree, keep the hint's ("[Beta]", not "Beta").
         int originalPrefix = LeadingNonAlphanumericLength(original);
         int candidatePrefix = LeadingNonAlphanumericLength(result);
 
         if (originalPrefix > 0 &&
             candidatePrefix > 0 &&
+            candidatePrefix < result.Length &&
             !string.Equals(
                 original[..originalPrefix],
                 result[..candidatePrefix],
                 StringComparison.Ordinal))
         {
-            result = result[candidatePrefix..];
+            result = original[..originalPrefix] + result[candidatePrefix..];
         }
 
         int originalSuffix = TrailingNonAlphanumericLength(original);
@@ -1015,15 +887,94 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
         if (originalSuffix > 0 &&
             candidateSuffix > 0 &&
+            candidateSuffix < result.Length &&
             !string.Equals(
                 original[^originalSuffix..],
                 result[^candidateSuffix..],
                 StringComparison.Ordinal))
         {
-            result = result[..^candidateSuffix];
+            result = result[..^candidateSuffix] + original[^originalSuffix..];
         }
 
         return result.Trim();
+    }
+
+    // Cyrillic and Latin letters that render identically in UI fonts.
+    private static readonly Dictionary<char, char> LookalikeToLatin = new()
+    {
+        ['А'] = 'A', ['В'] = 'B', ['Е'] = 'E', ['К'] = 'K', ['М'] = 'M', ['Н'] = 'H', ['О'] = 'O',
+        ['Р'] = 'P', ['С'] = 'C', ['Т'] = 'T', ['Х'] = 'X', ['У'] = 'Y', ['І'] = 'I', ['Ј'] = 'J', ['Ѕ'] = 'S',
+        ['а'] = 'a', ['е'] = 'e', ['о'] = 'o', ['р'] = 'p', ['с'] = 'c', ['у'] = 'y', ['х'] = 'x',
+        ['і'] = 'i', ['ј'] = 'j', ['ѕ'] = 's', ['п'] = 'n', ['к'] = 'k',
+    };
+
+    private static string LookalikeSkeleton(string text)
+    {
+        var chars = text.ToCharArray();
+        for (int i = 0; i < chars.Length; i++)
+            if (LookalikeToLatin.TryGetValue(chars[i], out var latin)) chars[i] = latin;
+        return new string(chars);
+    }
+
+    // "latin" / "cyrillic" when every letter is from that script, otherwise null.
+    private static string? PureLetterScript(string text)
+    {
+        bool latin = false, cyrillic = false, other = false;
+        foreach (char c in text)
+        {
+            if (!char.IsLetter(c)) continue;
+            if (c <= '\u024F') latin = true;
+            else if (c is >= '\u0400' and <= '\u04FF') cyrillic = true;
+            else other = true;
+        }
+        if (other || latin == cyrillic) return null;
+        return latin ? "latin" : "cyrillic";
+    }
+
+    /// <summary>Windows OCR with several profile languages reads "Open" as Cyrillic "Ореп" (and the
+    /// reverse). When a model produced the same glyphs in the script the rest of the line uses, take it.</summary>
+    private static string PreferLineScriptLookalike(
+        string chosen,
+        int wordIndex,
+        IReadOnlyList<PpOcrV5RecognizerSpec> models,
+        Dictionary<string, RapidOCRSharpOnnx.Models.RecResult[]> resultsByModel,
+        IReadOnlyList<HintLine> lines,
+        IReadOnlyList<OcrWord> hints)
+    {
+        string? chosenScript = PureLetterScript(chosen);
+        if (chosenScript == null) return chosen;
+
+        var line = lines.FirstOrDefault(l => l.WordIndices.Contains(wordIndex));
+        if (line == null) return chosen;
+        int latin = 0, cyrillic = 0;
+        foreach (int other in line.WordIndices)
+        {
+            if (other == wordIndex || hints[other].Text.Count(char.IsLetter) < 2) continue;
+            switch (PureLetterScript(hints[other].Text))
+            {
+                case "latin": latin++; break;
+                case "cyrillic": cyrillic++; break;
+            }
+        }
+        string? lineScript =
+            latin >= 2 && latin >= 2 * cyrillic ? "latin" :
+            cyrillic >= 2 && cyrillic >= 2 * latin ? "cyrillic" : null;
+        if (lineScript == null || lineScript == chosenScript) return chosen;
+
+        string skeleton = LookalikeSkeleton(chosen);
+        foreach (var model in models)
+        {
+            if (!resultsByModel.TryGetValue(model.Key, out var results) || wordIndex >= results.Length)
+                continue;
+            string candidate = NormalizeWhitespace(results[wordIndex].Label);
+            if (candidate.Length > 0 &&
+                PureLetterScript(candidate) == lineScript &&
+                string.Equals(LookalikeSkeleton(candidate), skeleton, StringComparison.Ordinal))
+            {
+                return candidate;
+            }
+        }
+        return chosen;
     }
 
     private static int LeadingNonAlphanumericLength(string text)
@@ -1152,6 +1103,17 @@ public sealed class PpOcrV5Engine : IOcrEngine
             Rect union = UnionBounds(word, detector);
             double extraWidth = union.Width - word.Width;
             if (extraWidth < Math.Max(2, word.Height * 0.12))
+                continue;
+
+            // Growing over a word-sized gap would swallow a neighbouring word the hints missed.
+            int wordSpace = Math.Max(3, (int)Math.Round(word.Height * 0.3));
+            if (union.X < word.X - 1 &&
+                LongestBlankRun(image, new Rect(union.X, word.Y, word.X - union.X + 2, word.Height), interiorOnly: true) >= wordSpace)
+                continue;
+            double wordRight = word.X + word.Width;
+            double unionRight = union.X + union.Width;
+            if (unionRight > wordRight + 1 &&
+                LongestBlankRun(image, new Rect(wordRight - 2, word.Y, unionRight - wordRight + 2, word.Height), interiorOnly: true) >= wordSpace)
                 continue;
 
             double area = detector.Width * detector.Height;
@@ -1284,60 +1246,17 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
         try
         {
-            using var crop = new OpenCvSharp.Mat(
-                image,
-                new OpenCvSharp.Rect(
-                    x0,
-                    y0,
-                    x1 - x0,
-                    y1 - y0));
-            using var gray = new OpenCvSharp.Mat();
-            using var binary = new OpenCvSharp.Mat();
-
-            OpenCvSharp.Cv2.CvtColor(
-                crop,
-                gray,
-                OpenCvSharp.ColorConversionCodes.BGR2GRAY);
-            OpenCvSharp.Cv2.Threshold(
-                gray,
-                binary,
-                0,
-                255,
-                OpenCvSharp.ThresholdTypes.Binary |
-                OpenCvSharp.ThresholdTypes.Otsu);
-
-            if (OpenCvSharp.Cv2.CountNonZero(binary) >
-                binary.Width * binary.Height / 2)
-            {
-                OpenCvSharp.Cv2.BitwiseNot(binary, binary);
-            }
-
-            int maxInkPerBlankColumn = Math.Max(
-                0,
-                (int)Math.Round(binary.Height * 0.03));
+            var rect = new OpenCvSharp.Rect(x0, y0, x1 - x0, y1 - y0);
+            var columns = InkPerColumn(image, rect);
+            int maxInkPerBlankColumn = Math.Max(0, (int)Math.Round(rect.Height * 0.03));
             int longestBlank = 0;
             int currentBlank = 0;
-
-            for (int x = 0; x < binary.Width; x++)
+            int foreground = 0;
+            foreach (int ink in columns)
             {
-                int ink = 0;
-                for (int y = 0; y < binary.Height; y++)
-                {
-                    if (binary.At<byte>(y, x) != 0)
-                        ink++;
-                }
-
-                if (ink <= maxInkPerBlankColumn)
-                {
-                    currentBlank++;
-                    longestBlank = Math.Max(
-                        longestBlank,
-                        currentBlank);
-                }
-                else
-                {
-                    currentBlank = 0;
-                }
+                foreground += ink;
+                currentBlank = ink <= maxInkPerBlankColumn ? currentBlank + 1 : 0;
+                longestBlank = Math.Max(longestBlank, currentBlank);
             }
 
             int wordGap = Math.Max(
@@ -1346,8 +1265,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
             if (longestBlank >= wordGap)
                 return false;
 
-            int foreground = OpenCvSharp.Cv2.CountNonZero(binary);
-            int area = binary.Width * binary.Height;
+            int area = rect.Width * rect.Height;
             return foreground >= Math.Max(
                 3,
                 (int)Math.Round(area * 0.025));
@@ -1477,6 +1395,15 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
                 if (models.Count == 0)
                     models = globalModels.Count > 0 ? globalModels : installed;
+
+                // Ink Windows OCR skipped is often in a script its languages don't cover, so the
+                // line's hints say nothing about it: also try the Latin and CJK models.
+                models = models
+                    .Concat(new[] { LangRec.EN, LangRec.CH }
+                        .Select(lang => installed.FirstOrDefault(m => m.Language == lang))
+                        .OfType<PpOcrV5RecognizerSpec>())
+                    .DistinctBy(m => m.Key, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
 
                 regions.Add(new RecoveryRegion(
                     candidate,
@@ -1734,12 +1661,21 @@ public sealed class PpOcrV5Engine : IOcrEngine
         if (segments.Count < 2)
             return [new OcrWord(normalized, bounds)];
 
-        string compact = RemoveWhitespace(normalized);
-        int[] weights = segments
-            .Select(segment => Math.Max(1, segment.Width))
-            .ToArray();
-
-        string[] textSegments = SplitTextByWeights(compact, weights);
+        // Trust the recognizer's own spaces when they agree with the visual gaps.
+        string[] tokens = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[] textSegments;
+        if (tokens.Length == segments.Count)
+        {
+            textSegments = tokens;
+        }
+        else
+        {
+            string compact = RemoveWhitespace(normalized);
+            int[] weights = segments
+                .Select(segment => Math.Max(1, segment.Width))
+                .ToArray();
+            textSegments = SplitTextByWeights(compact, weights);
+        }
         var result = new List<OcrWord>(textSegments.Length);
 
         for (int i = 0; i < textSegments.Length && i < segments.Count; i++)
@@ -1784,30 +1720,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
         try
         {
-            using var crop = new OpenCvSharp.Mat(
-                image,
-                new OpenCvSharp.Rect(x0, y0, width, height));
-            using var gray = new OpenCvSharp.Mat();
-            using var binary = new OpenCvSharp.Mat();
-
-            OpenCvSharp.Cv2.CvtColor(
-                crop,
-                gray,
-                OpenCvSharp.ColorConversionCodes.BGR2GRAY);
-            OpenCvSharp.Cv2.Threshold(
-                gray,
-                binary,
-                0,
-                255,
-                OpenCvSharp.ThresholdTypes.Binary |
-                OpenCvSharp.ThresholdTypes.Otsu);
-
-            if (OpenCvSharp.Cv2.CountNonZero(binary) >
-                binary.Width * binary.Height / 2)
-            {
-                OpenCvSharp.Cv2.BitwiseNot(binary, binary);
-            }
-
+            var columns = InkPerColumn(image, new OpenCvSharp.Rect(x0, y0, width, height));
             int minGap = Math.Max(5, (int)Math.Round(height * 0.40));
             int maxInk = Math.Max(0, (int)Math.Round(height * 0.03));
             int edgeGuard = Math.Max(1, (int)Math.Round(width * 0.04));
@@ -1817,12 +1730,7 @@ public sealed class PpOcrV5Engine : IOcrEngine
 
             for (int x = edgeGuard; x < width - edgeGuard; x++)
             {
-                int ink = 0;
-                for (int y = 0; y < height; y++)
-                {
-                    if (binary.At<byte>(y, x) != 0)
-                        ink++;
-                }
+                int ink = columns[x];
 
                 if (ink <= maxInk)
                 {
@@ -1868,6 +1776,58 @@ public sealed class PpOcrV5Engine : IOcrEngine
         catch
         {
             return Array.Empty<OpenCvSharp.Rect>();
+        }
+    }
+
+    /// <summary>Ink pixel count per column after Otsu binarization (text polarity normalized).</summary>
+    private static int[] InkPerColumn(OpenCvSharp.Mat image, OpenCvSharp.Rect rect)
+    {
+        using var crop = new OpenCvSharp.Mat(image, rect);
+        using var gray = new OpenCvSharp.Mat();
+        using var binary = new OpenCvSharp.Mat();
+        OpenCvSharp.Cv2.CvtColor(crop, gray, OpenCvSharp.ColorConversionCodes.BGR2GRAY);
+        OpenCvSharp.Cv2.Threshold(gray, binary, 0, 1,
+            OpenCvSharp.ThresholdTypes.Binary | OpenCvSharp.ThresholdTypes.Otsu);
+        // Background is the majority class; make ink = 1.
+        if (OpenCvSharp.Cv2.CountNonZero(binary) > binary.Width * binary.Height / 2)
+            OpenCvSharp.Cv2.Subtract(OpenCvSharp.Scalar.All(1), binary, binary);
+        using var sums = new OpenCvSharp.Mat();
+        OpenCvSharp.Cv2.Reduce(binary, sums, OpenCvSharp.ReduceDimension.Row,
+            OpenCvSharp.ReduceTypes.Sum, OpenCvSharp.MatType.CV_32S);
+        var columns = new int[rect.Width];
+        for (int x = 0; x < columns.Length; x++) columns[x] = sums.At<int>(0, x);
+        return columns;
+    }
+
+    /// <summary>Longest run of ink-free columns inside <paramref name="bounds"/>;
+    /// <paramref name="interiorOnly"/> ignores blank margins at either edge.</summary>
+    private static int LongestBlankRun(OpenCvSharp.Mat image, Rect bounds, bool interiorOnly = false)
+    {
+        int x0 = Math.Clamp((int)Math.Floor(bounds.X), 0, image.Width - 1);
+        int y0 = Math.Clamp((int)Math.Floor(bounds.Y), 0, image.Height - 1);
+        int x1 = Math.Clamp((int)Math.Ceiling(bounds.X + bounds.Width), x0 + 1, image.Width);
+        int y1 = Math.Clamp((int)Math.Ceiling(bounds.Y + bounds.Height), y0 + 1, image.Height);
+        try
+        {
+            var columns = InkPerColumn(image, new OpenCvSharp.Rect(x0, y0, x1 - x0, y1 - y0));
+            int maxInk = Math.Max(0, (int)Math.Round((y1 - y0) * 0.03));
+            int start = 0, end = columns.Length;
+            if (interiorOnly)
+            {
+                while (start < end && columns[start] <= maxInk) start++;
+                while (end > start && columns[end - 1] <= maxInk) end--;
+            }
+            int longest = 0, current = 0;
+            for (int x = start; x < end; x++)
+            {
+                current = columns[x] <= maxInk ? current + 1 : 0;
+                longest = Math.Max(longest, current);
+            }
+            return longest;
+        }
+        catch
+        {
+            return 0;
         }
     }
 
@@ -1944,10 +1904,11 @@ public sealed class PpOcrV5Engine : IOcrEngine
         if (words.Count < 2)
             return words;
 
-        var sorted = words
-            .Where(w => !string.IsNullOrWhiteSpace(w.Text))
-            .OrderBy(w => w.BoundsPixels.Y)
-            .ThenBy(w => w.BoundsPixels.X)
+        // Reading order by line (not raw top edge), so same-line neighbours of different heights are adjacent.
+        var nonEmpty = words.Where(w => !string.IsNullOrWhiteSpace(w.Text)).ToList();
+        var sorted = OcrTextLayout.GroupLines(nonEmpty.Select(w => w.BoundsPixels).ToList())
+            .SelectMany(line => line)
+            .Select(i => nonEmpty[i])
             .ToList();
 
         var result = new List<OcrWord>(sorted.Count);
@@ -1976,13 +1937,39 @@ public sealed class PpOcrV5Engine : IOcrEngine
                     (!char.IsLetterOrDigit(left[^1]) ||
                      !char.IsLetterOrDigit(right[0]));
 
+                // Split tokens ("1" + ".30", "Ctrl" + "+S") rejoin across a small gap, but
+                // punctuation that is normally followed/preceded by a space ("Hello," "world!",
+                // "tax" "(incl.", "—") only joins when the glyphs actually touch.
+                bool spacedPunctuation =
+                    (",;:!?)]}»”".Contains(left[^1]) && char.IsLetterOrDigit(right[0])) ||
+                    ("([{«“".Contains(right[0]) && char.IsLetterOrDigit(left[^1])) ||
+                    "—–".Contains(left[^1]) || "—–".Contains(right[0]);
+                double maxGap = spacedPunctuation
+                    ? Math.Max(1.5, height * 0.12)
+                    : Math.Max(3, height * 0.45);
+
                 bool punctuationJoin =
                     boundaryPunctuation &&
                     gap >= -height * 0.15 &&
-                    gap <= Math.Max(3, height * 0.45);
+                    gap <= maxGap;
 
                 if (!punctuationJoin)
                     break;
+
+                // Boxes may be detector-padded until they touch; a real word space still shows as
+                // blank columns. Checked only where a space is plausible: after "," etc., and around
+                // a standalone symbol ("cold / 0.25"). Hyphens and periods look blank to this test.
+                bool standaloneSymbol =
+                    !left.Any(char.IsLetterOrDigit) || !right.Any(char.IsLetterOrDigit);
+                if (spacedPunctuation || standaloneSymbol)
+                {
+                    double from = a.X + a.Width * 0.5;
+                    double to = b.X + b.Width * 0.5;
+                    var between = new Rect(from, Math.Min(a.Y, b.Y), Math.Max(1, to - from), height);
+                    double space = height * (spacedPunctuation ? 0.15 : 0.22);
+                    if (LongestBlankRun(image, between) >= Math.Max(2, space))
+                        break;
+                }
 
                 if (gap > 1 &&
                     FindStrongVisualSegments(
@@ -2286,74 +2273,4 @@ public sealed class PpOcrV5Engine : IOcrEngine
         {
             MaxSideLen = 2400,
         };
-}
-
-public static class OcrLanguageHint
-{
-    public static async Task<TessdataLang?> DetectAsync(byte[] pngBytes)
-    {
-        try
-        {
-            var words = await new WinRtOcrEngine().RecognizeAsync(pngBytes);
-            if (words.Count == 0) return null;
-
-            int latin = 0, cyrillic = 0, cjk = 0, kana = 0, hangul = 0, arabic = 0, total = 0;
-            foreach (var w in words)
-            {
-                foreach (var ch in w.Text)
-                {
-                    if (char.IsWhiteSpace(ch) || char.IsDigit(ch) || char.IsPunctuation(ch) || char.IsSymbol(ch))
-                        continue;
-                    total++;
-                    if (ch >= 0x4E00 && ch <= 0x9FFF) cjk++;
-                    else if (ch >= 0x3040 && ch <= 0x30FF) kana++;
-                    else if (ch >= 0xAC00 && ch <= 0xD7A3) hangul++;
-                    else if (ch >= 0x0600 && ch <= 0x06FF) arabic++;
-                    else if (ch >= 0x0400 && ch <= 0x04FF) cyrillic++;
-                    else if (ch < 0x0250) latin++;
-                }
-            }
-            if (total < 3) return null;
-
-            // Kana is unambiguous Japanese even when kanji outnumber it.
-            string? best;
-            if (kana >= 2) best = "jpn";
-            else
-            {
-                // Pick the dominant script; require a clear majority for confidence.
-                (string code, int count)[] scripts =
-                {
-                    ("kor", hangul),
-                    ("ara", arabic),
-                    ("chi_sim", cjk),
-                    ("rus", cyrillic),
-                    ("eng", latin),
-                };
-                best = null; int bestCount = 0;
-                foreach (var (code, count) in scripts)
-                    if (count > bestCount) { bestCount = count; best = code; }
-                if (best == null || bestCount < total * 0.4) return null;
-            }
-            return TessdataService.Catalog.FirstOrDefault(c => c.Code == best);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-}
-
-public static class OcrEngineFactory
-{
-    public static IOcrEngine Resolve()
-    {
-        var configured = SettingsService.Instance.Settings.OcrEngine;
-        if (string.Equals(configured, "Tesseract", StringComparison.OrdinalIgnoreCase)
-            && TessdataService.InstalledSelectedCodes().Count > 0)
-            return new TesseractOcrEngine();
-        if (string.Equals(configured, "PPOCRv5", StringComparison.OrdinalIgnoreCase)
-            && PpOcrV5Service.IsReady)
-            return new PpOcrV5Engine();
-        return new WinRtOcrEngine();
-    }
 }

@@ -1,0 +1,11 @@
+Готово.
+Смешанный RU+EN OCR переделан.
+fast-path, recognizer, cold/warm, PrintScreen/NVIDIA, lazy-Win2D, PP-OCRv5 в тесте
+распознаются нормально.
+Steam-кейс: 0.88 с cold / 0.25 с warm.
+Смешанный большой текст: 1.92 с cold / 1.30 с warm.
+x64: 0 ошибок.
+ARM64: 0 ошибок.
+Commit f50737f запушен в main.
+Working tree чистый.
+Текущий Release запущен, PID 34096.
