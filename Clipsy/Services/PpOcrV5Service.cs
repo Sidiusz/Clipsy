@@ -102,7 +102,7 @@ public static class PpOcrV5Service
         await DownloadConcurrencyGate.WaitAsync(ct);
         try
         {
-            PpOcrV5Engine.Reset();
+            // New model files are picked up lazily; loaded sessions stay valid.
             Directory.CreateDirectory(StorageDir);
 
             using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
@@ -133,7 +133,10 @@ public static class PpOcrV5Service
         }
     }
 
-    public static void DeleteModel(string key)
+    // Off the UI thread: Reset waits for an OCR run in progress to release its lock.
+    public static Task DeleteModelAsync(string key) => Task.Run(() => DeleteModel(key));
+
+    private static void DeleteModel(string key)
     {
         var model = RecognizerModels.FirstOrDefault(m =>
             string.Equals(m.Key, key, StringComparison.OrdinalIgnoreCase));
@@ -257,7 +260,7 @@ public static class PpOcrV5Service
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Clipsy] PP-OCRv5 directory cleanup failed: {ex.Message}");
+            Diagnostics.Log($"PP-OCRv5 directory cleanup failed: {ex.Message}");
         }
     }
 
@@ -270,7 +273,7 @@ public static class PpOcrV5Service
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Clipsy] PP-OCRv5 cleanup failed: {ex.Message}");
+            Diagnostics.Log($"PP-OCRv5 cleanup failed: {ex.Message}");
         }
     }
 }

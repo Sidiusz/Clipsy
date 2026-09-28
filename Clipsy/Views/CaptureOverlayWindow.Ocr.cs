@@ -22,10 +22,17 @@ public sealed partial class CaptureOverlayWindow
 {
     // ---------- OCR ----------
 
+    private int _ocrRun;
+    private System.Threading.CancellationTokenSource? _ocrCts;
+    private ScreenshotRenderer.PixelRect _ocrCrop;
+
     private async Task EnterOcrModeAsync()
     {
         if (!_hasSelection || _inOcrMode) return;
         _inOcrMode = true;
+        int run = ++_ocrRun;
+        _ocrCts?.Cancel();
+        var cts = _ocrCts = new System.Threading.CancellationTokenSource();
         SetTool(ToolKind.None);
         BottomToolbar.Visibility = Visibility.Collapsed;
         // Right toolbar stays visible during scan but its tools become
@@ -42,27 +49,46 @@ public sealed partial class CaptureOverlayWindow
         StartScanAnimation();
 
         IReadOnlyList<OcrWord> words;
+        var frame = _frame;
+        var selection = _selectionRect;
+        double scale = DpiScale;
+        _ocrCrop = ScreenshotRenderer.ToPixelRect(selection, scale, frame.PixelWidth, frame.PixelHeight);
         try
         {
-            var png = ScreenshotRenderer.RenderPng(_frame, _selectionRect, Array.Empty<DrawElement>(), DpiScale);
+            var png = await Task.Run(() => ScreenshotRenderer.RenderPng(frame, selection, Array.Empty<DrawElement>(), scale));
             var engine = OcrEngineFactory.Resolve();
-            words = await engine.RecognizeAsync(png);
+            words = await engine.RecognizeAsync(png, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (OcrUnavailableException ex)
+        {
+            Diagnostics.Log($"OCR unavailable: {ex.Message}");
+            if (run == _ocrRun) NotificationService.Error("ErrOcrUnavailable");
+            words = Array.Empty<OcrWord>();
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] OCR failed: {ex.Message}");
-            NotificationService.Error("ErrOcrFailed");
+            Diagnostics.Log("OCR failed", ex);
+            if (run == _ocrRun) NotificationService.Error("ErrOcrFailed");
             words = Array.Empty<OcrWord>();
         }
 
+        // Esc, a re-entered scan or a new capture superseded this run: drop its result.
+        if (run != _ocrRun || !_inOcrMode) return;
         StopScanAnimation();
-        if (!_inOcrMode) return;
         RenderOcrResults(words);
     }
 
     private void ExitOcrMode()
     {
         _inOcrMode = false;
+        _ocrRun++;
+        _ocrCts?.Cancel();
+        _ocrCts = null;
+        _translateRun++;
         StopScanAnimation();
         OcrLayer.Visibility = Visibility.Collapsed;
         ClearOcrVisuals();
@@ -141,19 +167,16 @@ public sealed partial class CaptureOverlayWindow
 
     private void ClearOcrVisuals()
     {
-        foreach (var (_, box, glyph) in _ocrVisuals)
-        {
+        foreach (var (_, box) in _ocrVisuals)
             OcrLayer.Children.Remove(box);
-            OcrLayer.Children.Remove(glyph);
-        }
         _ocrVisuals.Clear();
         _ocrWordsRaw.Clear();
         _ocrWordsDip.Clear();
-        _ocrSelected.Clear();
     }
 
     private void RenderOcrResults(IReadOnlyList<OcrWord> words)
     {
+        ClearOcrVisuals();
         if (words.Count == 0)
         {
             OcrStatusLabel.Text = Strings.Get("NoTextFound");
@@ -165,11 +188,10 @@ public sealed partial class CaptureOverlayWindow
             return;
         }
 
-        // Map word bounds from source-bitmap pixels to root DIPs:
-        //   root = selection origin + (pixel / dpiScale)
+        // Word bounds are pixels of the cropped image; map back through the crop origin to root DIPs.
         var scale = DpiScale;
-        var ox = _selectionRect.X;
-        var oy = _selectionRect.Y;
+        var ox = _ocrCrop.X / scale;
+        var oy = _ocrCrop.Y / scale;
 
         foreach (var w in words)
         {
@@ -192,61 +214,14 @@ public sealed partial class CaptureOverlayWindow
             Canvas.SetTop(rect, b.Y);
             OcrLayer.Children.Add(rect);
 
-            _ocrVisuals.Add((b, rect, new TextBlock()));
+            _ocrVisuals.Add((b, rect));
         }
 
-        // Build sorted, line-grouped text for the text panel.
-        OcrTextBox.Text = BuildSortedText();
+        OcrTextBox.Text = OcrTextLayout.BuildText(words);
         OcrToolbar.Visibility = Visibility.Collapsed;
         OcrPanelsContainer.Visibility = Visibility.Visible;
         PositionOcrPanelsContainer();
         SetOcrButtonsEnabled(true);
-    }
-
-    private string BuildSortedText()
-    {
-        if (_ocrWordsDip.Count == 0) return string.Empty;
-        // Estimate a typical line height to group words into rows.
-        double medianH = _ocrWordsDip.Select(r => r.Height).OrderBy(h => h)
-            .ElementAt(_ocrWordsDip.Count / 2);
-        double lineTolerance = System.Math.Max(4, medianH * 0.55);
-
-        // Pair indices with bounds and sort by Y, then X.
-        var sorted = Enumerable.Range(0, _ocrWordsDip.Count)
-            .OrderBy(i => _ocrWordsDip[i].Y)
-            .ThenBy(i => _ocrWordsDip[i].X)
-            .ToList();
-
-        var sb = new StringBuilder();
-        double currentLineY = double.NaN;
-        var lineBuffer = new List<int>();
-
-        void Flush()
-        {
-            if (lineBuffer.Count == 0) return;
-            lineBuffer.Sort((a, b) => _ocrWordsDip[a].X.CompareTo(_ocrWordsDip[b].X));
-            for (int k = 0; k < lineBuffer.Count; k++)
-            {
-                if (k > 0) sb.Append(' ');
-                sb.Append(_ocrWordsRaw[lineBuffer[k]].Text);
-            }
-            sb.AppendLine();
-            lineBuffer.Clear();
-        }
-
-        foreach (var i in sorted)
-        {
-            var y = _ocrWordsDip[i].Y;
-            if (double.IsNaN(currentLineY)) currentLineY = y;
-            if (System.Math.Abs(y - currentLineY) > lineTolerance)
-            {
-                Flush();
-                currentLineY = y;
-            }
-            lineBuffer.Add(i);
-        }
-        Flush();
-        return sb.ToString().TrimEnd();
     }
 
     private void PositionOcrPanelsContainer()
@@ -266,87 +241,6 @@ public sealed partial class CaptureOverlayWindow
         if (tx < 8) tx = 8;
         Canvas.SetLeft(OcrPanelsContainer, tx);
         Canvas.SetTop(OcrPanelsContainer, ty);
-    }
-
-    private void UpdateOcrDragSelection(Point pos)
-    {
-        var dragRoot = MakeRect(_ocrDragStart, pos);
-        var dragLocal = new Rect(
-            dragRoot.X - _selectionRect.X,
-            dragRoot.Y - _selectionRect.Y,
-            dragRoot.Width,
-            dragRoot.Height);
-        _ocrSelected.Clear();
-        for (int i = 0; i < _ocrWordsDip.Count; i++)
-        {
-            if (RectsIntersect(_ocrWordsDip[i], dragLocal)) _ocrSelected.Add(i);
-        }
-        UpdateOcrSelectionVisual();
-    }
-
-    private void FinishOcrSelection(Point pos)
-    {
-        var dragRoot = MakeRect(_ocrDragStart, pos);
-        if (dragRoot.Width < 4 && dragRoot.Height < 4)
-        {
-            var local = new Point(_ocrDragStart.X - _selectionRect.X, _ocrDragStart.Y - _selectionRect.Y);
-            int idx = -1;
-            for (int i = 0; i < _ocrWordsDip.Count; i++)
-            {
-                var b = _ocrWordsDip[i];
-                if (local.X >= b.X && local.X <= b.X + b.Width && local.Y >= b.Y && local.Y <= b.Y + b.Height)
-                {
-                    idx = i;
-                    break;
-                }
-            }
-            _ocrSelected.Clear();
-            if (idx >= 0) _ocrSelected.Add(idx);
-            UpdateOcrSelectionVisual();
-        }
-    }
-
-    private static bool RectsIntersect(Rect a, Rect b)
-    {
-        return !(b.X > a.X + a.Width || b.X + b.Width < a.X || b.Y > a.Y + a.Height || b.Y + b.Height < a.Y);
-    }
-
-    private void UpdateOcrSelectionVisual()
-    {
-        var unsel = new SolidColorBrush(Color.FromArgb(80, 0xFF, 0xEB, 0x3B));
-        var sel = new SolidColorBrush(Color.FromArgb(170, 0xFF, 0xEB, 0x3B));
-        for (int i = 0; i < _ocrVisuals.Count; i++)
-        {
-            _ocrVisuals[i].box.Fill = _ocrSelected.Contains(i) ? sel : unsel;
-        }
-    }
-
-    private string GetSelectedOcrText()
-    {
-        if (_ocrSelected.Count == 0) return string.Empty;
-        var sorted = _ocrSelected
-            .OrderBy(i => _ocrWordsDip[i].Y)
-            .ThenBy(i => _ocrWordsDip[i].X)
-            .ToList();
-        var sb = new StringBuilder();
-        double lastY = double.NaN;
-        double lastH = 0;
-        foreach (var i in sorted)
-        {
-            var b = _ocrWordsDip[i];
-            if (!double.IsNaN(lastY) && System.Math.Abs(b.Y - lastY) > lastH * 0.6)
-            {
-                sb.AppendLine();
-            }
-            else if (sb.Length > 0)
-            {
-                sb.Append(' ');
-            }
-            sb.Append(_ocrWordsRaw[i].Text);
-            lastY = b.Y;
-            lastH = b.Height;
-        }
-        return sb.ToString();
     }
 
     private void PositionOcrToolbar()
@@ -383,14 +277,12 @@ public sealed partial class CaptureOverlayWindow
         if (string.IsNullOrWhiteSpace(text)) return;
         try
         {
-            var dp = new Windows.ApplicationModel.DataTransfer.DataPackage();
-            dp.SetText(text);
-            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dp);
-            Windows.ApplicationModel.DataTransfer.Clipboard.Flush();
+            await ClipboardService.SetTextAsync(text);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] OCR copy failed: {ex.Message}");
+            Diagnostics.Log("OCR copy failed", ex);
+            NotificationService.Error("ErrCopyFailed");
             return;
         }
         OcrStatusLabel.Text = Strings.Get("Copied");
@@ -401,6 +293,7 @@ public sealed partial class CaptureOverlayWindow
     }
 
     private string? _lastTranslateSource;
+    private int _translateRun;
 
     private async void OnOcrTranslate(object sender, RoutedEventArgs e)
     {
@@ -413,6 +306,7 @@ public sealed partial class CaptureOverlayWindow
 
     private async System.Threading.Tasks.Task DoTranslateAsync(string text)
     {
+        int run = ++_translateRun;
         _lastTranslateSource = text;
         TranslateTarget.Text = "...";
         TranslatePanel.Width = OcrTextPanel.ActualWidth;
@@ -423,16 +317,20 @@ public sealed partial class CaptureOverlayWindow
         string from = cfg.TranslateFrom;
         string to   = cfg.TranslateTo == "ui" ? Strings.Lang : cfg.TranslateTo;
 
-        // MyMemory doesn't support sl=auto; fall back to heuristic detection
-        if (from == "auto" && !string.Equals(cfg.TranslateService, "Google", StringComparison.OrdinalIgnoreCase))
+        if (!cfg.TranslationNoticeShown)
         {
-            var guessed = TranslationService.GuessLangPair(text);
-            from = guessed.from;
-            if (cfg.TranslateTo == "ui") to = guessed.to;
+            string serviceName = string.Equals(cfg.TranslateService, "Google", StringComparison.OrdinalIgnoreCase)
+                ? "Google Translate" : "MyMemory";
+            NotificationService.Post(NotificationLevel.Info, "Clipsy",
+                string.Format(Strings.Get("TranslateNotice"), serviceName), ToastCategory.Hint);
+            cfg.TranslationNoticeShown = true;
+            SettingsService.Instance.SaveState();
         }
 
-        var translated = await TranslationService.TranslateAsync(text, from, to, cfg.TranslateService);
-        TranslateTarget.Text = translated ?? Strings.Get("TranslateUnavailable");
+        var result = await TranslationService.TranslateAsync(text, from, to, cfg.TranslateService);
+        // A slower earlier request (language switched meanwhile) must not overwrite the newer one.
+        if (run != _translateRun || !_inOcrMode) return;
+        TranslateTarget.Text = result.Text ?? Strings.Get(result.ErrorKey ?? "TranslateUnavailable");
     }
 
     private void UpdateTranslateButtons()
@@ -492,7 +390,7 @@ public sealed partial class CaptureOverlayWindow
         var s = SettingsService.Instance.Settings;
         if (isFrom) s.TranslateFrom = code;
         else        s.TranslateTo   = code;
-        SettingsService.Instance.Save();
+        SettingsService.Instance.SaveState();
         UpdateTranslateButtons();
         if (!string.IsNullOrEmpty(_lastTranslateSource))
             await DoTranslateAsync(_lastTranslateSource);
