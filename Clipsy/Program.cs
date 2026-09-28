@@ -1,6 +1,6 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
-using System.Runtime.InteropServices;
 using Clipsy.Services;
 
 namespace Clipsy;
@@ -11,6 +11,7 @@ public static class Program
 {
     // Local\ scope is per-session, preventing collisions across RDP / fast-user-switch.
     private const string MutexName = "Local\\Clipsy.SingleInstance.v1";
+    private static readonly TimeSpan StartupGrace = TimeSpan.FromSeconds(20);
 
     [STAThread]
     public static int Main(string[] args)
@@ -21,28 +22,12 @@ public static class Program
         if (CliService.TryRun(args, out int cliExitCode))
             return cliExitCode;
 
-        TryEnablePerMonitorV2();
-        bool createdNew;
-        // Created-new is the authoritative signal; it also covers an abandoned
-        // mutex left by a crashed previous instance.
-        using var mutex = new Mutex(initiallyOwned: true, MutexName, out createdNew);
-        if (!createdNew)
-        {
-            // Live instance holds the mutex: hand off if it answers the ping,
-            // else it's hung — kill it and take over so relaunch isn't bricked.
-            if (SingleInstanceService.TryPingExisting())
-                return 0;
-            SingleInstanceService.KillStaleInstances();
-            bool acquired;
-            try { acquired = mutex.WaitOne(TimeSpan.FromSeconds(3)); }
-            catch (AbandonedMutexException) { acquired = true; }
-            if (!acquired)
-            {
-                Diagnostics.Log("Single-instance mutex was not released after stale-instance cleanup.");
-                return 0;
-            }
-        }
+        using var mutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
+        if (!createdNew && !TakeOver(mutex))
+            return 0;
 
+        // Pipe answers PING before XAML is up, so a relaunch during a slow start hands off instead of killing us.
+        SingleInstanceService.StartServer();
         ProcessWatchdog.StartForCurrentProcess();
 
         // Install native crash capture before XAML init so a fail-fast / AV
@@ -63,15 +48,40 @@ public static class Program
         }
         finally
         {
-            try { mutex.ReleaseMutex(); } catch { /* ignore — process exiting */ }
+            SingleInstanceService.StopServer();
+            try { mutex.ReleaseMutex(); } catch { /* process exiting */ }
         }
     }
 
-    private static void TryEnablePerMonitorV2()
+    /// <summary>Returns true once this process owns the mutex; false after handing off to a live instance.</summary>
+    private static bool TakeOver(Mutex mutex)
     {
-        try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch { }
+        var sw = Stopwatch.StartNew();
+        while (true)
+        {
+            switch (SingleInstanceService.Probe(out int pid))
+            {
+                case SingleInstanceService.ProbeResult.Alive:
+                    SingleInstanceService.TrySendRequest(CliService.SerializeRequest("activate", Array.Empty<string>()), out _);
+                    return false;
+                case SingleInstanceService.ProbeResult.Hung:
+                    Diagnostics.Log($"Existing instance pid={pid} is hung; replacing it.");
+                    SingleInstanceService.KillInstance(pid);
+                    return AcquireMutex(mutex, TimeSpan.FromSeconds(5));
+                default:
+                    // Starting up or shutting down: give it time before assuming it's wedged.
+                    if (AcquireMutex(mutex, TimeSpan.FromMilliseconds(500))) return true;
+                    if (sw.Elapsed < StartupGrace) continue;
+                    Diagnostics.Log("Existing instance never answered; replacing it.");
+                    SingleInstanceService.KillStaleInstances();
+                    return AcquireMutex(mutex, TimeSpan.FromSeconds(5));
+            }
+        }
     }
 
-    [DllImport("user32.dll")]
-    private static extern bool SetProcessDpiAwarenessContext(IntPtr dpiContext);
+    private static bool AcquireMutex(Mutex mutex, TimeSpan timeout)
+    {
+        try { return mutex.WaitOne(timeout); }
+        catch (AbandonedMutexException) { return true; }
+    }
 }

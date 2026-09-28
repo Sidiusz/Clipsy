@@ -21,6 +21,7 @@ public static class Diagnostics
                 var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clipsy");
                 Directory.CreateDirectory(dir);
                 _logPath = Path.Combine(dir, "debug.log");
+                RotateIfLarge(_logPath);
             }
             catch
             {
@@ -28,6 +29,20 @@ public static class Diagnostics
             }
             return _logPath;
         }
+    }
+
+    private const long MaxLogBytes = 2 * 1024 * 1024;
+
+    /// <summary>Keeps one previous generation (name.old.log) once the file passes 2 MB.</summary>
+    public static void RotateIfLarge(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length < MaxLogBytes) return;
+            File.Move(path, Path.ChangeExtension(path, ".old.log"), overwrite: true);
+        }
+        catch { }
     }
 
     public static void Log(string message)
@@ -71,7 +86,9 @@ public static class Diagnostics
         try
         {
             var body = $"{context}\n\n{ex.GetType().Name}: {ex.Message}\n\nFull details: {LogPath}";
-            MessageBoxW(IntPtr.Zero, body, "Clipsy error", 0x00000010 /* MB_ICONERROR */);
+            string caption = "Clipsy";
+            try { caption = Clipsy.Localization.Strings.Get("ErrDialogCaption"); } catch { }
+            MessageBoxW(IntPtr.Zero, body, caption, 0x00000010 /* MB_ICONERROR */);
         }
         catch { }
     }

@@ -144,7 +144,9 @@ public static class ProcessWatchdog
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Clipsy");
             Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "watchdog.log"), $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
+            string path = Path.Combine(dir, "watchdog.log");
+            Diagnostics.RotateIfLarge(path);
+            File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
         }
         catch { }
     }

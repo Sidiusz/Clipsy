@@ -18,6 +18,9 @@ public sealed partial class MainWindow : Window
 
     public event Action? CaptureRequested;
     public event Action? MenuRequested;
+    public event Action? SessionEnding;
+
+    private SubclassProc? _subclassProc;
 
     public ICommand CaptureCommand  { get; }
     public ICommand ShowMenuCommand { get; }
@@ -33,6 +36,21 @@ public sealed partial class MainWindow : Window
         WireTrayCommands();
         ApplyLocalization();
         HideAsTrayHost();
+        _subclassProc = HostWndProc;
+        SetWindowSubclass(Hwnd, _subclassProc, UIntPtr.Zero, IntPtr.Zero);
+    }
+
+    // Logoff/shutdown and installer Restart Manager end the process on purpose;
+    // tell the watchdog so it doesn't treat it as a crash and relaunch.
+    private IntPtr HostWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr id, IntPtr data)
+    {
+        if (msg == WM_ENDSESSION && wParam != IntPtr.Zero)
+        {
+            ProcessWatchdog.MarkCleanExit();
+            SingleInstanceService.StopServer();
+            try { SessionEnding?.Invoke(); } catch (Exception ex) { Diagnostics.Log("SessionEnding", ex); }
+        }
+        return DefSubclassProc(hWnd, msg, wParam, lParam);
     }
 
     public TaskbarIcon TrayIconControl => TrayIcon;
@@ -65,7 +83,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] Tray icon load failed: {ex.Message}");
+            Diagnostics.Log("Tray icon load failed", ex);
         }
     }
 
@@ -81,6 +99,11 @@ public sealed partial class MainWindow : Window
     }
 
     // ---------- Win32 ----------
+
+    private const uint WM_ENDSESSION = 0x0016;
+    private delegate IntPtr SubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, UIntPtr id, IntPtr data);
+    [DllImport("comctl32.dll")] private static extern bool SetWindowSubclass(IntPtr hWnd, SubclassProc proc, UIntPtr id, IntPtr data);
+    [DllImport("comctl32.dll")] private static extern IntPtr DefSubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);

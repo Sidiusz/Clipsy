@@ -14,16 +14,23 @@ public static class AutostartService
     private const string LegacyTaskName = "ClipsyAutostart";
     private const string SettingsKey = @"Software\Clipsy";
     private const string OptOutValue = "AutostartOptOut";
+    private const string MigrationDeclinedValue = "LegacyTaskElevationDeclined";
+    private const string StartupApprovedKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+    private static readonly object _sync = new();
     private static bool _legacyChecked;
     private static bool _legacyPresent;
 
     public static bool IsEnabled()
     {
-        try { return HasRunEntry() || CachedLegacyTaskExists(); }
+        try { return (HasRunEntry() && !IsDisabledInTaskManager()) || CachedLegacyTaskExists(); }
         catch (Exception ex) { Diagnostics.Log("AutostartService.IsEnabled", ex); return false; }
     }
 
-    public static void MigrateLegacyScheduledTask()
+    /// <summary>Removes the legacy scheduled task off the UI thread; asks for UAC at most once.</summary>
+    public static void MigrateLegacyScheduledTaskInBackground()
+        => System.Threading.Tasks.Task.Run(MigrateLegacyScheduledTask);
+
+    private static void MigrateLegacyScheduledTask()
     {
         try
         {
@@ -33,10 +40,10 @@ public static class AutostartService
             if (!optedOut && string.IsNullOrEmpty(path)) return;
 
             // Never create the Run entry before the legacy task is gone, or both
-            // mechanisms would launch Clipsy at the next sign-in. A one-time UAC
-            // prompt may be required because old builds created /RL HIGHEST tasks.
-            bool removed = RemoveLegacyScheduledTask(elevateIfNeeded: true);
-            _legacyPresent = !removed;
+            // mechanisms would launch Clipsy at the next sign-in. Old builds created
+            // /RL HIGHEST tasks, so deleting may need one UAC prompt.
+            bool removed = RemoveLegacyScheduledTask(elevateIfNeeded: !ElevationDeclined());
+            lock (_sync) _legacyPresent = !removed;
             if (!removed) return;
 
             if (optedOut) DeleteRunEntry();
@@ -92,36 +99,66 @@ public static class AutostartService
                 if (string.IsNullOrEmpty(path)) return;
                 SetRunEntry(path);
                 SetOptOut(false);
-                _legacyChecked = true;
-                _legacyPresent = !RemoveLegacyScheduledTask(elevateIfNeeded: false);
+                bool present = !RemoveLegacyScheduledTask(elevateIfNeeded: false);
+                lock (_sync) { _legacyChecked = true; _legacyPresent = present; }
             }
             else
             {
                 DeleteRunEntry();
                 SetOptOut(true);
-                _legacyChecked = true;
-                _legacyPresent = !RemoveLegacyScheduledTask(elevateIfNeeded: true);
+                bool present = !RemoveLegacyScheduledTask(elevateIfNeeded: true);
+                lock (_sync) { _legacyChecked = true; _legacyPresent = present; }
             }
         }
         catch (Exception ex) { Diagnostics.Log("AutostartService.SetEnabled", ex); }
     }
 
+    // Entry must point at this exe; a stale path from a moved install doesn't count.
     private static bool HasRunEntry()
     {
         using var key = Registry.CurrentUser.OpenSubKey(RunKey);
-        return key?.GetValue(AppName) is string value && !string.IsNullOrWhiteSpace(value);
+        if (key?.GetValue(AppName) is not string value || string.IsNullOrWhiteSpace(value)) return false;
+        var exe = GetExePath();
+        return exe == null || string.Equals(value.Trim().Trim('"'), exe, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void SetRunEntry(string path)
     {
-        using var key = Registry.CurrentUser.CreateSubKey(RunKey);
-        key?.SetValue(AppName, $"\"{path}\"", RegistryValueKind.String);
+        using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
+            key?.SetValue(AppName, $"\"{path}\"", RegistryValueKind.String);
+        ClearTaskManagerDisable();
     }
 
     private static void DeleteRunEntry()
     {
-        using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+        using (var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true))
+            key?.DeleteValue(AppName, throwOnMissingValue: false);
+        ClearTaskManagerDisable();
+    }
+
+    // Task Manager's Startup tab disables entries via StartupApproved (odd first byte = disabled).
+    private static bool IsDisabledInTaskManager()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(StartupApprovedKey);
+        return key?.GetValue(AppName) is byte[] data && data.Length > 0 && (data[0] & 1) == 1;
+    }
+
+    private static void ClearTaskManagerDisable()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(StartupApprovedKey, writable: true);
         key?.DeleteValue(AppName, throwOnMissingValue: false);
+    }
+
+    private static bool ElevationDeclined()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(SettingsKey);
+        return key?.GetValue(MigrationDeclinedValue) is int value && value == 1;
+    }
+
+    private static void SetElevationDeclined()
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(SettingsKey);
+        key?.SetValue(MigrationDeclinedValue, 1, RegistryValueKind.DWord);
     }
 
     private static bool IsOptedOut()
@@ -139,10 +176,17 @@ public static class AutostartService
 
     private static bool CachedLegacyTaskExists()
     {
-        if (_legacyChecked) return _legacyPresent;
-        _legacyPresent = LegacyTaskExists();
-        _legacyChecked = true;
-        return _legacyPresent;
+        lock (_sync)
+        {
+            if (_legacyChecked) return _legacyPresent;
+        }
+        bool present = LegacyTaskExists();
+        lock (_sync)
+        {
+            _legacyPresent = present;
+            _legacyChecked = true;
+            return present;
+        }
     }
 
     private static bool LegacyTaskExists()
@@ -169,8 +213,15 @@ public static class AutostartService
                 WindowStyle = ProcessWindowStyle.Hidden,
             });
             if (p == null) return false;
-            p.WaitForExit();
+            if (!p.WaitForExit(120_000)) return false;
             return p.ExitCode == 0 || !LegacyTaskExists();
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            // ERROR_CANCELLED: user declined UAC; don't ask again on every start.
+            Diagnostics.Log($"AutostartService: elevation declined ({ex.Message})");
+            SetElevationDeclined();
+            return false;
         }
         catch (Exception ex)
         {
