@@ -319,8 +319,7 @@ public sealed partial class CaptureOverlayWindow
 
         if (!cfg.TranslationNoticeShown)
         {
-            string serviceName = string.Equals(cfg.TranslateService, "Google", StringComparison.OrdinalIgnoreCase)
-                ? "Google Translate" : "MyMemory";
+            string serviceName = TranslationService.DisplayName(cfg.TranslateService);
             NotificationService.Post(NotificationLevel.Info, "Clipsy",
                 string.Format(Strings.Get("TranslateNotice"), serviceName), ToastCategory.Hint);
             cfg.TranslationNoticeShown = true;

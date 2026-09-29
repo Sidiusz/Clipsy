@@ -127,8 +127,9 @@ public sealed partial class SettingsWindow
         BuildPpOcrModelRows();
         // WinRT is the OCR engine default — append a localized "(default)" hint.
         OcrWinRt.Content   = Strings.Get("OptWinRtOcr") + defaultSuffix;
+        TrSvcBing.Content     = Strings.Get("OptBing") + defaultSuffix;
+        TrSvcGoogle.Content   = Strings.Get("OptGoogle");
         TrSvcMyMemory.Content = Strings.Get("OptMyMemory");
-        TrSvcGoogle.Content   = Strings.Get("OptGoogle") + defaultSuffix;
         FmtPng.Content     = Strings.Get("OptPngLossless");
         FmtJpg.Content     = Strings.Get("OptJpgSmaller");
         FmtWebp.Content    = Strings.Get("OptWebpPreview");

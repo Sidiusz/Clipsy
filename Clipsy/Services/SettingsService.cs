@@ -77,7 +77,7 @@ public sealed class AppSettings
     public string SkippedVersion { get; set; } = string.Empty;
 
     // Translation
-    public string TranslateService { get; set; } = "Google"; // Google / MyMemory — Google default for better quality + language coverage.
+    public string TranslateService { get; set; } = "Bing"; // Bing / Google / MyMemory
     public string TranslateFrom { get; set; } = "auto";
     public string TranslateTo { get; set; } = "ui"; // "ui" = current interface language
     public bool TranslationNoticeShown { get; set; }
@@ -128,7 +128,7 @@ public sealed class AppSettings
 
 public sealed class SettingsService
 {
-    public const int CurrentSettingsVersion = 1;
+    public const int CurrentSettingsVersion = 2;
     private static readonly Lazy<SettingsService> _instance = new(() => new SettingsService());
     public static SettingsService Instance => _instance.Value;
 
@@ -208,6 +208,11 @@ public sealed class SettingsService
             switch (version)
             {
                 case 0: version = 1; break;
+                // MyMemory was the old default and translates worst; move it to the new default once.
+                case 1:
+                    if (string.Equals(s.TranslateService, "MyMemory", StringComparison.OrdinalIgnoreCase)) s.TranslateService = "Bing";
+                    version = 2;
+                    break;
                 default: version = CurrentSettingsVersion; break;
             }
         }
@@ -222,6 +227,7 @@ public sealed class SettingsService
         s.Language = OneOf(s.Language, "auto", "auto", "en", "ru");
         s.Theme = OneOf(s.Theme, "auto", "auto", "dark", "light");
         s.OcrEngine = OneOf(s.OcrEngine, "WinRT", "WinRT", "Tesseract", "PPOCRv5");
+        s.TranslateService = OneOf(s.TranslateService, "Bing", "Bing", "Google", "MyMemory");
         s.ScreenshotFormat = OneOf(s.ScreenshotFormat, "png", "png", "jpg", "webp");
         s.VideoFormat = OneOf(s.VideoFormat, "mp4", "mp4", "avi", "mkv", "gif");
         s.VideoCodec = OneOf(s.VideoCodec, "H.264", "H.264", "H.265", "VP9", "AV1");

@@ -51,7 +51,7 @@ internal static class CliConfigService
         ["hotkey.select-monitor"] = new(nameof(AppSettings.HotkeySelectMonitor), Kind: Kind.OptionalHotkey),
         ["hotkey.record-save"] = new(nameof(AppSettings.HotkeyRecordSilentSave), Kind: Kind.OptionalHotkey),
         ["hotkey.mic"] = new(nameof(AppSettings.HotkeyMicToggle), Kind: Kind.OptionalHotkey),
-        ["translation.service"] = new(nameof(AppSettings.TranslateService), ["Google", "MyMemory"]),
+        ["translation.service"] = new(nameof(AppSettings.TranslateService), ["Bing", "Google", "MyMemory"]),
         ["translation.from"] = new(nameof(AppSettings.TranslateFrom), Kind: Kind.TranslateFrom),
         ["translation.to"] = new(nameof(AppSettings.TranslateTo), Kind: Kind.TranslateTo),
         ["notifications.enabled"] = new(nameof(AppSettings.NotificationsEnabled)),

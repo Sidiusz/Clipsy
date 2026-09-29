@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -14,13 +15,34 @@ public sealed record TranslationLang(string Code, string En, string Ru);
 /// <param name="ErrorKey">Localization key describing why <paramref name="Text"/> is null.</param>
 public sealed record TranslationResult(string? Text, string? ErrorKey = null);
 
-/// <summary>Translation via Google (unofficial endpoint) or MyMemory. Text leaves the machine;
-/// the overlay tells the user once before the first request.</summary>
+/// <summary>Translation via Microsoft (Bing web translator), Google (unofficial endpoint) or MyMemory,
+/// falling back to the next service when one fails. Text leaves the machine; the overlay tells the
+/// user once before the first request.</summary>
 public static class TranslationService
 {
-    // MyMemory counts bytes (500 max); Google's form POST takes ~5000 chars.
+    // MyMemory counts bytes (500 max); Google's form POST takes ~5000 chars; Bing's web API 1000.
     private const int ChunkLimitMyMemoryBytes = 480;
     private const int ChunkLimitGoogleChars = 4500;
+    private const int ChunkLimitBingChars = 1000;
+
+    public const string Bing = "Bing", Google = "Google", MyMemory = "MyMemory";
+    public static readonly IReadOnlyList<string> Services = new[] { Bing, Google, MyMemory };
+
+    public static string DisplayName(string service) => service switch
+    {
+        Bing => "Microsoft Translator",
+        Google => "Google Translate",
+        _ => "MyMemory",
+    };
+
+    // The chosen service first, then the rest in quality order.
+    internal static IEnumerable<string> FallbackOrder(string service)
+    {
+        var first = Services.FirstOrDefault(s => string.Equals(s, service, StringComparison.OrdinalIgnoreCase)) ?? Bing;
+        yield return first;
+        foreach (var s in Services)
+            if (s != first) yield return s;
+    }
 
     private static readonly HttpClient _http = CreateClient();
 
@@ -51,29 +73,51 @@ public static class TranslationService
     }
 
     public static async Task<TranslationResult> TranslateAsync(string text, string from, string to,
-        string service = "Google", CancellationToken ct = default)
+        string service = Bing, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(text)) return new TranslationResult(string.Empty);
-        bool google = string.Equals(service, "Google", StringComparison.OrdinalIgnoreCase);
 
-        // MyMemory has no working auto-detect. Text already in the target language is
-        // translated the other way (Russian UI + Russian text → English).
+        // Text already in the target language is translated the other way (Russian UI + Russian text → English).
         bool confident = true;
         string? source = from == "auto" ? DetectLanguage(text, out confident) : from;
-        if (!google && from == "auto") from = source ?? "en";
         if (source != null && confident && SameLanguage(source, to)) to = SameLanguage(source, "en") ? "ru" : "en";
 
+        TranslationResult? firstFailure = null;
+        foreach (var svc in FallbackOrder(service))
+        {
+            ct.ThrowIfCancellationRequested();
+            // MyMemory has no working auto-detect.
+            string svcFrom = svc == MyMemory && from == "auto" ? source ?? "en" : from;
+            var result = await TranslateWithAsync(svc, text, svcFrom, to, ct);
+            if (result.Text != null)
+            {
+                if (firstFailure != null) Diagnostics.Log($"Translate: {service} failed ({firstFailure.ErrorKey}), used {svc}");
+                return result;
+            }
+            firstFailure ??= result;
+        }
+        return firstFailure!;
+    }
+
+    private static async Task<TranslationResult> TranslateWithAsync(string service, string text, string from, string to, CancellationToken ct)
+    {
         try
         {
-            var chunks = google
-                ? PackChunks(text, s => s.Length, ChunkLimitGoogleChars)
-                : PackChunks(text, s => Encoding.UTF8.GetByteCount(s), ChunkLimitMyMemoryBytes);
+            var chunks = service switch
+            {
+                Bing => PackChunks(text, s => s.Length, ChunkLimitBingChars),
+                Google => PackChunks(text, s => s.Length, ChunkLimitGoogleChars),
+                _ => PackChunks(text, s => Encoding.UTF8.GetByteCount(s), ChunkLimitMyMemoryBytes),
+            };
             var sb = new StringBuilder();
             foreach (var (chunk, separator) in chunks)
             {
-                var translated = google
-                    ? await TranslateChunkGoogleAsync(chunk, from, to, ct)
-                    : await TranslateChunkMyMemoryAsync(chunk, from, to, ct);
+                var translated = service switch
+                {
+                    Bing => await BingTranslator.TranslateAsync(chunk, from, to, ct),
+                    Google => await TranslateChunkGoogleAsync(chunk, from, to, ct),
+                    _ => await TranslateChunkMyMemoryAsync(chunk, from, to, ct),
+                };
                 if (translated.Text == null) return translated;
                 sb.Append(translated.Text).Append(separator);
             }

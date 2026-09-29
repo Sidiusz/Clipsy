@@ -33,7 +33,7 @@ public static class Strings
         ["TranslateUnavailable"]= New("Translation unavailable", "Перевод недоступен"),
         ["TranslateQuota"]      = New("Translation limit reached. Try again later or switch the service in Settings.", "Лимит перевода исчерпан. Попробуйте позже или смените сервис в настройках."),
         ["TranslateNetwork"]    = New("Translation service is unreachable. Check the connection.", "Сервис перевода недоступен. Проверьте подключение."),
-        ["TranslateNotice"]     = New("Translation sends the recognized text to {0}.", "Для перевода распознанный текст отправляется в {0}."),
+        ["TranslateNotice"]     = New("Translation sends the recognized text to {0}; if it's unavailable, to another online translator.", "Для перевода распознанный текст отправляется в {0}, а если он недоступен — в другой онлайн-переводчик."),
 
         // Capture overlay - bottom toolbar tooltips
         ["TipRecord"]           = New("Record",     "Запись"),
@@ -295,6 +295,7 @@ public static class Strings
         ["LblTranslateTo"]        = New("Translate to...",               "Перевод на..."),
         ["HelperTranslateTo"]     = New("Language the text is translated into.", "Язык, на который переводится текст."),
         ["OptMyMemory"]           = New("MyMemory",            "MyMemory"),
+        ["OptBing"]               = New("Microsoft Translator", "Переводчик Microsoft"),
         ["OptGoogle"]             = New("Google Translate",    "Google Переводчик"),
         ["LangUiDefault"]         = New("Interface language",  "Язык интерфейса"),
         ["LangAutoDetect"]        = New("Auto-detect",         "Автоопределение"),
