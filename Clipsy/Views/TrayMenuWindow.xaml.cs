@@ -198,57 +198,43 @@ public sealed partial class TrayMenuWindow : Window
     }
 
 
-    // Renders the header update button from shared UpdateManager state:
-    // download → progress ring + percent → install.
+    // Header update button from shared UpdateManager state: download → percent → install.
     private void RenderUpdate()
     {
         try
         {
-            var text3   = ThemeService.GetBrush("ClipsyText3Brush", Content as FrameworkElement);
-            var green   = ThemeService.GetBrush("ClipsySuccessBrush", Content as FrameworkElement);
-            var warning = ThemeService.GetBrush("ClipsyWarningBrush", Content as FrameworkElement);
+            var info = UpdateManager.Info;
+            var phase = UpdateManager.Phase;
+            string current = $"v{UpdateService.CurrentVersion()}";
+            bool pending = info != null && phase is UpdatePhase.Available or UpdatePhase.Downloading or UpdatePhase.Ready;
+            HeaderVersion.Text = pending ? $"{current} → {info!.Version}" : current;
 
-            void Icon(string glyph, Microsoft.UI.Xaml.Media.Brush brush, bool hit, string tip)
+            UpdateBtn.IsEnabled = phase != UpdatePhase.Downloading;
+            switch (phase)
             {
-                UpdateRow.Visibility       = Visibility.Visible;
-                UpdateRow.IsHitTestVisible = hit;
-                UpdateRowIcon.Visibility   = Visibility.Visible;
-                UpdateRowIcon.Glyph        = glyph;
-                UpdateRowIcon.Foreground   = brush;
-                UpdateRing.Visibility      = Visibility.Collapsed;
-                UpdatePct.Visibility       = Visibility.Collapsed;
-                ToolTipService.SetToolTip(UpdateRow, tip);
-            }
-
-            switch (UpdateManager.Phase)
-            {
-                case UpdatePhase.Checking:
-                    Icon("", text3, false, Strings.Get("TrayUpdateChecking"));
-                    break;
-                case UpdatePhase.Available:
-                    Icon("", green, true, Strings.Get("TrayUpdateAvailable"));
+                case UpdatePhase.Available when info != null:
+                    UpdateBtn.Content = string.Format(Strings.Get("UpdBtnDownloadVer"), info.Version);
                     break;
                 case UpdatePhase.Downloading:
-                    UpdateRow.Visibility       = Visibility.Visible;
-                    UpdateRow.IsHitTestVisible = false;
-                    UpdateRowIcon.Visibility   = Visibility.Collapsed;
-                    UpdateRing.Visibility      = Visibility.Visible;
-                    UpdateRing.Value           = Math.Clamp(UpdateManager.Progress * 100.0, 0, 100);
-                    UpdatePct.Visibility       = Visibility.Visible;
-                    UpdatePct.Text             = ((int)(UpdateManager.Progress * 100)).ToString();
-                    UpdatePct.Foreground       = green;
-                    ToolTipService.SetToolTip(UpdateRow, Strings.Get("TrayUpdateDownloading"));
+                    UpdateBtn.Content = $"{(int)(UpdateManager.Progress * 100)}%";
                     break;
                 case UpdatePhase.Ready:
-                    Icon("", green, true, Strings.Get("TrayUpdateInstall"));
+                    UpdateBtn.Content = Strings.Get("UpdBtnInstallShort");
                     break;
                 case UpdatePhase.Failed:
-                    Icon("", warning, true, Strings.Get("TrayUpdateFailed"));
+                    UpdateBtn.Content = Strings.Get("UpdBtnRetry");
                     break;
-                default: // None / UpToDate
-                    UpdateRow.Visibility = Visibility.Collapsed;
-                    break;
+                default: // None / Checking / UpToDate
+                    UpdateBtn.Visibility = Visibility.Collapsed;
+                    return;
             }
+            UpdateBtn.Visibility = Visibility.Visible;
+            ToolTipService.SetToolTip(UpdateBtn, phase switch
+            {
+                UpdatePhase.Ready => Strings.Get("TrayUpdateInstall"),
+                UpdatePhase.Failed => Strings.Get("TrayUpdateFailed"),
+                _ => null,
+            });
         }
         catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.RenderUpdate", ex); }
     }
@@ -318,7 +304,7 @@ public sealed partial class TrayMenuWindow : Window
         SettingsTxt.Text         = Strings.Get("TraySettings");
         ExitTxt.Text             = Strings.Get("TrayExit");
         CaptureShortcut.Text     = FormatBinding(SettingsService.Instance.Settings.HotkeyCapture);
-        HeaderVersion.Text       = $"v{UpdateService.CurrentVersion()}";
+        RenderUpdate();
     }
 
     private static string FormatBinding(string? binding)
@@ -407,8 +393,8 @@ public sealed partial class TrayMenuWindow : Window
     private void OnExitClick(object s, TappedRoutedEventArgs e)
         { HideMenu(); ExitClicked?.Invoke(); }
 
-    private void OnUpdateRowTapped(object s, TappedRoutedEventArgs e)
-        { UpdateStatusClicked?.Invoke(); } // keep menu open to show download progress
+    private void OnUpdateClick(object s, RoutedEventArgs e)
+        => UpdateStatusClicked?.Invoke(); // menu stays open to show download progress
 
     // ─── Win32 ───
 

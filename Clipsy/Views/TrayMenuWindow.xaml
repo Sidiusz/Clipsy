@@ -28,27 +28,12 @@
                                Foreground="{ThemeResource ClipsyText3Brush}"
                                FontFamily="{StaticResource ClipsyFontFamily}"/>
                 </StackPanel>
-                <!-- Update button — same size as the logo, right-aligned.
-                     Visible only when Checking / Available / Failed. -->
-                <Grid x:Name="UpdateRow" Grid.Column="2"
-                      Width="34" Height="34" CornerRadius="6"
-                      Background="Transparent"
-                      Visibility="Collapsed"
-                      Tapped="OnUpdateRowTapped"
-                      IsHitTestVisible="False"
-                      VerticalAlignment="Top"
-                      Margin="0,2,0,0">
-                    <FontIcon x:Name="UpdateRowIcon" FontSize="18"
-                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    <ProgressRing x:Name="UpdateRing" Width="26" Height="26"
-                                  IsIndeterminate="False" Visibility="Collapsed"
-                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="UpdatePct" Visibility="Collapsed" FontSize="9"
-                               FontFamily="{StaticResource ClipsyFontFamily}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    <!-- Kept for code-behind compat; rendered off-screen. -->
-                    <TextBlock x:Name="UpdateRowText" Visibility="Collapsed" />
-                </Grid>
+                <!-- Labelled so the state can't be misread (a bare tick looked like "up to date"). -->
+                <Button x:Name="UpdateBtn" Grid.Column="2"
+                        Style="{StaticResource ClipsyButtonPrimary}"
+                        Visibility="Collapsed" VerticalAlignment="Center"
+                        Padding="10,4" FontSize="12" MinHeight="0"
+                        Click="OnUpdateClick" />
             </Grid>
 
             <!-- ── Separator 1 ── -->
