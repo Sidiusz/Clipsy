@@ -27,11 +27,23 @@
             </StackPanel>
         </Grid>
 
-        <StackPanel Grid.Row="1" Spacing="4" Padding="20,16,20,12">
-            <TextBlock x:Name="TitleLabel" Text="Changelog"
-                       Style="{StaticResource ClipsySectionTitle}" />
-            <TextBlock x:Name="HeaderLabel" Style="{StaticResource ClipsyHelper}" />
-        </StackPanel>
+        <Grid Grid.Row="1" Padding="20,16,20,12" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="TitleLabel" Text="Changelog"
+                           Style="{StaticResource ClipsySectionTitle}" />
+                <TextBlock x:Name="HeaderLabel" Style="{StaticResource ClipsyHelper}" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
+                <Button x:Name="UpdateActionBtn" Style="{StaticResource ClipsyButtonPrimary}"
+                        Visibility="Collapsed" Click="OnUpdateActionClick" HorizontalAlignment="Right" />
+                <ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Width="160"
+                             Visibility="Collapsed" />
+            </StackPanel>
+        </Grid>
 
         <ScrollViewer Grid.Row="2" Padding="20,0,20,20" VerticalScrollBarVisibility="Auto">
             <StackPanel x:Name="ReleaseList" Spacing="12" />

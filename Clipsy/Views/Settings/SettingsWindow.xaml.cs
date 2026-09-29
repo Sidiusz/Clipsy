@@ -1158,8 +1158,76 @@ public sealed partial class SettingsWindow : Window
         return result == ContentDialogResult.Primary;
     }
 
+    // The same button checks, then downloads/installs, so the result shows where the user clicked.
     private void OnCheckUpdates(object sender, RoutedEventArgs e)
-        => _ = UpdateManager.CheckAsync(true);
+    {
+        var phase = UpdateManager.Phase;
+        if (UpdateManager.Info != null && (phase is UpdatePhase.Available or UpdatePhase.Ready
+                || (phase == UpdatePhase.Failed && UpdateManager.DownloadFailed)))
+            UpdateManager.PrimaryAction();
+        else
+            _ = UpdateManager.CheckAsync(true);
+    }
+
+    private void RenderCheckButton()
+    {
+        var info = UpdateManager.Info;
+        var phase = UpdateManager.Phase;
+        string current = UpdateService.CurrentVersion();
+        string text = Strings.Get("BtnCheckNow"), glyph = "\uE72C";
+        string? status = null, statusBrush = null;
+        bool primary = false, enabled = true;
+        switch (phase)
+        {
+            case UpdatePhase.Checking:
+                text = Strings.Get("UpdChecking");
+                enabled = false;
+                break;
+            case UpdatePhase.UpToDate:
+                status = string.Format(Strings.Get("UpdLatestInstalled"), current);
+                statusBrush = "ClipsySuccessBrush";
+                break;
+            case UpdatePhase.Available when info != null:
+                text = string.Format(Strings.Get("UpdBtnDownloadVer"), info.Version);
+                glyph = "\uE896";
+                primary = true;
+                status = string.Format(Strings.Get("UpdAvailableRow"), info.Version, current);
+                statusBrush = "ClipsyAccentBrush";
+                break;
+            case UpdatePhase.Downloading when info != null:
+                text = $"{(int)(UpdateManager.Progress * 100)}%";
+                glyph = "\uE896";
+                enabled = false;
+                status = string.Format(Strings.Get("UpdDownloadingTitle"), info.Version);
+                break;
+            case UpdatePhase.Ready when info != null:
+                text = Strings.Get("UpdBtnInstallShort");
+                glyph = "\uE896";
+                primary = true;
+                status = string.Format(Strings.Get("UpdReady"), info.Version);
+                statusBrush = "ClipsyAccentBrush";
+                break;
+            case UpdatePhase.Failed when UpdateManager.DownloadFailed && info != null:
+                text = Strings.Get("UpdBtnReleasePage");
+                glyph = "\uE8A7";
+                status = string.Format(Strings.Get("UpdDownloadFailed"), info.Version);
+                statusBrush = "ClipsyDangerBrush";
+                break;
+            case UpdatePhase.Failed:
+                text = Strings.Get("UpdBtnRetry");
+                status = Strings.Get("UpdateCheckFailed");
+                statusBrush = "ClipsyDangerBrush";
+                break;
+        }
+        BtnCheckNowText.Text = text;
+        BtnCheckNowIcon.Glyph = glyph;
+        BtnCheckNow.IsEnabled = enabled;
+        BtnCheckNow.Style = (Style)Application.Current.Resources[primary ? "ClipsyButtonPrimary" : "ClipsyButtonGhost"];
+        UpdRowStatus.Visibility = status == null ? Visibility.Collapsed : Visibility.Visible;
+        UpdRowStatus.Text = status ?? string.Empty;
+        if (statusBrush != null) UpdRowStatus.Foreground = ThemeService.GetBrush(statusBrush, UpdRowStatus);
+        else UpdRowStatus.ClearValue(TextBlock.ForegroundProperty);
+    }
 
     private void OnOpenChangelog(object sender, RoutedEventArgs e)
         => ChangelogWindow.ShowWindow();
@@ -1178,45 +1246,51 @@ public sealed partial class SettingsWindow : Window
     private void OnUpdateActionClick(object sender, RoutedEventArgs e)
         => UpdateManager.PrimaryAction();
 
-    // Mirrors the tray update button: shows phase, download percent, and a
-    // Download/Install action.
+    // Banner above every pane, so a pending update can't be missed at the bottom of General.
     private void RenderUpdateStatus()
     {
         try
         {
-            switch (UpdateManager.Phase)
+            RenderCheckButton();
+            var info = UpdateManager.Info;
+            var phase = UpdateManager.Phase;
+            bool failedDownload = phase == UpdatePhase.Failed && UpdateManager.DownloadFailed;
+            if (info == null || !(phase is UpdatePhase.Available or UpdatePhase.Downloading or UpdatePhase.Ready || failedDownload))
+            {
+                UpdateBanner.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            UpdateBanner.Visibility = Visibility.Visible;
+            UpdWhatsNewBtn.Content = Strings.Get("UpdBtnWhatsNew");
+            UpdProgress.Visibility = phase == UpdatePhase.Downloading ? Visibility.Visible : Visibility.Collapsed;
+            UpdProgress.Value = System.Math.Clamp(UpdateManager.Progress * 100.0, 0, 100);
+            UpdActionBtn.Visibility = phase == UpdatePhase.Downloading ? Visibility.Collapsed : Visibility.Visible;
+            string youHave = string.Format(Strings.Get("UpdYouHave"), UpdateService.CurrentVersion());
+            switch (phase)
             {
                 case UpdatePhase.Available:
-                    UpdateStatusRow.Visibility = Visibility.Visible;
-                    UpdProgress.Visibility = Visibility.Collapsed;
-                    UpdStatusText.Text = Strings.Get("TrayUpdateAvailable");
-                    SetUpdActionText(Strings.Get("ToastDownload"));
+                    UpdBannerTitle.Text = string.Format(Strings.Get("UpdAvailable"), info.Version);
+                    UpdBannerSub.Text = youHave;
+                    UpdActionBtn.Content = Strings.Get("UpdBtnDownload");
                     break;
                 case UpdatePhase.Downloading:
-                    UpdateStatusRow.Visibility = Visibility.Visible;
-                    UpdProgress.Visibility = Visibility.Visible;
-                    UpdProgress.Value = System.Math.Clamp(UpdateManager.Progress * 100.0, 0, 100);
-                    UpdStatusText.Text = $"{Strings.Get("TrayUpdateDownloading")} {(int)(UpdateManager.Progress * 100)}%";
-                    UpdActionBtn.Visibility = Visibility.Collapsed;
+                    UpdBannerTitle.Text = string.Format(Strings.Get("UpdDownloadingTitle"), info.Version);
+                    UpdBannerSub.Text = $"{(int)(UpdateManager.Progress * 100)}%";
                     break;
                 case UpdatePhase.Ready:
-                    UpdateStatusRow.Visibility = Visibility.Visible;
-                    UpdProgress.Visibility = Visibility.Collapsed;
-                    UpdStatusText.Text = Strings.Get("TrayUpdateInstall");
-                    SetUpdActionText(Strings.Get("ToastInstallNow"));
+                    UpdBannerTitle.Text = string.Format(Strings.Get("UpdReady"), info.Version);
+                    UpdBannerSub.Text = Strings.Get("UpdReadyHint");
+                    UpdActionBtn.Content = Strings.Get("UpdBtnInstall");
                     break;
-                default: // None / Checking / UpToDate / Failed
-                    UpdateStatusRow.Visibility = Visibility.Collapsed;
+                default:
+                    UpdBannerTitle.Text = string.Format(Strings.Get("UpdDownloadFailed"), info.Version);
+                    UpdBannerSub.Text = Strings.Get("UpdFailedHint");
+                    UpdActionBtn.Content = Strings.Get("UpdBtnReleasePage");
                     break;
             }
         }
         catch (Exception ex) { Diagnostics.Log("SettingsWindow.RenderUpdateStatus", ex); }
-    }
-
-    private void SetUpdActionText(string text)
-    {
-        UpdActionBtn.Visibility = Visibility.Visible;
-        UpdActionBtn.Content = text;
     }
 
     private void OnNavChecked(object sender, RoutedEventArgs e)
