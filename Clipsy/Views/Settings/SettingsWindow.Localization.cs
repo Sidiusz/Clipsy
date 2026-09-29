@@ -198,6 +198,7 @@ public sealed partial class SettingsWindow
         RefreshComboDisplay(TranslateServiceBox);
         _loading = wasLoading;
         UpdateSidebarWidth();
+        RenderUpdateStatus();
     }
 
     private void UpdateSidebarWidth()

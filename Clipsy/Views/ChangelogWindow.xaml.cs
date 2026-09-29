@@ -40,14 +40,41 @@ public sealed partial class ChangelogWindow : Window
         TitleLabel.Text = Strings.Get("ChangelogTitle");
         HeaderLabel.Text = Strings.Get("ChangelogLoading");
 
+        UpdateManager.StateChanged += RenderUpdateAction;
+        RenderUpdateAction();
+
         Closed += (_, _) =>
         {
             _closed = true;
+            UpdateManager.StateChanged -= RenderUpdateAction;
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnRevealFrame;
             _revealFallback?.Stop();
             if (_open == this) _open = null;
         };
         if (Content is FrameworkElement fe) fe.Loaded += (_, _) => _ = LoadAsync();
+    }
+
+    private void OnUpdateActionClick(object sender, RoutedEventArgs e) => UpdateManager.PrimaryAction();
+
+    private void RenderUpdateAction()
+    {
+        if (_closed) return;
+        var info = UpdateManager.Info;
+        var phase = UpdateManager.Phase;
+        bool failedDownload = phase == UpdatePhase.Failed && UpdateManager.DownloadFailed;
+        bool show = info != null && (phase is UpdatePhase.Available or UpdatePhase.Downloading or UpdatePhase.Ready || failedDownload);
+        UpdateActionBtn.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        UpdateProgress.Visibility = show && phase == UpdatePhase.Downloading ? Visibility.Visible : Visibility.Collapsed;
+        if (!show) return;
+        UpdateProgress.Value = Math.Clamp(UpdateManager.Progress * 100.0, 0, 100);
+        UpdateActionBtn.IsEnabled = phase != UpdatePhase.Downloading;
+        UpdateActionBtn.Content = phase switch
+        {
+            UpdatePhase.Available => $"{Strings.Get("UpdBtnDownload")} {info!.Version}",
+            UpdatePhase.Downloading => $"{(int)(UpdateManager.Progress * 100)}%",
+            UpdatePhase.Ready => Strings.Get("UpdBtnInstall"),
+            _ => Strings.Get("UpdBtnReleasePage"),
+        };
     }
 
     private void ConfigureTitleBar()

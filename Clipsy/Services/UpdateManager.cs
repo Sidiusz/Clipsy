@@ -21,6 +21,8 @@ public static class UpdateManager
     private static UpdateService.VerifiedInstaller? _installer;
     private static bool _downloadFailed;
 
+    public static bool DownloadFailed => _downloadFailed;
+
     public static event Action? StateChanged;
 
     private static DispatcherQueue? _ui;
