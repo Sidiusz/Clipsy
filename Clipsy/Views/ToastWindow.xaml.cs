@@ -41,6 +41,7 @@ public sealed partial class ToastWindow : Window
     private bool _isFadingOut;
     private bool _isInUse;
     private bool _isPrewarmed;
+    private bool _revealPending;
     private int _targetX, _targetY, _currentX, _currentY, _w, _h, _offscreenX;
 
     internal bool IsInUse => _isInUse;
@@ -98,9 +99,25 @@ public sealed partial class ToastWindow : Window
         _currentX = _offscreenX;
         _currentY = _targetY;
         SetWindowPos(_hwnd, HWND_TOPMOST, _currentX, _currentY, _w, _h, SWP_NOACTIVATE);
-        Cloak(false);
-        AnimateTo(_targetX, _targetY, FadeInMs, EaseOutCubic);
+        RevealWhenRendered();
         StartDismissTimer();
+    }
+
+    // New text/size needs a fresh XAML frame; uncloaking earlier shows the black surface under load.
+    private void RevealWhenRendered()
+    {
+        StopRenderHandler();
+        _revealPending = true;
+        int ticks = 0;
+        var start = DateTime.UtcNow;
+        _renderHandler = (_, _) =>
+        {
+            if (++ticks < 3 && (DateTime.UtcNow - start).TotalMilliseconds < 300) return;
+            StopRenderHandler();
+            Cloak(false);
+            AnimateTo(_targetX, _targetY, FadeInMs, EaseOutCubic);
+        };
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += _renderHandler;
     }
 
     internal void PositionAtSlot(int index)
@@ -109,6 +126,7 @@ public sealed partial class ToastWindow : Window
             return;
 
         CalculateSlot(index);
+        if (_revealPending) return; // the reveal animates to the new slot
         AnimateTo(_targetX, _targetY, RepositionMs, EaseOutCubic);
     }
 
@@ -205,6 +223,7 @@ public sealed partial class ToastWindow : Window
 
     private void StopRenderHandler()
     {
+        _revealPending = false;
         if (_renderHandler != null)
         {
             Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= _renderHandler;

@@ -8,9 +8,16 @@ public static class AfterSaveAction
 {
     /// <summary>Apply the "after save" preference: open-file, open-folder
     /// (select in Explorer), or nothing.</summary>
+    // ShellExecute can stall for seconds under load, so it never runs on the caller's (UI) thread.
     public static void Run(string filePath, string? action)
     {
-        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;
+        if (string.IsNullOrEmpty(filePath) || action is not ("open-file" or "open-folder")) return;
+        System.Threading.Tasks.Task.Run(() => Launch(filePath, action));
+    }
+
+    private static void Launch(string filePath, string action)
+    {
+        if (!File.Exists(filePath)) return;
         try
         {
             switch (action)
@@ -39,7 +46,7 @@ public static class AfterSaveAction
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Clipsy] AfterSaveAction.Run failed: {ex.Message}");
+            Diagnostics.Log("AfterSaveAction failed", ex);
         }
     }
 }
