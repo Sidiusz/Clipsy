@@ -1221,7 +1221,7 @@
                                               SelectionMode="None"
                                               Background="Transparent"
                                               BorderThickness="0"
-                                              Padding="0,6">
+                                              Padding="0,0,0,6">
                                         <!-- Empty collection disables the default bottom-up
                                              entrance/reorder animation when rows populate. -->
                                         <ListView.ItemContainerTransitions>
@@ -1245,8 +1245,8 @@
                                                     </Grid.RowDefinitions>
                                                     <Border Grid.Row="0" Visibility="{Binding GroupVisibility}"
                                                             Background="{ThemeResource ClipsyBg1Brush}"
-                                                            BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}" BorderThickness="0,1,0,1"
-                                                            Margin="0,8,0,2" Padding="14,7">
+                                                            BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}" BorderThickness="{Binding GroupBorder}"
+                                                            Margin="{Binding GroupMargin}" Padding="14,7">
                                                         <TextBlock Text="{Binding GroupLabel}" Style="{StaticResource ClipsyLabel}" />
                                                     </Border>
                                                     <Grid Grid.Row="1" Padding="14,6" ColumnSpacing="16">
@@ -1269,6 +1269,7 @@
                                                         </Button>
                                                     </Grid>
                                                     <Border Grid.Row="2" Height="1"
+                                                            Visibility="{Binding SeparatorVisibility}"
                                                             Background="{ThemeResource ClipsyBorderSubtleBrush}"
                                                             Margin="14,0,14,0" />
                                                 </Grid>

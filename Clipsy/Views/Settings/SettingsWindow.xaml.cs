@@ -186,7 +186,39 @@ public sealed partial class SettingsWindow : Window
         // Re-apply nav CheckStates once the tree is live (initial pass runs while
         // most radios are still null and before the theme is applied).
         if (Content is FrameworkElement rootFe)
-            rootFe.Loaded += (_, _) => SnapNavVisuals();
+        {
+            rootFe.Loaded += (_, _) =>
+            {
+                SnapNavVisuals();
+                if (_combosHooked) return;
+                _combosHooked = true;
+                foreach (var combo in FindDescendants<ComboBox>(rootFe))
+                    combo.DropDownClosed += OnComboDropDownClosed;
+            };
+        }
+    }
+
+    private bool _combosHooked;
+
+    // A focused closed ComboBox changes its value on mouse wheel; drop focus so the wheel scrolls the page.
+    private void OnComboDropDownClosed(object? sender, object e)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            foreach (var nav in NavList.Children)
+                if (nav is RadioButton { IsChecked: true } rb) { rb.Focus(FocusState.Programmatic); return; }
+        });
+    }
+
+    private static IEnumerable<T> FindDescendants<T>(DependencyObject root) where T : DependencyObject
+    {
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is T match) yield return match;
+            foreach (var nested in FindDescendants<T>(child)) yield return nested;
+        }
     }
 
     // Re-localize + re-tint a hidden/open window when settings change elsewhere.
@@ -856,8 +888,37 @@ public sealed partial class SettingsWindow : Window
             var c = k.StartsWith("hk-") ? "hotkeys" : _paramToCategory.GetValueOrDefault(k, string.Empty);
             if (c == category) { catDirty = true; break; }
         }
-        WriteDirtyLabel(lbl, baseText, catDirty);
+        lbl.Text = baseText;
+        SetNavDot(lbl, catDirty);
     }
+
+    // Own column, always reserved: a dot inside the text wrapped onto a second line for long names.
+    private static void SetNavDot(TextBlock lbl, bool dirty)
+    {
+        if (lbl.Parent is not Grid row) return;
+        TextBlock? dot = null;
+        foreach (var child in row.Children)
+            if (child is TextBlock t && (t.Tag as string) == NavDotTag) { dot = t; break; }
+        if (dot == null)
+        {
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(NavDotWidth) });
+            dot = new TextBlock
+            {
+                Tag = NavDotTag,
+                Text = "●",
+                FontSize = 10,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Grid.SetColumn(dot, row.ColumnDefinitions.Count - 1);
+            row.Children.Add(dot);
+        }
+        dot.Foreground = ThemeService.GetBrush("ClipsyWarningBrush", lbl);
+        dot.Opacity = dirty ? 1 : 0;
+    }
+
+    private const string NavDotTag = "nav-dirty-dot";
+    internal const double NavDotWidth = 14;
 
     private static void WriteDirtyLabel(TextBlock lbl, string baseText, bool dirty)
     {
@@ -865,12 +926,10 @@ public sealed partial class SettingsWindow : Window
         lbl.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = baseText });
         if (dirty)
         {
-            // Orange dot rendered after the label sits at the trailing corner of
-            // the param / nav row, so changed items pop without obscuring the text.
             var warn = ThemeService.GetBrush("ClipsyWarningBrush", lbl);
             lbl.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
             {
-                Text = "  ●",
+                Text = "\u00A0\u00A0●", // no-break: the dot never wraps alone
                 Foreground = warn,
             });
         }

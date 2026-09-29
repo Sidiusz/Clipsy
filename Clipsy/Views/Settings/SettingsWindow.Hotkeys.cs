@@ -17,6 +17,11 @@ public sealed partial class SettingsWindow
         public required string Key { get; init; }
         public string GroupLabel { get; init; } = string.Empty;
         public Visibility GroupVisibility { get; init; } = Visibility.Collapsed;
+        // First group sits flush under the column header, which already draws the line above it.
+        public Thickness GroupMargin { get; init; } = new(0, 8, 0, 2);
+        public Thickness GroupBorder { get; init; } = new(0, 1, 0, 1);
+        // The next group's border already separates the last row of a group.
+        public Visibility SeparatorVisibility { get; init; } = Visibility.Visible;
 
         private string _label = string.Empty;
         public required string Label
@@ -57,29 +62,36 @@ public sealed partial class SettingsWindow
     {
         foreach (var existing in _hotkeyRows) existing.PropertyChanged -= OnHotkeyRowChanged;
         _hotkeyRows.Clear();
-        AddHotkeyRow("capture", "HkOpenCapture", _draft.HotkeyCapture, "HkGroupGeneral");
-        AddHotkeyRow("undo", "HkUndo", _draft.HotkeyUndo, "HkGroupEditing");
-        AddHotkeyRow("redo", "HkRedo", _draft.HotkeyRedo);
-        AddHotkeyRow("save-silent", "HkSaveSilent", _draft.HotkeyScreenshotSilent, "HkGroupScreenshot");
-        AddHotkeyRow("copy", "HkCopy", _draft.HotkeyCopy);
-        AddHotkeyRow("select-all", "HkSelectAll", _draft.HotkeySelectAll);
-        AddHotkeyRow("select-monitor", "HkSelectMonitor", _draft.HotkeySelectMonitor);
-        AddHotkeyRow("record-save", "HkRecordSave", _draft.HotkeyRecordSilentSave, "HkGroupVideo");
-        AddHotkeyRow("mic-toggle", "HkMicToggle", _draft.HotkeyMicToggle);
-    }
-
-    private void AddHotkeyRow(string key, string labelKey, string binding, string? groupKey = null)
-    {
-        var row = new HotkeyRow
+        var specs = new (string Key, string LabelKey, string Binding, string? GroupKey)[]
         {
-            Key = key,
-            Label = Strings.Get(labelKey),
-            Binding = binding,
-            GroupLabel = groupKey == null ? string.Empty : Strings.Get(groupKey),
-            GroupVisibility = groupKey == null ? Visibility.Collapsed : Visibility.Visible,
+            ("capture", "HkOpenCapture", _draft.HotkeyCapture, "HkGroupGeneral"),
+            ("undo", "HkUndo", _draft.HotkeyUndo, "HkGroupEditing"),
+            ("redo", "HkRedo", _draft.HotkeyRedo, null),
+            ("save-silent", "HkSaveSilent", _draft.HotkeyScreenshotSilent, "HkGroupScreenshot"),
+            ("copy", "HkCopy", _draft.HotkeyCopy, null),
+            ("select-all", "HkSelectAll", _draft.HotkeySelectAll, null),
+            ("select-monitor", "HkSelectMonitor", _draft.HotkeySelectMonitor, null),
+            ("record-save", "HkRecordSave", _draft.HotkeyRecordSilentSave, "HkGroupVideo"),
+            ("mic-toggle", "HkMicToggle", _draft.HotkeyMicToggle, null),
         };
-        row.PropertyChanged += OnHotkeyRowChanged;
-        _hotkeyRows.Add(row);
+        for (int i = 0; i < specs.Length; i++)
+        {
+            var s = specs[i];
+            bool lastInGroup = i == specs.Length - 1 || specs[i + 1].GroupKey != null;
+            var row = new HotkeyRow
+            {
+                Key = s.Key,
+                Label = Strings.Get(s.LabelKey),
+                Binding = s.Binding,
+                GroupLabel = s.GroupKey == null ? string.Empty : Strings.Get(s.GroupKey),
+                GroupVisibility = s.GroupKey == null ? Visibility.Collapsed : Visibility.Visible,
+                GroupMargin = i == 0 ? new Thickness(0, 0, 0, 2) : new Thickness(0, 8, 0, 2),
+                GroupBorder = i == 0 ? new Thickness(0, 0, 0, 1) : new Thickness(0, 1, 0, 1),
+                SeparatorVisibility = lastInGroup ? Visibility.Collapsed : Visibility.Visible,
+            };
+            row.PropertyChanged += OnHotkeyRowChanged;
+            _hotkeyRows.Add(row);
+        }
     }
 
     private void OnHotkeyRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

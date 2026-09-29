@@ -215,8 +215,8 @@ public sealed partial class SettingsWindow
             probe.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
             maxTextWidth = System.Math.Max(maxTextWidth, probe.DesiredSize.Width);
         }
-        // 28 px icon column + template margins/padding/accent + a small trailing safety gap.
-        double width = System.Math.Clamp(System.Math.Ceiling(maxTextWidth + 68), 200, 280);
+        // 28 px icon column + dirty-dot column + template margins/padding/accent + a small trailing safety gap.
+        double width = System.Math.Clamp(System.Math.Ceiling(maxTextWidth + 68 + NavDotWidth), 200, 300);
         SidebarColumn.Width = new GridLength(width);
     }
 
