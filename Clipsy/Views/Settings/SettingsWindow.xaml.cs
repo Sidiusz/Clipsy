@@ -561,7 +561,14 @@ public sealed partial class SettingsWindow : Window
                 return;
             }
         }
-        if (box.Items.Count > 0) box.SelectedIndex = 0;
+        // Unknown value (settings from a newer or dev build): select nothing rather than silently change it.
+        box.SelectedIndex = -1;
+    }
+
+    private static string ComboTagOr(ComboBox box, string current)
+    {
+        var tag = SelectedComboTag(box);
+        return tag.Length == 0 ? current : tag;
     }
 
     private static string SelectedComboTag(ComboBox box)
@@ -571,27 +578,27 @@ public sealed partial class SettingsWindow : Window
 
     private void Collect()
     {
-        _draft.Language = SelectedComboTag(LangBox);
+        _draft.Language = ComboTagOr(LangBox, _draft.Language);
         _draft.Theme = SelectedSegmentTag(ThemeBtnAuto, ThemeBtnDark, ThemeBtnLight);
-        _draft.OcrEngine = SelectedComboTag(OcrEngineBox);
+        _draft.OcrEngine = ComboTagOr(OcrEngineBox, _draft.OcrEngine);
         _draft.TesseractLanguages = string.Join(",", _tessSelectedCodes);
-        _draft.TranslateService = SelectedComboTag(TranslateServiceBox);
-        _draft.TranslateFrom    = SelectedComboTag(TranslateFromBox);
-        _draft.TranslateTo      = SelectedComboTag(TranslateToBox);
+        _draft.TranslateService = ComboTagOr(TranslateServiceBox, _draft.TranslateService);
+        _draft.TranslateFrom    = ComboTagOr(TranslateFromBox, _draft.TranslateFrom);
+        _draft.TranslateTo      = ComboTagOr(TranslateToBox, _draft.TranslateTo);
         _draft.ScreenshotFolder = ScreenshotFolderBox.Text;
         _draft.VideoFolder = VideoFolderBox.Text;
         _draft.RememberLastFolder = RememberFolderSwitch.IsChecked == true;
-        _draft.ScreenshotFormat = SelectedComboTag(ScreenshotFormatBox);
+        _draft.ScreenshotFormat = ComboTagOr(ScreenshotFormatBox, _draft.ScreenshotFormat);
         _draft.CaptureScreenshotCursor = ScreenshotCursorSwitch.IsChecked == true;
         _draft.ExperimentalModernScreenshotCapture = ModernCaptureSwitch.IsChecked == true;
         _draft.DynamicToolbarIslands = DynamicIslandsSwitch.IsChecked == true;
-        _draft.VideoFormat = SelectedComboTag(VideoFormatBox);
+        _draft.VideoFormat = ComboTagOr(VideoFormatBox, _draft.VideoFormat);
         _draft.CaptureVideoCursor = VideoCursorSwitch.IsChecked == true;
         _draft.JpgQuality = (int)JpgQualitySlider.Value;
-        _draft.AfterSaveAction = SelectedComboTag(AfterSaveBox);
+        _draft.AfterSaveAction = ComboTagOr(AfterSaveBox, _draft.AfterSaveAction);
         _draft.EyedropperModifier = GetEyedropperModifierBinding();
         _draft.CopyEyedropperHexToClipboard = EyedropperCopyHexSwitch.IsChecked == true;
-        _draft.UpdateInterval = SelectedComboTag(UpdateIntervalBox);
+        _draft.UpdateInterval = ComboTagOr(UpdateIntervalBox, _draft.UpdateInterval);
         _draft.AutoDownloadUpdates = AutoDownloadSwitch.IsChecked == true;
 
         _draft.NotificationsEnabled   = NotifyMasterSwitch.IsChecked    == true;
