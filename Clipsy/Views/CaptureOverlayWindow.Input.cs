@@ -218,9 +218,14 @@ public sealed partial class CaptureOverlayWindow
                 var pts = e.GetIntermediatePoints(RootGrid);
                 if (pts != null && pts.Count > 0)
                 {
+                    // History comes newest-first; appended as-is, a laggy batch is drawn backwards as long chords.
                     var batch = new System.Collections.Generic.List<Point>(pts.Count);
-                    foreach (var p in pts)
+                    foreach (var p in System.Linq.Enumerable.OrderBy(pts, p => p.Timestamp))
+                    {
+                        if (p.Timestamp <= _lastStrokeTimestamp) continue;
+                        _lastStrokeTimestamp = p.Timestamp;
                         if (TryAppendStrokePoint(p.Position)) batch.Add(p.Position);
+                    }
                     _drawing.AppendActiveStrokeBatch(batch);
                 }
                 else

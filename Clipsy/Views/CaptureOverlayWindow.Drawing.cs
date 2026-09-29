@@ -26,6 +26,7 @@ public sealed partial class CaptureOverlayWindow
         {
             case ToolKind.Pencil:
                 _mode = InteractionMode.DrawingStroke;
+                _lastStrokeTimestamp = 0;
                 _activeStroke = new StrokeElement
                 {
                     Points = new List<Point> { pos },
@@ -139,6 +140,7 @@ public sealed partial class CaptureOverlayWindow
 
     // Drop sub-pixel points (~1.4 px min spacing) to bound stroke size.
     private const double MinStrokePointDistSq = 2.0;
+    private ulong _lastStrokeTimestamp;
 
     private void ExtendStroke(Point pos)
     {
