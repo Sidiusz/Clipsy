@@ -30,6 +30,8 @@ public sealed partial class CaptureOverlayWindow
     {
         var cp = e.GetCurrentPoint(RootGrid);
         var pos = cp.Position;
+        // The first move's history can hold hover samples from before the press.
+        _lastStrokeTimestamp = cp.Timestamp;
         bool rmb = cp.Properties.IsRightButtonPressed;
         bool lmb = cp.Properties.IsLeftButtonPressed;
 
@@ -214,24 +216,7 @@ public sealed partial class CaptureOverlayWindow
                 RequestSelectionVisualUpdate();
                 break;
             case InteractionMode.DrawingStroke:
-                // Batch buffered mouse samples into one GPU drawing session/invalidate.
-                var pts = e.GetIntermediatePoints(RootGrid);
-                if (pts != null && pts.Count > 0)
-                {
-                    // History comes newest-first; appended as-is, a laggy batch is drawn backwards as long chords.
-                    var batch = new System.Collections.Generic.List<Point>(pts.Count);
-                    foreach (var p in System.Linq.Enumerable.OrderBy(pts, p => p.Timestamp))
-                    {
-                        if (p.Timestamp <= _lastStrokeTimestamp) continue;
-                        _lastStrokeTimestamp = p.Timestamp;
-                        if (TryAppendStrokePoint(p.Position)) batch.Add(p.Position);
-                    }
-                    _drawing.AppendActiveStrokeBatch(batch);
-                }
-                else
-                {
-                    ExtendStroke(pos);
-                }
+                AppendStrokeHistory(e, pos);
                 break;
             case InteractionMode.DrawingRect:
                 UpdateActiveShape(pos);
@@ -343,6 +328,8 @@ public sealed partial class CaptureOverlayWindow
     private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e)
     {
         var pos = e.GetCurrentPoint(RootGrid).Position;
+        // Under lag the release event carries the stroke's last samples.
+        if (_mode == InteractionMode.DrawingStroke) AppendStrokeHistory(e, pos);
         FinishPointerInteraction(pos);
         // After the mode reset: releasing capture raises PointerCaptureLost synchronously.
         RootGrid.ReleasePointerCapture(e.Pointer);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Clipsy.Drawing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -26,7 +27,6 @@ public sealed partial class CaptureOverlayWindow
         {
             case ToolKind.Pencil:
                 _mode = InteractionMode.DrawingStroke;
-                _lastStrokeTimestamp = 0;
                 _activeStroke = new StrokeElement
                 {
                     Points = new List<Point> { pos },
@@ -141,6 +141,26 @@ public sealed partial class CaptureOverlayWindow
     // Drop sub-pixel points (~1.4 px min spacing) to bound stroke size.
     private const double MinStrokePointDistSq = 2.0;
     private ulong _lastStrokeTimestamp;
+
+    // Batches buffered mouse samples into one GPU drawing session/invalidate.
+    private void AppendStrokeHistory(PointerRoutedEventArgs e, Point pos)
+    {
+        var pts = e.GetIntermediatePoints(RootGrid);
+        if (pts == null || pts.Count == 0)
+        {
+            ExtendStroke(pos);
+            return;
+        }
+        // History comes newest-first; appended as-is, a laggy batch is drawn backwards as long chords.
+        var batch = new List<Point>(pts.Count);
+        foreach (var p in pts.OrderBy(p => p.Timestamp))
+        {
+            if (p.Timestamp <= _lastStrokeTimestamp) continue;
+            _lastStrokeTimestamp = p.Timestamp;
+            if (TryAppendStrokePoint(p.Position)) batch.Add(p.Position);
+        }
+        _drawing.AppendActiveStrokeBatch(batch);
+    }
 
     private void ExtendStroke(Point pos)
     {
