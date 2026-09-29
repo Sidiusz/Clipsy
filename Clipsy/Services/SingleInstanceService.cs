@@ -17,7 +17,8 @@ public static class SingleInstanceService
 
     private const int MaxServerInstances = 4;
     private const int HungAfterMs = 30_000;
-    private static readonly string PipeName = BuildPipeName();
+    // Settable so tests don't talk to a Clipsy running on the same machine.
+    internal static string PipeName { get; set; } = BuildPipeName();
     private static volatile bool _running;
     private static Func<string, string>? _requestHandler;
     private static long _uiHeartbeat;

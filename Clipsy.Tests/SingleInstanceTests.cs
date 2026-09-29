@@ -8,6 +8,7 @@ public class SingleInstanceTests
     [Fact]
     public async Task ServerAnswersPingAndRequests()
     {
+        SingleInstanceService.PipeName = "Clipsy.Tests." + Guid.NewGuid().ToString("N");
         SingleInstanceService.SetRequestHandler(req => "echo:" + req);
         SingleInstanceService.StartServer();
 
