@@ -37,7 +37,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ArchitecturesAllowed=x64compatible
 WizardStyle=modern
 ; In-app updater downloads the new setup and exits Clipsy before running it;
-; CloseApplications covers the case where the app is still holding files.
+; CloseApplications is the last resort if something else still holds files.
 CloseApplications=yes
 RestartApplications=no
 
@@ -125,21 +125,59 @@ begin
        ewWaitUntilTerminated, ResultCode);
 end;
 
-// Ask a running Clipsy to exit cleanly (it finishes a recording first) before files are replaced;
-// Restart Manager (CloseApplications) is the fallback.
-procedure QuitRunningClipsy;
+// True when a Clipsy from this install folder (app or watchdog) is running; Kill ends them.
+function ClipsyRunning(const Exe: String; Kill: Boolean): Boolean;
 var
-  ResultCode: Integer;
+  Locator, Service, Procs, Proc: Variant;
+  I: Integer;
+begin
+  Result := False;
+  try
+    Locator := CreateOleObject('WbemScripting.SWbemLocator');
+    Service := Locator.ConnectServer('.', 'root\CIMV2');
+    Procs := Service.ExecQuery('SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name = ''{#ClipsyExeName}''');
+    for I := 0 to Procs.Count - 1 do
+    begin
+      Proc := Procs.ItemIndex(I);
+      if not VarIsNull(Proc.ExecutablePath) and (CompareText(Proc.ExecutablePath, Exe) = 0) then
+      begin
+        Result := True;
+        if Kill then Proc.Terminate(0);
+      end;
+    end;
+  except
+    Log('Clipsy process check failed: ' + GetExceptionMessage);
+  end;
+end;
+
+// Ask a running Clipsy to exit cleanly (it finishes saving a recording first), then make sure
+// nothing from the install folder is left holding files. Setup runs elevated and an elevated
+// process can't reach the user's Clipsy pipe, so 'quit' runs as the original user when possible.
+procedure QuitRunningClipsy(AsOriginalUser: Boolean);
+var
+  ResultCode, I: Integer;
   Exe: String;
 begin
   Exe := ExpandConstant('{app}\{#ClipsyExeName}');
-  if FileExists(Exe) then
+  if not FileExists(Exe) then exit;
+  if AsOriginalUser then
+    ExecAsOriginalUser(Exe, 'quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+  else
     Exec(Exe, 'quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // The watchdog follows the app out within a few seconds.
+  for I := 1 to 20 do
+  begin
+    if not ClipsyRunning(Exe, False) then exit;
+    Sleep(500);
+  end;
+  Log('Clipsy did not exit after quit; terminating it.');
+  ClipsyRunning(Exe, True);
+  Sleep(500);
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
-  QuitRunningClipsy;
+  QuitRunningClipsy(True);
   Result := '';
 end;
 
@@ -153,7 +191,7 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
   begin
-    QuitRunningClipsy;
+    QuitRunningClipsy(False);
     DeleteLegacyAutostartTask;
   end;
   // [UninstallDelete] Check functions run at install time, so /KEEPDATA must be read here.
