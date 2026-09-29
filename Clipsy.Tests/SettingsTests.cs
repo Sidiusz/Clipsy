@@ -42,6 +42,19 @@ public sealed class SettingsTests : IDisposable
         Assert.Null(svc.Settings.ScreenshotFolder);
     }
 
+    [Theory]
+    [InlineData("MyMemory", "Bing")]
+    [InlineData("Google", "Google")]
+    public void Version1TranslateServiceMigrates(string saved, string expected)
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "settings.json"), $"{{\"SettingsVersion\":1,\"TranslateService\":\"{saved}\"}}");
+
+        var svc = new SettingsService(_dir);
+
+        Assert.Equal(expected, svc.Settings.TranslateService);
+    }
+
     [Fact]
     public void NewerSettingsFileIsLoadedAndPreserved()
     {

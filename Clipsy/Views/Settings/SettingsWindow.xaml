@@ -1061,8 +1061,9 @@
                                                   HorizontalAlignment="Right"
                                                   VerticalAlignment="Center"
                                                   SelectionChanged="OnAnyControlChanged">
-                                            <ComboBoxItem x:Name="TrSvcMyMemory" Content="MyMemory" Tag="MyMemory" />
+                                            <ComboBoxItem x:Name="TrSvcBing" Content="Microsoft Translator" Tag="Bing" />
                                             <ComboBoxItem x:Name="TrSvcGoogle" Content="Google Translate" Tag="Google" />
+                                            <ComboBoxItem x:Name="TrSvcMyMemory" Content="MyMemory" Tag="MyMemory" />
                                         </ComboBox>
                                     </Grid>
 
