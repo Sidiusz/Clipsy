@@ -72,7 +72,10 @@ public static class CaptureOverlayHost
                 var frame = _freeze.Capture();
                 long captureMs = sw.ElapsedMilliseconds;
                 var dq = _dispatcher;
-                if (dq == null || !dq.TryEnqueue(() => ShowCapturedFrame(frame, requestTick, workerWaitMs, captureMs)))
+                long enqueuedTick = Environment.TickCount64;
+                // High priority: jump ahead of queued toast/layout work so the overlay appears first.
+                if (dq == null || !dq.TryEnqueue(DispatcherQueuePriority.High,
+                        () => ShowCapturedFrame(frame, requestTick, workerWaitMs, captureMs, Environment.TickCount64 - enqueuedTick)))
                     Interlocked.Exchange(ref _requestInFlight, 0);
             }
             catch (Exception ex)
@@ -84,7 +87,7 @@ public static class CaptureOverlayHost
     }
 
     private static void ShowCapturedFrame(ScreenFreezeService.FrozenFrame frame,
-        long requestTick, long workerWaitMs, long captureMs)
+        long requestTick, long workerWaitMs, long captureMs, long queueMs)
     {
         try
         {
@@ -104,7 +107,7 @@ public static class CaptureOverlayHost
                     _current = _instance;
                     _current.Activate();
                     Volatile.Write(ref _overlayVisible, 1);
-                    LogTiming("reuse", frame, requestTick, workerWaitMs, captureMs, sw.ElapsedMilliseconds);
+                    LogTiming("reuse", frame, requestTick, workerWaitMs, captureMs, queueMs, sw.ElapsedMilliseconds);
                     return;
                 }
                 catch (Exception ex)
@@ -126,7 +129,7 @@ public static class CaptureOverlayHost
             _current = win;
             win.Activate();
             Volatile.Write(ref _overlayVisible, 1);
-            LogTiming("new", frame, requestTick, workerWaitMs, captureMs, sw.ElapsedMilliseconds);
+            LogTiming("new", frame, requestTick, workerWaitMs, captureMs, queueMs, sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
@@ -141,11 +144,11 @@ public static class CaptureOverlayHost
     }
 
     private static void LogTiming(string mode, ScreenFreezeService.FrozenFrame frame,
-        long requestTick, long workerWaitMs, long captureMs, long uiMs)
+        long requestTick, long workerWaitMs, long captureMs, long queueMs, long uiMs)
     {
         long totalMs = Math.Max(0, Environment.TickCount64 - requestTick);
         var b = frame.VirtualBounds;
-        Diagnostics.Log($"Overlay open ({mode}): total={totalMs}ms workerWait={workerWaitMs}ms capture={captureMs}ms ui={uiMs}ms " +
+        Diagnostics.Log($"Overlay open ({mode}): total={totalMs}ms workerWait={workerWaitMs}ms capture={captureMs}ms queue={queueMs}ms ui={uiMs}ms " +
             $"frame={frame.PixelWidth}x{frame.PixelHeight} bounds={b.X},{b.Y},{b.Width}x{b.Height} monitors={frame.Monitors.Count}");
     }
 

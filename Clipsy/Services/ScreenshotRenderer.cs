@@ -20,6 +20,9 @@ public static class ScreenshotRenderer
 
     public readonly record struct PixelRect(int X, int Y, int Width, int Height);
 
+    /// <summary>Opaque BGRA pixels, top-down rows.</summary>
+    public readonly record struct RenderedImage(byte[] Bgra, int Width, int Height);
+
     public static OutputFormat ParseFormat(string s)
     {
         return s?.ToLowerInvariant() switch
@@ -64,13 +67,23 @@ public static class ScreenshotRenderer
         OutputFormat format,
         int quality = 90)
     {
+        var image = Render(frame, selectionDip, elements, dpiScale);
+        return Encode(image.Bgra, image.Width, image.Height, format, quality);
+    }
+
+    public static RenderedImage Render(
+        ScreenFreezeService.FrozenFrame frame,
+        Rect selectionDip,
+        IReadOnlyList<DrawElement> elements,
+        double dpiScale)
+    {
         var rect = ToPixelRect(selectionDip, dpiScale, frame.PixelWidth, frame.PixelHeight);
         if (rect.Width == 0 || rect.Height == 0)
             throw new InvalidOperationException("Selection is outside the captured frame.");
         var pixels = Crop(frame, rect);
         if (elements.Count > 0)
             pixels = BurnDrawings(pixels, rect, elements, dpiScale);
-        return Encode(pixels, rect.Width, rect.Height, format, quality);
+        return new RenderedImage(pixels, rect.Width, rect.Height);
     }
 
     public static byte[] Crop(ScreenFreezeService.FrozenFrame frame, PixelRect rect)

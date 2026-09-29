@@ -82,11 +82,11 @@ internal static class CliScreenshotService
             target.Y - frame.VirtualBounds.Y,
             target.Width,
             target.Height);
-        var bytes = ScreenshotRenderer.RenderEncoded(
-            frame, selection, Array.Empty<DrawElement>(), 1.0, format, settings.JpgQuality);
+        var image = ScreenshotRenderer.Render(frame, selection, Array.Empty<DrawElement>(), 1.0);
 
-        if (finalPath != null) File.WriteAllBytes(finalPath, bytes);
-        if (clipboard) ClipboardService.SetImageAsync(bytes).GetAwaiter().GetResult();
+        if (finalPath != null)
+            File.WriteAllBytes(finalPath, ScreenshotRenderer.Encode(image.Bgra, image.Width, image.Height, format, settings.JpgQuality));
+        if (clipboard) ClipboardService.SetImage(image);
 
         return new CliResult(0, finalPath ?? "copied to clipboard", new
         {

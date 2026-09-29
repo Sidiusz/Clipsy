@@ -187,8 +187,8 @@ public sealed partial class CaptureOverlayWindow
         var job = SnapshotRenderJob();
         try
         {
-            var png = await Task.Run(() => ScreenshotRenderer.RenderPng(job.Frame, job.Selection, job.Elements, job.Scale));
-            await ClipboardService.SetImageAsync(png);
+            await Task.Run(() => ClipboardService.SetImage(
+                ScreenshotRenderer.Render(job.Frame, job.Selection, job.Elements, job.Scale)));
             NotificationService.CopiedToClipboard();
             CloseIfSameSession(job);
         }

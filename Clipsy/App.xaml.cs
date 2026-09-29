@@ -124,8 +124,6 @@ public partial class App : Application
         }
     }
 
-    // Periodic re-check so a long-running tray instance finds updates without a
-    // restart; CheckUpdatesIfDueAsync itself gates on the chosen interval.
     private void StartWatchdogHeartbeat()
     {
         var dq = HostWindow?.DispatcherQueue;
@@ -135,8 +133,13 @@ public partial class App : Application
         _watchdogTimer = dq.CreateTimer();
         _watchdogTimer.Interval = TimeSpan.FromSeconds(5);
         _watchdogTimer.IsRepeating = true;
+        long lastTick = Environment.TickCount64;
         _watchdogTimer.Tick += (_, _) =>
         {
+            long now = Environment.TickCount64;
+            // A late tick means the UI thread was blocked, which delays overlays and toasts.
+            if (now - lastTick > 8000) Diagnostics.Log($"UI thread stalled ~{now - lastTick - 5000} ms");
+            lastTick = now;
             ProcessWatchdog.Pulse();
             SingleInstanceService.MarkUiAlive();
         };
