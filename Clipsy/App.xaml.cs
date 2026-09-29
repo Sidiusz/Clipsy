@@ -101,6 +101,7 @@ public partial class App : Application
         _ = CheckUpdatesIfDueAsync();
         StartUpdateTimer();
         RecordingController.RecoverOrphanedRecordings();
+        OcrEngineMigration.RunAtStartup();
 
         // Warm the capture pipeline off-thread so the first PrintScreen doesn't
         // pay JIT + XAML cold init + first BitBlt at once.

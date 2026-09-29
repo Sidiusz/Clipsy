@@ -4,7 +4,7 @@ using Clipsy.Views;
 
 namespace Clipsy.Services;
 
-public enum ToastCategory { Screenshot, Video, Clipboard, Error, Update, Hint }
+public enum ToastCategory { Screenshot, Video, Clipboard, Error, Update, Hint, Prompt }
 
 public static class ToastService
 {
@@ -22,6 +22,9 @@ public static class ToastService
         public string? Action2Tooltip  { get; init; }
         public Action? Action2Callback { get; init; }
         public bool    Action2IsPrimary { get; init; }
+        // Labelled buttons under the text instead of icons, for choices that need words.
+        public string? Action1Text     { get; init; }
+        public string? Action2Text     { get; init; }
         // When true the toast never auto-dismisses — it stays until the user
         // clicks an action or Close. Used for update prompts.
         public bool    Persistent      { get; init; }
@@ -71,7 +74,8 @@ public static class ToastService
     public static void Show(ToastOptions opts)
     {
         var s = SettingsService.Instance.Settings;
-        if (!s.NotificationsEnabled) return;
+        // Prompts are questions the app asked, not notifications.
+        if (!s.NotificationsEnabled && opts.Category != ToastCategory.Prompt) return;
         if (opts.Category == ToastCategory.Screenshot && !s.NotifyScreenshotSaved) return;
         if (opts.Category == ToastCategory.Video      && !s.NotifyVideoSaved)       return;
         if (opts.Category == ToastCategory.Clipboard  && !s.NotifyClipboard)        return;

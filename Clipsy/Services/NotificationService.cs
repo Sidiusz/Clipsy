@@ -47,6 +47,31 @@ public static class NotificationService
 
     // ── Simple helpers ───────────────────────────────────────────
 
+    // Prompts answer a question the app asked, so they ignore the per-category notification switches.
+    public static void Prompt(string body, NotificationLevel level = NotificationLevel.Info)
+        => ToastService.Show(new ToastService.ToastOptions
+        {
+            Category = ToastCategory.Prompt,
+            Level = level,
+            Title = "Clipsy",
+            Body = body,
+            DismissSeconds = Math.Clamp(SettingsService.Instance.Settings.NotificationDurationSeconds, 1, 30),
+        });
+
+    public static void OcrEngineOffer(string title, string body, string keepText, Action keep, string switchText, Action switchAction)
+        => ToastService.Show(new ToastService.ToastOptions
+        {
+            Category = ToastCategory.Prompt,
+            Title = title,
+            Body = body,
+            Action1Text = keepText,
+            Action1Callback = keep,
+            Action2Text = switchText,
+            Action2Callback = switchAction,
+            Action2IsPrimary = true,
+            Persistent = true,
+        });
+
     public static void Error(string bodyKey)
         => Post(NotificationLevel.Error,   "Clipsy", Strings.Get(bodyKey), ToastCategory.Error);
 
