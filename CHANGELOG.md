@@ -4,6 +4,12 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.0.7
+
+PP-OCRv5 as the default OCR engine with a one-time switch offer, Microsoft Translator as the default
+translation service with automatic fallback, a clearer update flow in Settings, and Settings fixes.
+See [1.0.7.md](.github/release-notes/1.0.7.md).
+
 ## 1.0.6
 
 Working VP9/AV1 recording, exact-match screenshot export, undoable erase/clear/move, OCR accuracy
