@@ -21,11 +21,20 @@ public static class CaptureOverlayHost
     private static long _requestTick;
     private static int _pendingCancelled;
     private static long _escapeProbeTick;
-    private static Timer? _escapeProbeTimer;
+    private static long _lastEscapeTick;
+    private static volatile bool _shuttingDown;
 
-    // How long the UI thread may leave an Esc unanswered, with the overlay on screen,
-    // before the process is ended to release the screen.
-    private const int HungEscapeTimeoutMs = 5000;
+    // A second Esc this long after an unanswered first one ends the process to release the
+    // screen. A single Esc never does: the UI thread may just be busy for a few seconds.
+    private const int HungEscapeConfirmMs = 3000;
+    // Esc events closer together than this are the key's auto-repeat, not a new press.
+    private const int EscapeRepeatGapMs = 200;
+    // HIGH priority covers the opening and the first input, then a game under the open
+    // editor (OCR, encoding, the user thinking) gets its share back.
+    private const int BoostAfterRevealMs = 3000;
+
+    /// <summary>The app is exiting: the overlay may really close instead of hiding for reuse.</summary>
+    internal static bool IsShuttingDown => _shuttingDown;
 
     public static void Initialize(DispatcherQueue dispatcher)
     {
@@ -78,8 +87,8 @@ public static class CaptureOverlayHost
             {
                 long requestTick = Interlocked.Read(ref _requestTick);
                 long workerWaitMs = Math.Max(0, Environment.TickCount64 - requestTick);
-                // Held until the overlay closes; under game load the capture, the first
-                // frames and the input all wait on CPU/GPU time otherwise.
+                // Held until shortly after the reveal (or the close); under game load the capture,
+                // the first frames and the first input all wait on CPU/GPU time otherwise.
                 CapturePriority.Boost();
                 var sw = Stopwatch.StartNew();
                 var frame = _freeze.Capture();
@@ -138,7 +147,7 @@ public static class CaptureOverlayHost
                 catch (Exception ex)
                 {
                     Diagnostics.Log("CaptureOverlayHost reuse failed", ex);
-                    try { _instance.Close(); } catch { }
+                    try { _instance.ForceClose(); } catch { }
                     _instance = null;
                 }
             }
@@ -183,23 +192,39 @@ public static class CaptureOverlayHost
             $"frame={frame.PixelWidth}x{frame.PixelHeight} bounds={b.X},{b.Y},{b.Width}x{b.Height} monitors={frame.Monitors.Count}");
     }
 
-    internal static void Dismiss(CaptureOverlayWindow win)
+    /// <summary>The overlay started closing (already cloaked): a capture requested from now
+    /// on opens a fresh session instead of re-activating the closing one.</summary>
+    internal static void Detach(CaptureOverlayWindow win)
     {
-        if (_current == win) _current = null;
+        // Only the current overlay: a late call must not drop the boost of a capture in flight.
+        if (_current != win) return;
+        _current = null;
         // Before the visible flag drops: a capture requested right after must boost again.
         CapturePriority.Restore();
         Volatile.Write(ref _overlayVisible, 0);
+    }
+
+    /// <summary>The overlay is on screen: keep the boost a moment for the first input, then drop it.</summary>
+    internal static void OnRevealed(CaptureOverlayWindow win)
+    {
+        if (_current == win) CapturePriority.RestoreAfter(BoostAfterRevealMs);
+    }
+
+    internal static void Dismiss(CaptureOverlayWindow win)
+    {
+        Detach(win);
         try { win.HideAndReset(); }
         catch (Exception ex)
         {
             Diagnostics.Log("CaptureOverlayHost.Dismiss", ex);
             if (_instance == win) _instance = null;
-            try { win.Close(); } catch { }
+            try { win.ForceClose(); } catch { }
         }
     }
 
     public static void Shutdown()
     {
+        _shuttingDown = true;
         _running = false;
         _captureSignal.Set();
         try { _captureThread?.Join(1000); } catch { }
@@ -241,12 +266,20 @@ public static class CaptureOverlayHost
             });
         }
 
-        // Probe the UI thread; if it can't answer, the overlay is wedged on screen.
+        // Probe the UI thread with plain Esc only: Ctrl+Shift+Esc opens Task Manager.
+        if (withModifiers) return;
         long now = Environment.TickCount64;
-        if (Interlocked.CompareExchange(ref _escapeProbeTick, now, 0) != 0) return;
-        dq.TryEnqueue(DispatcherQueuePriority.High, () => Interlocked.Exchange(ref _escapeProbeTick, 0));
-        var timer = new Timer(CheckEscapeProbe, now, HungEscapeTimeoutMs, Timeout.Infinite);
-        Interlocked.Exchange(ref _escapeProbeTimer, timer)?.Dispose();
+        bool repeat = now - Interlocked.Exchange(ref _lastEscapeTick, now) < EscapeRepeatGapMs;
+        long probe = Interlocked.Read(ref _escapeProbeTick);
+        if (probe == 0)
+        {
+            if (Interlocked.CompareExchange(ref _escapeProbeTick, now, 0) != 0) return;
+            if (!dq.TryEnqueue(DispatcherQueuePriority.High, () => Interlocked.Exchange(ref _escapeProbeTick, 0)))
+                Interlocked.CompareExchange(ref _escapeProbeTick, 0, now);
+            return;
+        }
+        // A second, separate Esc while the first is still unanswered: the overlay is wedged on screen.
+        if (!repeat && now - probe >= HungEscapeConfirmMs) ReleaseWedgedOverlay(probe);
     }
 
     // True when `window` is a real window below the overlay in z-order, i.e. the user can't see it.
@@ -263,10 +296,8 @@ public static class CaptureOverlayHost
         return false;
     }
 
-    private static void CheckEscapeProbe(object? state)
+    private static void ReleaseWedgedOverlay(long probe)
     {
-        long probe = (long)state!;
-        if (Interlocked.Read(ref _escapeProbeTick) != probe) return; // the UI thread answered
         // Only when the overlay is actually on screen (a cloaked one blocks nothing), and
         // never while a recording is running or still being finalized.
         if (Volatile.Read(ref _overlayVisible) == 0 || _current is not { IsRevealed: true }
@@ -275,11 +306,18 @@ public static class CaptureOverlayHost
             Interlocked.CompareExchange(ref _escapeProbeTick, 0, probe);
             return;
         }
-        // The UI thread is the only one that can hide the window, and it isn't running.
-        // End the process so the screen is usable again; the watchdog starts Clipsy anew.
-        Diagnostics.Log($"Overlay UI thread unresponsive for {HungEscapeTimeoutMs} ms after Esc; restarting Clipsy to release the screen");
-        try { Process.GetCurrentProcess().Kill(); }
-        catch (Exception ex) { Diagnostics.Log("Emergency overlay release failed", ex); }
+        // Off the hook thread: the hook callback must return immediately.
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            if (Interlocked.Read(ref _escapeProbeTick) != probe) return; // the UI thread answered
+            // The UI thread is the only one that can hide the window, and it isn't running.
+            // End the process so the screen is usable again; the watchdog starts Clipsy anew.
+            Diagnostics.Log($"Overlay UI thread unresponsive for {Environment.TickCount64 - probe} ms after a repeated Esc; restarting Clipsy to release the screen");
+            try { ProcessWatchdog.RequestRestart(); }
+            catch (Exception ex) { Diagnostics.Log("Watchdog restart request failed", ex); }
+            try { Process.GetCurrentProcess().Kill(); }
+            catch (Exception ex) { Diagnostics.Log("Emergency overlay release failed", ex); }
+        });
     }
 
     private const uint GW_HWNDPREV = 3;

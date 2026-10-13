@@ -254,6 +254,58 @@ public static class SaveDialogService
         return path;
     }
 
+    /// <summary>Writes a new "prefix_yyyyMMdd_HHmmss.ext" file ("_2", "_3"... when taken) and returns
+    /// its path. CreateNew claims the name, so parallel saves can't overwrite each other.</summary>
+    public static string WriteNewFile(string folder, string prefix, string extension, byte[] bytes)
+    {
+        Directory.CreateDirectory(folder);
+        var ext = extension.StartsWith('.') ? extension : "." + extension;
+        var baseName = Path.GetFileNameWithoutExtension(MakeTimestampName(prefix, ext));
+        for (int i = 1; ; i++)
+        {
+            var path = Path.Combine(folder, (i == 1 ? baseName : $"{baseName}_{i}") + ext);
+            FileStream fs;
+            try { fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None); }
+            // Only a taken name moves on; a full disk or denied access must fail, not litter _2.._999.
+            catch (IOException ex) when (IsFileExists(ex) && i < 1000) { continue; }
+            WriteAndClose(fs, path, bytes);
+            return path;
+        }
+    }
+
+    /// <summary>Replaces <paramref name="path"/> in one step: the bytes go to a temp file in the
+    /// same folder first, so a failed write never leaves the existing file truncated.</summary>
+    public static void WriteReplacing(string path, byte[] bytes)
+    {
+        var full = Path.GetFullPath(path);
+        var tmp = Path.Combine(Path.GetDirectoryName(full)!, $".{Path.GetFileName(full)}.{Guid.NewGuid():N}.tmp");
+        WriteAndClose(new FileStream(tmp, FileMode.CreateNew, FileAccess.Write, FileShare.None), tmp, bytes);
+        try { File.Move(tmp, full, overwrite: true); }
+        catch
+        {
+            try { File.Delete(tmp); } catch { }
+            throw;
+        }
+    }
+
+    private static void WriteAndClose(FileStream fs, string path, byte[] bytes)
+    {
+        try
+        {
+            using (fs) fs.Write(bytes, 0, bytes.Length);
+        }
+        catch
+        {
+            // Don't leave a truncated image behind.
+            try { File.Delete(path); } catch { }
+            throw;
+        }
+    }
+
+    // ERROR_FILE_EXISTS / ERROR_ALREADY_EXISTS.
+    private static bool IsFileExists(IOException ex)
+        => ex.HResult is unchecked((int)0x80070050) or unchecked((int)0x800700B7);
+
     public static string MakeTimestampName(string prefix, string extension)
     {
         var ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");

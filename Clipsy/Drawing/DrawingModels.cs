@@ -85,6 +85,9 @@ public abstract class DrawElement
 
     /// <summary>Translate the element by (dx, dy) for the move tool.</summary>
     public abstract void Offset(double dx, double dy);
+
+    /// <summary>Independent copy (own point list), for renders that run while editing goes on.</summary>
+    public abstract DrawElement Clone();
 }
 
 public sealed class StrokeElement : DrawElement
@@ -124,6 +127,9 @@ public sealed class StrokeElement : DrawElement
             Points[i] = new Point(Points[i].X + dx, Points[i].Y + dy);
     }
 
+    public override DrawElement Clone()
+        => new StrokeElement { Points = new List<Point>(Points), Thickness = Thickness, Color = Color };
+
     private static double SegmentDistance(Point a, Point b, Point p)
     {
         double dx = b.X - a.X, dy = b.Y - a.Y;
@@ -152,6 +158,9 @@ public sealed class RectangleElement : DrawElement
     public override void Offset(double dx, double dy)
         => Bounds = new Rect(Bounds.X + dx, Bounds.Y + dy, Bounds.Width, Bounds.Height);
 
+    public override DrawElement Clone()
+        => new RectangleElement { Bounds = Bounds, Thickness = Thickness, Color = Color };
+
     public override bool HitTest(Point p, double radius)
     {
         var b = Bounds;
@@ -172,6 +181,9 @@ public sealed class EllipseElement : DrawElement
 
     public override void Offset(double dx, double dy)
         => Bounds = new Rect(Bounds.X + dx, Bounds.Y + dy, Bounds.Width, Bounds.Height);
+
+    public override DrawElement Clone()
+        => new EllipseElement { Bounds = Bounds, Thickness = Thickness, Color = Color };
 
     public override bool HitTest(Point p, double radius)
     {
@@ -205,6 +217,9 @@ public sealed class LineElement : DrawElement
         Start = new Point(Start.X + dx, Start.Y + dy);
         End = new Point(End.X + dx, End.Y + dy);
     }
+
+    public override DrawElement Clone()
+        => new LineElement { Start = Start, End = End, Thickness = Thickness, EndArrow = EndArrow, Color = Color };
 
     /// <summary>Arrow tool: draw an open arrowhead at End.</summary>
     public bool EndArrow { get; init; }
@@ -263,4 +278,15 @@ public sealed class TextElement : DrawElement
 
     public override void Offset(double dx, double dy)
         => Position = new Point(Position.X + dx, Position.Y + dy);
+
+    public override DrawElement Clone()
+        => new TextElement
+        {
+            Position = Position,
+            Text = Text,
+            FontSize = FontSize,
+            FontFamily = FontFamily,
+            MeasuredSize = MeasuredSize,
+            Color = Color,
+        };
 }

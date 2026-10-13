@@ -53,10 +53,14 @@ public sealed class DrawingController
             return;
 
         if (_canvas != null)
+        {
             _canvas.Draw -= OnDraw;
+            _canvas.CreateResources -= OnCreateResources;
+        }
 
         _canvas = canvas;
         _canvas.Draw += OnDraw;
+        _canvas.CreateResources += OnCreateResources;
         _cacheDirty = true;
         _canvas?.Invalidate();
     }
@@ -64,7 +68,10 @@ public sealed class DrawingController
     public void DetachCanvas()
     {
         if (_canvas != null)
+        {
             _canvas.Draw -= OnDraw;
+            _canvas.CreateResources -= OnCreateResources;
+        }
 
         _canvas = null;
         DisposeResources();
@@ -111,14 +118,21 @@ public sealed class DrawingController
             _canvas?.Invalidate();
             return;
         }
-        using var ds = _cache.CreateDrawingSession();
-        var last = _activeLast;
-        foreach (var pt in points)
+        try
         {
-            ds.DrawLine(V(last), V(pt), _activeColor, (float)_activeThickness, RoundStroke);
-            last = pt;
+            using var ds = _cache.CreateDrawingSession();
+            var last = _activeLast;
+            foreach (var pt in points)
+            {
+                ds.DrawLine(V(last), V(pt), _activeColor, (float)_activeThickness, RoundStroke);
+                last = pt;
+            }
         }
-        _activeLast = last;
+        catch (Exception ex) when (IsDeviceLost(ex))
+        {
+            DropLostCache();
+        }
+        _activeLast = points[^1];
         _canvas?.Invalidate();
     }
 
@@ -165,16 +179,46 @@ public sealed class DrawingController
     private void PaintActiveSegment(Point a, Point b)
     {
         if (_cache == null) { _activeMissedPaint = true; _canvas?.Invalidate(); return; }
-        using var cds = _cache.CreateDrawingSession();
-        cds.DrawLine(V(a), V(b), _activeColor, (float)_activeThickness, RoundStroke);
+        try
+        {
+            using var cds = _cache.CreateDrawingSession();
+            cds.DrawLine(V(a), V(b), _activeColor, (float)_activeThickness, RoundStroke);
+        }
+        catch (Exception ex) when (IsDeviceLost(ex))
+        {
+            DropLostCache();
+        }
         _canvas?.Invalidate();
     }
 
     public void DisposeResources()
     {
-        _cache?.Dispose();
+        try { _cache?.Dispose(); } catch { } // may belong to a removed device
         _cache = null;
     }
+
+    // The GPU was reset or removed (a driver TDR under a game is realistic): the cache is gone
+    // with it. The canvas recreates its device; the next draw rebuilds from committed elements.
+    private void DropLostCache()
+    {
+        DisposeResources();
+        if (_activeOpen) _activeMissedPaint = true;
+        _cacheDirty = true;
+    }
+
+    // New device for the canvas (first use or after a device loss): the cache belongs to the old one.
+    private void OnCreateResources(CanvasControl sender, Microsoft.Graphics.Canvas.UI.CanvasCreateResourcesEventArgs args)
+        => DropLostCache();
+
+    private const int DXGI_ERROR_DEVICE_REMOVED = unchecked((int)0x887A0005);
+    private const int DXGI_ERROR_DEVICE_HUNG = unchecked((int)0x887A0006);
+    private const int DXGI_ERROR_DEVICE_RESET = unchecked((int)0x887A0007);
+    private const int DXGI_ERROR_DRIVER_INTERNAL_ERROR = unchecked((int)0x887A0020);
+    private const int D2DERR_RECREATE_TARGET = unchecked((int)0x8899000C);
+
+    private static bool IsDeviceLost(Exception ex)
+        => ex.HResult is DXGI_ERROR_DEVICE_REMOVED or DXGI_ERROR_DEVICE_HUNG or DXGI_ERROR_DEVICE_RESET
+            or DXGI_ERROR_DRIVER_INTERNAL_ERROR or D2DERR_RECREATE_TARGET;
 
     public void Add(DrawElement e)
     {
@@ -374,8 +418,17 @@ public sealed class DrawingController
     private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         var ds = args.DrawingSession;
-        EnsureCache(sender);
-        if (_cache != null) ds.DrawImage(_cache);
+        try
+        {
+            EnsureCache(sender);
+            if (_cache != null) ds.DrawImage(_cache);
+        }
+        catch (Exception ex) when (IsDeviceLost(ex))
+        {
+            // Rethrown: the control recovers from device loss in Draw by recreating its device.
+            DropLostCache();
+            throw;
+        }
         if (_selected != null)
         {
             try { DrawOne(ds, _selected); } catch { }

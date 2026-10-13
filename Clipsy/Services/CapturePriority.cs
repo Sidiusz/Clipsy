@@ -1,11 +1,12 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Clipsy.Services;
 
 /// <summary>Raises the process's CPU and GPU scheduling priority from the capture
-/// hotkey until the overlay closes, so games saturating the machine can't starve
-/// the capture, the overlay's first frames or its input handling.</summary>
+/// hotkey until shortly after the overlay is on screen, so games saturating the machine
+/// can't starve the capture, the overlay's first frames or its first input.</summary>
 internal static class CapturePriority
 {
     private static readonly object _lock = new();
@@ -14,6 +15,9 @@ internal static class CapturePriority
     private static bool _cpuRaised;
     private static int _savedGpuClass = -1;
     private static bool _gpuFailureLogged;
+    // Bumped by every Boost, so a delayed restore never ends a later capture's boost.
+    private static int _generation;
+    private static Timer? _restoreTimer;
 
     public static void Boost()
     {
@@ -21,6 +25,7 @@ internal static class CapturePriority
         {
             if (_boosted) return;
             _boosted = true;
+            _generation++;
             var self = GetCurrentProcess();
 
             _savedCpuClass = GetPriorityClass(self);
@@ -65,6 +70,24 @@ internal static class CapturePriority
                 try { D3DKMTSetProcessSchedulingPriorityClass(self, _savedGpuClass); }
                 catch { }
             }
+        }
+    }
+
+    /// <summary>Restores after <paramref name="delayMs"/> unless a new boost started meanwhile.</summary>
+    public static void RestoreAfter(int delayMs)
+    {
+        lock (_lock)
+        {
+            if (!_boosted) return;
+            int generation = _generation;
+            _restoreTimer?.Dispose();
+            _restoreTimer = new Timer(_ =>
+            {
+                lock (_lock)
+                {
+                    if (generation == _generation) Restore();
+                }
+            }, null, delayMs, Timeout.Infinite);
         }
     }
 

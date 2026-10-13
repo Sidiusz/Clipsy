@@ -81,4 +81,14 @@ public class ScreenshotRendererTests
         var outside = bmp.GetPixel(5, 5);
         Assert.Equal(0x40, outside.R);
     }
+
+    [Fact]
+    public void OversizedWebpFallsBackToPng()
+    {
+        var webp = ScreenshotRenderer.OutputFormat.Webp;
+        Assert.Equal(webp, ScreenshotRenderer.EffectiveFormat(webp, 16383, 16383));
+        Assert.Equal(ScreenshotRenderer.OutputFormat.Png, ScreenshotRenderer.EffectiveFormat(webp, 16384, 100));
+        Assert.Equal(ScreenshotRenderer.OutputFormat.Jpeg,
+            ScreenshotRenderer.EffectiveFormat(ScreenshotRenderer.OutputFormat.Jpeg, 20000, 100));
+    }
 }

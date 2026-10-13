@@ -21,12 +21,10 @@ public sealed partial class CaptureOverlayWindow
     private async void OnRecordClick(object sender, RoutedEventArgs e)
     {
         if (!_hasSelection) return;
-        var scale = DpiScale;
+        // Clamped to the frame: the recorder can't capture outside the virtual screen.
+        var px = ScreenshotRenderer.ToPixelRect(_selectionRect, DpiScale, _frame.PixelWidth, _frame.PixelHeight);
         var b = _frame.VirtualBounds;
-        int x = b.X + (int)System.Math.Round(_selectionRect.X * scale);
-        int y = b.Y + (int)System.Math.Round(_selectionRect.Y * scale);
-        int w = (int)System.Math.Round(_selectionRect.Width * scale);
-        int h = (int)System.Math.Round(_selectionRect.Height * scale);
+        int x = b.X + px.X, y = b.Y + px.Y, w = px.Width, h = px.Height;
         if (w < 8 || h < 8) return;
         var dq = App.Current.HostWindow!.DispatcherQueue;
         CaptureOverlayHost.Dismiss(this);
@@ -46,6 +44,9 @@ public sealed partial class CaptureOverlayWindow
     {
         try { OverlayMenu.Hide(); } catch { }
         HideForClose();
+        // Free the host now: a capture hotkey pressed before the deferred reset runs must open
+        // a new session, not re-activate this cloaked window.
+        CaptureOverlayHost.Detach(this);
         // Only this session: a second request (Esc auto-repeat) queued before the first ran
         // must not dismiss the next capture, which reuses this window.
         int session = _session;
@@ -58,10 +59,34 @@ public sealed partial class CaptureOverlayWindow
     // Everything a background render needs, copied so the overlay can be reset or reused meanwhile.
     private sealed record RenderJob(ScreenFreezeService.FrozenFrame Frame, Rect Selection, DrawElement[] Elements, double Scale, int Session);
 
-    private bool _busy;
+    // Session of the save/copy in progress: a slow one from a closed session must not block
+    // the next capture, and its finally must not clear the next one's flag.
+    private int _busySession = -1;
 
+    private bool TryBeginBusy()
+    {
+        if (!_hasSelection || _busySession == _session) return false;
+        _busySession = _session;
+        return true;
+    }
+
+    private void EndBusy(RenderJob job)
+    {
+        if (_busySession == job.Session) _busySession = -1;
+    }
+
+    // Deep copies: the move tool and undo mutate elements in place while the render runs.
     private RenderJob SnapshotRenderJob()
-        => new(_frame, _selectionRect, _drawing.Elements.ToArray(), DpiScale, _session);
+        => new(_frame, _selectionRect, _drawing.Elements.Select(e => e.Clone()).ToArray(), DpiScale, _session);
+
+    // WebP can't hold a side over 16383 px; such a render is written as PNG instead.
+    private static (byte[] Bytes, ScreenshotRenderer.OutputFormat Format) RenderForSave(
+        RenderJob job, ScreenshotRenderer.OutputFormat fmt, int quality)
+    {
+        var image = ScreenshotRenderer.Render(job.Frame, job.Selection, job.Elements, job.Scale);
+        var actual = ScreenshotRenderer.EffectiveFormat(fmt, image.Width, image.Height);
+        return (ScreenshotRenderer.Encode(image.Bgra, image.Width, image.Height, actual, quality), actual);
+    }
 
     // A save/copy that finishes after the user moved on must not close the next capture.
     private void CloseIfSameSession(RenderJob job)
@@ -71,8 +96,7 @@ public sealed partial class CaptureOverlayWindow
 
     private async Task SaveSilentAsync()
     {
-        if (!_hasSelection || _busy) return;
-        _busy = true;
+        if (!TryBeginBusy()) return;
         var job = SnapshotRenderJob();
         try
         {
@@ -82,8 +106,8 @@ public sealed partial class CaptureOverlayWindow
             var folder = settings.GetEffectiveScreenshotFolder();
             var fullPath = await Task.Run(() =>
             {
-                var bytes = ScreenshotRenderer.RenderEncoded(job.Frame, job.Selection, job.Elements, job.Scale, fmt, quality);
-                return WriteUnique(folder, ScreenshotRenderer.ExtensionFor(fmt), bytes);
+                var (bytes, actual) = RenderForSave(job, fmt, quality);
+                return SaveDialogService.WriteNewFile(folder, "Clipsy", ScreenshotRenderer.ExtensionFor(actual), bytes);
             });
             NotificationService.ScreenshotSaved(IOPath.GetFileName(fullPath), new FileInfo(fullPath).Length / 1024L, fullPath);
             AfterSaveAction.Run(fullPath, settings.Settings.AfterSaveAction);
@@ -94,31 +118,12 @@ public sealed partial class CaptureOverlayWindow
             Diagnostics.Log("Silent save failed", ex);
             NotificationService.Error("ErrSaveFailed");
         }
-        finally { _busy = false; }
-    }
-
-    // CreateNew never overwrites: two saves in the same second get "_2", "_3"...
-    private static string WriteUnique(string folder, string ext, byte[] bytes)
-    {
-        Directory.CreateDirectory(folder);
-        var baseName = IOPath.GetFileNameWithoutExtension(SaveDialogService.MakeTimestampName("Clipsy", ext));
-        for (int i = 1; ; i++)
-        {
-            var path = IOPath.Combine(folder, (i == 1 ? baseName : $"{baseName}_{i}") + ext);
-            try
-            {
-                using var fs = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                fs.Write(bytes, 0, bytes.Length);
-                return path;
-            }
-            catch (IOException) when (File.Exists(path) && i < 1000) { }
-        }
+        finally { EndBusy(job); }
     }
 
     private async Task SaveAsAsync()
     {
-        if (!_hasSelection || _busy) return;
-        _busy = true;
+        if (!TryBeginBusy()) return;
         var job = SnapshotRenderJob();
         try
         {
@@ -151,22 +156,20 @@ public sealed partial class CaptureOverlayWindow
             var result = await SaveDialogService.PickSaveAsync(_hwnd, suggestedFolder, name, filters, preferredExt);
             if (result == null || job.Session != _session) return;
 
-            // Figure out the format from the chosen filter; fall back to file extension.
+            // The typed extension picks the format; with none, or one we can't write (it
+            // would hold PNG bytes under a foreign name), the chosen filter's is appended.
             var chosen = filters[System.Math.Max(0, result.FilterIndex - 1)];
             var chosenExt = SaveDialogService.ExtensionFromPattern(chosen.Pattern);
-            var pathExt = IOPath.GetExtension(result.Path);
-            var finalExt = string.IsNullOrEmpty(pathExt) ? chosenExt : pathExt;
-            var fmt = ScreenshotRenderer.ParseFormat(finalExt.TrimStart('.'));
-            var finalPath = result.Path;
-            if (string.IsNullOrEmpty(pathExt))
-            {
-                finalPath = result.Path + "." + chosenExt;
-            }
+            var pathExt = IOPath.GetExtension(result.Path).TrimStart('.').ToLowerInvariant();
+            bool knownExt = pathExt is "png" or "jpg" or "jpeg" or "webp";
+            var fmt = ScreenshotRenderer.ParseFormat(knownExt ? pathExt : chosenExt);
+            var finalPath = knownExt ? result.Path : result.Path + "." + chosenExt;
 
             int quality = settings.Settings.JpgQuality;
-            var bytes = await Task.Run(() =>
-                ScreenshotRenderer.RenderEncoded(job.Frame, job.Selection, job.Elements, job.Scale, fmt, quality));
-            await File.WriteAllBytesAsync(finalPath, bytes);
+            var (bytes, actual) = await Task.Run(() => RenderForSave(job, fmt, quality));
+            if (actual != fmt) finalPath = IOPath.ChangeExtension(finalPath, ScreenshotRenderer.ExtensionFor(actual));
+            // Temp file + rename: a failed write never leaves the file being replaced truncated.
+            await Task.Run(() => SaveDialogService.WriteReplacing(finalPath, bytes));
             NotificationService.ScreenshotSaved(IOPath.GetFileName(finalPath), bytes.LongLength / 1024L, finalPath);
             var dir = IOPath.GetDirectoryName(finalPath);
             if (!string.IsNullOrEmpty(dir))
@@ -182,13 +185,12 @@ public sealed partial class CaptureOverlayWindow
             Diagnostics.Log("Save As failed", ex);
             NotificationService.Error("ErrSaveFailed");
         }
-        finally { _busy = false; }
+        finally { EndBusy(job); }
     }
 
     private async Task CopyAsync()
     {
-        if (!_hasSelection || _busy) return;
-        _busy = true;
+        if (!TryBeginBusy()) return;
         var job = SnapshotRenderJob();
         try
         {
@@ -202,7 +204,7 @@ public sealed partial class CaptureOverlayWindow
             Diagnostics.Log("Copy failed", ex);
             NotificationService.Error("ErrCopyFailed");
         }
-        finally { _busy = false; }
+        finally { EndBusy(job); }
     }
 
     // ---------- Context menu ----------

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Clipsy.Drawing;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -199,6 +200,7 @@ public sealed partial class CaptureOverlayWindow
         _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _hoverTimer.Tick += OnFontHoverTimerTick;
         _hoverTimer.Start();
+        _ = InstalledFonts.Value; // start enumerating during the hover delay
     }
 
     private void OnFontHoverTimerTick(object? sender, object e)
@@ -216,17 +218,27 @@ public sealed partial class CaptureOverlayWindow
         ShowFlyout(FontsFlyout);
     }
 
-    private List<string>? _systemFonts;
+    private const string BundledFontEntry = "Onest (bundled)";
+    // Each row renders in its own font; materializing hundreds of them stalls the UI thread.
+    private const int MaxFontRows = 200;
 
-    private void EnsureFontListBuilt()
+    // Enumerated once per process, off the UI thread: GDI+ is slow with many fonts installed.
+    private static readonly Lazy<Task<IReadOnlyList<string>>> InstalledFonts =
+        new(() => Task.Run(() => EnumerateInstalledFonts()));
+
+    private IReadOnlyList<string>? _systemFonts;
+    private bool _fontsLoading;
+    private DispatcherQueueTimer? _fontFilterTimer;
+
+    private static IReadOnlyList<string> EnumerateInstalledFonts()
     {
-        if (FontList == null || _systemFonts != null) return;
+        List<string> fonts;
         try
         {
             // GDI+ font enumeration via System.Drawing.Common; filter to families
             // with a regular face to skip broken icon/symbol entries.
             using var coll = new System.Drawing.Text.InstalledFontCollection();
-            _systemFonts = coll.Families
+            fonts = coll.Families
                 .Select(f => f.Name)
                 .Where(n => !string.IsNullOrWhiteSpace(n))
                 .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
@@ -235,12 +247,29 @@ public sealed partial class CaptureOverlayWindow
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Clipsy] Font enumeration failed: {ex.Message}");
-            _systemFonts = new List<string> { "Segoe UI Variable", "Segoe UI", "Arial" };
+            fonts = new List<string> { "Segoe UI Variable", "Segoe UI", "Arial" };
         }
         // Prepend the bundled Onest entry so it always shows even if not
         // installed system-wide.
-        _systemFonts.Insert(0, "Onest (bundled)");
-        RenderFontList(string.Empty);
+        fonts.Insert(0, BundledFontEntry);
+        return fonts;
+    }
+
+    private async void EnsureFontListBuilt()
+    {
+        if (FontList == null || _systemFonts != null || _fontsLoading) return;
+        _fontsLoading = true;
+        try { _systemFonts = await InstalledFonts.Value; }
+        finally { _fontsLoading = false; }
+        if (_closed) return;
+        RenderFontList(FontFilterBox?.Text ?? string.Empty);
+        // The flyout may already be open, placed for the empty list; keep it on screen.
+        if (FontsFlyout is { Visibility: Visibility.Visible })
+        {
+            FontsFlyout.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            double maxTop = System.Math.Max(8, RootGrid.ActualHeight - FontsFlyout.DesiredSize.Height - 8);
+            Canvas.SetTop(FontsFlyout, System.Math.Clamp(Canvas.GetTop(FontsFlyout), 8, maxTop));
+        }
     }
 
     private void RenderFontList(string filter)
@@ -250,9 +279,9 @@ public sealed partial class CaptureOverlayWindow
         IEnumerable<string> items = _systemFonts;
         if (!string.IsNullOrWhiteSpace(filter))
             items = items.Where(n => n.Contains(filter, StringComparison.OrdinalIgnoreCase));
-        foreach (var name in items)
+        foreach (var name in items.Take(MaxFontRows))
         {
-            var (family, tag) = name == "Onest (bundled)"
+            var (family, tag) = name == BundledFontEntry
                 ? ("ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, Segoe UI, sans-serif",
                    "ms-appx:///Assets/Fonts/Onest-VariableFont_wght.ttf#Onest, Inter, Segoe UI, sans-serif")
                 : (name, name);
@@ -282,7 +311,19 @@ public sealed partial class CaptureOverlayWindow
     private void OnFontFilterChanged(object sender, TextChangedEventArgs e)
     {
         if (FontFilterBox == null) return;
-        RenderFontList(FontFilterBox.Text ?? string.Empty);
+        // Debounced: rebuilding the rows on every keystroke makes typing lag.
+        if (_fontFilterTimer == null)
+        {
+            _fontFilterTimer = DispatcherQueue.CreateTimer();
+            _fontFilterTimer.Interval = TimeSpan.FromMilliseconds(150);
+            _fontFilterTimer.IsRepeating = false;
+            _fontFilterTimer.Tick += (_, _) =>
+            {
+                if (!_closed) RenderFontList(FontFilterBox?.Text ?? string.Empty);
+            };
+        }
+        _fontFilterTimer.Stop();
+        _fontFilterTimer.Start();
     }
 
     private void PositionFontsFlyout()

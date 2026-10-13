@@ -84,4 +84,16 @@ public class DrawingHistoryTests
         Assert.True(d.Redo());
         Assert.Equal(new Point(40, 15), text.Position);
     }
+
+    [Fact]
+    public void CloneIsUnaffectedByLaterMoves()
+    {
+        var stroke = Stroke((0, 0), (10, 10));
+        var copy = (StrokeElement)stroke.Clone();
+
+        stroke.Offset(5, 5);
+        Assert.Equal(new Point(0, 0), copy.Points[0]);
+        Assert.Equal(stroke.Thickness, copy.Thickness);
+        Assert.Equal(stroke.Color, copy.Color);
+    }
 }

@@ -69,11 +69,11 @@ internal static class CliScreenshotService
         var frame = new ScreenFreezeService().Capture(cursor);
         target = Rectangle.Intersect(target, frame.VirtualBounds);
 
-        string? finalPath = null;
+        string? finalPath = null, saveFolder = null;
         if (!noSave)
         {
-            finalPath = ResolveOutputPath(outPath, ext);
-            var dir = Path.GetDirectoryName(finalPath);
+            finalPath = ResolveOutputPath(outPath, ext, out saveFolder);
+            var dir = saveFolder ?? Path.GetDirectoryName(finalPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         }
 
@@ -84,8 +84,20 @@ internal static class CliScreenshotService
             target.Height);
         var image = ScreenshotRenderer.Render(frame, selection, Array.Empty<DrawElement>(), 1.0);
 
-        if (finalPath != null)
-            File.WriteAllBytes(finalPath, ScreenshotRenderer.Encode(image.Bgra, image.Width, image.Height, format, settings.JpgQuality));
+        if (!noSave)
+        {
+            // WebP can't hold a side over 16383 px: such an image is written as PNG, and named so.
+            var actual = ScreenshotRenderer.EffectiveFormat(format, image.Width, image.Height);
+            ext = ScreenshotRenderer.ExtensionFor(actual);
+            var bytes = ScreenshotRenderer.Encode(image.Bgra, image.Width, image.Height, actual, settings.JpgQuality);
+            if (saveFolder != null)
+                finalPath = SaveDialogService.WriteNewFile(saveFolder, "Clipsy", ext, bytes);
+            else
+            {
+                if (actual != format) finalPath = Path.ChangeExtension(finalPath, ext);
+                SaveDialogService.WriteReplacing(finalPath!, bytes);
+            }
+        }
         if (clipboard) ClipboardService.SetImage(image);
 
         return new CliResult(0, finalPath ?? "copied to clipboard", new
@@ -166,13 +178,21 @@ internal static class CliScreenshotService
         return ScreenshotRenderer.ParseFormat(chosen);
     }
 
-    private static string ResolveOutputPath(string? requested, string extension)
+    // An explicit file path, or null with the folder a new unique name is created in at write time.
+    private static string? ResolveOutputPath(string? requested, string extension, out string? folder)
     {
+        folder = null;
         if (string.IsNullOrWhiteSpace(requested))
-            return SaveDialogService.UniquePath(SettingsService.Instance.GetEffectiveScreenshotFolder(), "Clipsy", extension);
+        {
+            folder = SettingsService.Instance.GetEffectiveScreenshotFolder();
+            return null;
+        }
         string expanded = Environment.ExpandEnvironmentVariables(requested);
         if (Directory.Exists(expanded) || Path.EndsInDirectorySeparator(expanded))
-            return SaveDialogService.UniquePath(Path.GetFullPath(expanded), "Clipsy", extension);
+        {
+            folder = Path.GetFullPath(expanded);
+            return null;
+        }
         string full = Path.GetFullPath(expanded);
         return string.IsNullOrEmpty(Path.GetExtension(full)) ? full + extension : full;
     }

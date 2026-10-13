@@ -20,6 +20,15 @@ public static class ClipboardService
     private static readonly IntPtr HWND_MESSAGE = new(-3);
     // Chrome, Discord, Telegram and image editors prefer PNG over CF_DIB.
     private static readonly uint CF_PNG = RegisterClipboardFormatW("PNG");
+    // Above this a PNG copy costs seconds of encoding and hundreds of MB; CF_DIB alone still pastes.
+    private const long MaxPngPixels = 50_000_000;
+
+    // Fills the locked clipboard memory in place, so large images aren't staged in a second array.
+    private delegate void Fill(Span<byte> dest);
+    private readonly record struct ClipItem(uint Format, int Length, Fill Write);
+
+    private static ClipItem FromBytes(uint format, ArraySegment<byte> data)
+        => new(format, data.Count, dest => data.AsSpan().CopyTo(dest));
 
     public static Task SetTextAsync(string text) => Task.Run(() => SetText(text));
 
@@ -27,27 +36,37 @@ public static class ClipboardService
     {
         var data = new byte[(text.Length + 1) * 2];
         Encoding.Unicode.GetBytes(text, 0, text.Length, data, 0);
-        Set((CF_UNICODETEXT, data));
+        Set(FromBytes(CF_UNICODETEXT, data));
     }
 
     public static void SetImage(ScreenshotRenderer.RenderedImage image)
     {
-        var dib = BuildDib(image);
-        if (CF_PNG == 0)
+        var dib = new ClipItem(CF_DIB, DibLength(image), dest => WriteDib(image, dest));
+        if (CF_PNG == 0 || (long)image.Width * image.Height > MaxPngPixels)
         {
-            Set((CF_DIB, dib));
+            Set(dib);
             return;
         }
-        var png = ScreenshotRenderer.Encode(image.Bgra, image.Width, image.Height, ScreenshotRenderer.OutputFormat.Png, 100);
-        Set((CF_DIB, dib), (CF_PNG, png));
+        var png = ScreenshotRenderer.EncodeSegment(image.Bgra, image.Width, image.Height, ScreenshotRenderer.OutputFormat.Png, 100);
+        Set(dib, FromBytes(CF_PNG, png));
+    }
+
+    private static int DibLength(ScreenshotRenderer.RenderedImage image)
+        => checked(DibHeaderSize + image.Width * 4 * image.Height);
+
+    internal static byte[] BuildDib(ScreenshotRenderer.RenderedImage image)
+    {
+        var dib = new byte[DibLength(image)];
+        WriteDib(image, dib);
+        return dib;
     }
 
     // Bottom-up 32bpp BI_RGB: the one DIB layout every reader handles.
-    internal static byte[] BuildDib(ScreenshotRenderer.RenderedImage image)
+    private static void WriteDib(ScreenshotRenderer.RenderedImage image, Span<byte> dib)
     {
         int stride = image.Width * 4;
-        var dib = new byte[DibHeaderSize + stride * image.Height];
-        var header = dib.AsSpan(0, DibHeaderSize);
+        var header = dib[..DibHeaderSize];
+        header.Clear(); // locked clipboard memory isn't zeroed
         BinaryPrimitives.WriteInt32LittleEndian(header[0..], DibHeaderSize);
         BinaryPrimitives.WriteInt32LittleEndian(header[4..], image.Width);
         BinaryPrimitives.WriteInt32LittleEndian(header[8..], image.Height);
@@ -55,11 +74,10 @@ public static class ClipboardService
         BinaryPrimitives.WriteInt16LittleEndian(header[14..], 32);
         BinaryPrimitives.WriteInt32LittleEndian(header[20..], stride * image.Height);
         for (int y = 0; y < image.Height; y++)
-            Buffer.BlockCopy(image.Bgra, y * stride, dib, DibHeaderSize + (image.Height - 1 - y) * stride, stride);
-        return dib;
+            image.Bgra.AsSpan(y * stride, stride).CopyTo(dib.Slice(DibHeaderSize + (image.Height - 1 - y) * stride, stride));
     }
 
-    private static void Set(params (uint Format, byte[] Data)[] items)
+    private static void Set(params ClipItem[] items)
     {
         // EmptyClipboard with a NULL owner makes SetClipboardData fail, so own it with a throwaway window.
         IntPtr owner = CreateWindowExW(0, "STATIC", null, 0, 0, 0, 0, 0, HWND_MESSAGE, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
@@ -69,7 +87,7 @@ public static class ClipboardService
             try
             {
                 if (!EmptyClipboard()) throw new Win32Exception();
-                foreach (var (format, data) in items) Put(format, data);
+                foreach (var item in items) Put(item);
             }
             finally { CloseClipboard(); }
         }
@@ -105,17 +123,17 @@ public static class ClipboardService
         catch { return "unknown"; }
     }
 
-    private static void Put(uint format, byte[] data)
+    private static unsafe void Put(ClipItem item)
     {
-        IntPtr h = GlobalAlloc(GMEM_MOVEABLE, (UIntPtr)data.Length);
-        if (h == IntPtr.Zero) throw new OutOfMemoryException($"GlobalAlloc({data.Length}) failed for clipboard data.");
+        IntPtr h = GlobalAlloc(GMEM_MOVEABLE, (UIntPtr)item.Length);
+        if (h == IntPtr.Zero) throw new OutOfMemoryException($"GlobalAlloc({item.Length}) failed for clipboard data.");
         try
         {
             IntPtr p = GlobalLock(h);
             if (p == IntPtr.Zero) throw new Win32Exception();
-            try { Marshal.Copy(data, 0, p, data.Length); }
+            try { item.Write(new Span<byte>((void*)p, item.Length)); }
             finally { GlobalUnlock(h); }
-            if (SetClipboardData(format, h) == IntPtr.Zero) throw new Win32Exception();
+            if (SetClipboardData(item.Format, h) == IntPtr.Zero) throw new Win32Exception();
             h = IntPtr.Zero; // the clipboard owns it now
         }
         finally

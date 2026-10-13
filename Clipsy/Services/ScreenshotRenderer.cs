@@ -40,6 +40,18 @@ public static class ScreenshotRenderer
         _ => ".png",
     };
 
+    // WebP stores each side in 14 bits.
+    private const int WebpMaxSide = 16383;
+    // Burn tiles stay well under every GPU's texture limit and a few hundred MB of VRAM.
+    private const int MaxBurnTile = 8192;
+
+    /// <summary>The format <see cref="Encode"/> actually writes: WebP can't hold a side over
+    /// 16383 px, so such images become PNG. Callers name the file after this.</summary>
+    public static OutputFormat EffectiveFormat(OutputFormat requested, int width, int height)
+        => requested == OutputFormat.Webp && (width > WebpMaxSide || height > WebpMaxSide)
+            ? OutputFormat.Png
+            : requested;
+
     /// <summary>Same rounding as the overlay's selection hole, clamped to the frame.</summary>
     public static PixelRect ToPixelRect(Rect selectionDip, double dpiScale, int frameWidth, int frameHeight)
     {
@@ -114,6 +126,34 @@ public static class ScreenshotRenderer
     private static byte[] BurnDrawings(CanvasDevice device, byte[] pixels, PixelRect rect,
         IReadOnlyList<DrawElement> elements, double scale)
     {
+        int tile = Math.Min(device.MaximumBitmapSizeInPixels, MaxBurnTile);
+        if (rect.Width <= tile && rect.Height <= tile)
+            return BurnTile(device, pixels, rect, elements, scale);
+
+        // Larger than one GPU texture (big multi-monitor frames): burn tile by tile and stitch.
+        // Into a new buffer: the software retry after a mid-loop GPU failure needs the clean input.
+        int stride = rect.Width * 4;
+        var output = new byte[pixels.Length];
+        for (int ty = 0; ty < rect.Height; ty += tile)
+        for (int tx = 0; tx < rect.Width; tx += tile)
+        {
+            var part = new PixelRect(rect.X + tx, rect.Y + ty,
+                Math.Min(tile, rect.Width - tx), Math.Min(tile, rect.Height - ty));
+            int partStride = part.Width * 4;
+            var partPixels = new byte[partStride * part.Height];
+            for (int y = 0; y < part.Height; y++)
+                Buffer.BlockCopy(pixels, (ty + y) * stride + tx * 4, partPixels, y * partStride, partStride);
+            var burned = BurnTile(device, partPixels, part, elements, scale);
+            for (int y = 0; y < part.Height; y++)
+                Buffer.BlockCopy(burned, y * partStride, output, (ty + y) * stride + tx * 4, partStride);
+        }
+        return output;
+    }
+
+    // `rect` is where these pixels sit in the frame; elements are mapped from overlay DIPs onto it.
+    private static byte[] BurnTile(CanvasDevice device, byte[] pixels, PixelRect rect,
+        IReadOnlyList<DrawElement> elements, double scale)
+    {
         using var background = CanvasBitmap.CreateFromBytes(device, pixels, rect.Width, rect.Height,
             Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, 96f, CanvasAlphaMode.Premultiplied);
         using var target = new CanvasRenderTarget(device, rect.Width, rect.Height, 96f);
@@ -132,8 +172,18 @@ public static class ScreenshotRenderer
         return target.GetPixelBytes();
     }
 
+    /// <summary>Encodes as <see cref="EffectiveFormat"/> of <paramref name="format"/>.</summary>
     public static byte[] Encode(byte[] bgra, int width, int height, OutputFormat format, int quality)
     {
+        var encoded = EncodeSegment(bgra, width, height, format, quality);
+        return encoded.Count == encoded.Array!.Length ? encoded.Array : encoded.ToArray();
+    }
+
+    /// <summary>Like <see cref="Encode"/>, but hands out the encoder's own buffer instead of
+    /// copying it to an exact-size array (multi-monitor PNGs run to tens of MB).</summary>
+    public static ArraySegment<byte> EncodeSegment(byte[] bgra, int width, int height, OutputFormat format, int quality)
+    {
+        format = EffectiveFormat(format, width, height);
         var handle = GCHandle.Alloc(bgra, GCHandleType.Pinned);
         try
         {
@@ -149,7 +199,8 @@ public static class ScreenshotRenderer
 
             // 32bppRgb ignores alpha: PNG is written as RGB and JPEG gets no tinted alpha.
             using var bmp = new Bitmap(width, height, width * 4, PixelFormat.Format32bppRgb, scan0);
-            using var ms = new MemoryStream();
+            // A quarter byte per pixel fits most screenshot PNGs without a large up-front allocation.
+            using var ms = new MemoryStream(format == OutputFormat.Png ? (int)Math.Min((long)width * height / 4, Array.MaxLength) : 0);
             if (format == OutputFormat.Jpeg && GetEncoder(ImageFormat.Jpeg) is { } jpeg)
             {
                 using var ep = new EncoderParameters(1);
@@ -160,7 +211,7 @@ public static class ScreenshotRenderer
             {
                 bmp.Save(ms, format == OutputFormat.Jpeg ? ImageFormat.Jpeg : ImageFormat.Png);
             }
-            return ms.ToArray();
+            return new ArraySegment<byte>(ms.GetBuffer(), 0, (int)ms.Length);
         }
         finally { handle.Free(); }
     }

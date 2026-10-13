@@ -22,12 +22,27 @@ public sealed partial class CaptureOverlayWindow
     private double _textPreviewMeasureSize = -1;
     private double _textPreviewMeasureWidth;
     private double _textPreviewMeasureHeight;
+    // The pointer that started the current gesture; a second one (pen + mouse, two fingers)
+    // must not feed or end it.
+    private uint _gesturePointerId;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetDoubleClickTime();
 
     private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        if (_mode != InteractionMode.Idle)
+        {
+            // Another pointer mid-gesture is ignored; the same one pressing again means its
+            // release was missed, so finish that gesture first.
+            if (e.Pointer.PointerId != _gesturePointerId)
+            {
+                e.Handled = true;
+                return;
+            }
+            FinishPointerInteraction(_lastPointerPos);
+        }
+        _gesturePointerId = e.Pointer.PointerId;
         var cp = e.GetCurrentPoint(RootGrid);
         var pos = cp.Position;
         _lastPointerPos = pos;
@@ -150,6 +165,7 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
     {
+        if (_mode != InteractionMode.Idle && e.Pointer.PointerId != _gesturePointerId) return;
         var pos = e.GetCurrentPoint(RootGrid).Position;
         _lastPointerPos = pos;
 
@@ -328,6 +344,7 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        if (_mode != InteractionMode.Idle && e.Pointer.PointerId != _gesturePointerId) return;
         var pos = e.GetCurrentPoint(RootGrid).Position;
         // Under lag the release event carries the stroke's last samples.
         if (_mode == InteractionMode.DrawingStroke) AppendStrokeHistory(e, pos);
@@ -352,9 +369,12 @@ public sealed partial class CaptureOverlayWindow
                 var rect = MakeRect(_dragStart, pos);
                 if (rect.Width < MinSelectionSize && rect.Height < MinSelectionSize)
                 {
-                    double x = _dragStart.X - SingleClickFallbackSize / 2;
-                    double y = _dragStart.Y - SingleClickFallbackSize / 2;
-                    rect = new Rect(x, y, SingleClickFallbackSize, SingleClickFallbackSize);
+                    // Shifted to stay on the frame near a screen edge.
+                    double x = System.Math.Clamp(_dragStart.X - SingleClickFallbackSize / 2,
+                        0, System.Math.Max(0, RootGrid.ActualWidth - SingleClickFallbackSize));
+                    double y = System.Math.Clamp(_dragStart.Y - SingleClickFallbackSize / 2,
+                        0, System.Math.Max(0, RootGrid.ActualHeight - SingleClickFallbackSize));
+                    rect = ClampToRoot(new Rect(x, y, SingleClickFallbackSize, SingleClickFallbackSize));
                     _selectionFromFallback = true; // a double-click may replace it with a full monitor
                 }
                 else _selectionFromFallback = false;

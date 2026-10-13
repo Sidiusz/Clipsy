@@ -113,6 +113,16 @@ public sealed partial class CaptureOverlayWindow
         return new Rect(x, y, w, h);
     }
 
+    // The selection must stay on the captured frame; pixels outside it don't exist.
+    private Rect ClampToRoot(Rect r)
+    {
+        double gw = RootGrid.ActualWidth, gh = RootGrid.ActualHeight;
+        if (!(gw > 0) || !(gh > 0)) return r;
+        double left = System.Math.Clamp(r.X, 0, gw), top = System.Math.Clamp(r.Y, 0, gh);
+        double right = System.Math.Clamp(r.X + r.Width, 0, gw), bottom = System.Math.Clamp(r.Y + r.Height, 0, gh);
+        return new Rect(left, top, System.Math.Max(0, right - left), System.Math.Max(0, bottom - top));
+    }
+
     private Rect ResizeFromHandle(Rect baseRect, HandlePos h, Point pos)
     {
         double left = baseRect.X, top = baseRect.Y, right = baseRect.X + baseRect.Width, bottom = baseRect.Y + baseRect.Height;
@@ -129,7 +139,7 @@ public sealed partial class CaptureOverlayWindow
         }
         if (right < left) (left, right) = (right, left);
         if (bottom < top) (top, bottom) = (bottom, top);
-        return new Rect(left, top, right - left, bottom - top);
+        return ClampToRoot(new Rect(left, top, right - left, bottom - top));
     }
 
     private void UpdateSelectionVisual()

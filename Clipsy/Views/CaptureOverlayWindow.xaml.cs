@@ -147,6 +147,7 @@ public sealed partial class CaptureOverlayWindow : Window
         BuildScreenMenu();
         Activated += OnActivated;
         Closed += OnOverlayClosed;
+        _appWindow.Closing += OnOverlayAppWindowClosing;
         _appWindow.Changed += OnOverlayAppWindowChanged;
         RootGrid.SizeChanged += OnRootGridSizeChanged;
         ArmReveal();
@@ -162,6 +163,24 @@ public sealed partial class CaptureOverlayWindow : Window
     /// <summary>Cancel requested from outside the window (Esc pressed while another app has the focus).</summary>
     internal void CancelFromOutside()
     {
+        if (!_closed) CloseDeferred();
+    }
+
+    private bool _allowClose;
+
+    /// <summary>Really closes the window (drops the reusable instance); Alt+F4 only cancels.</summary>
+    internal void ForceClose()
+    {
+        _allowClose = true;
+        Close();
+    }
+
+    // Alt+F4 (or any system close) would destroy the reusable instance, and before the reveal
+    // crash on the pending first-frames handler; treat it as Cancel unless the app is exiting.
+    private void OnOverlayAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_allowClose || CaptureOverlayHost.IsShuttingDown) return;
+        args.Cancel = true;
         if (!_closed) CloseDeferred();
     }
 
@@ -279,6 +298,11 @@ public sealed partial class CaptureOverlayWindow : Window
         if (_activeTextBox != null) CancelText();
 
         RemoveActiveDrawingVisuals();
+        // A gesture cut short can strand a preview shape that no field points to any more.
+        for (int i = DrawingCanvas.Children.Count - 1; i >= 0; i--)
+        {
+            if (DrawingCanvas.Children[i] is not TextBox) DrawingCanvas.Children.RemoveAt(i);
+        }
         _drawing.ClearAll();
         ReleaseDrawingSurface();
         _movingText = null;
@@ -685,6 +709,7 @@ public sealed partial class CaptureOverlayWindow : Window
         // issued while hidden is dropped, leaving last capture's drawings.
         _drawing?.InvalidateCommitted();
         PlayIntroAnimations();
+        CaptureOverlayHost.OnRevealed(this);
     }
 
     // Composition ticks can stall under load; force the reveal so the overlay
@@ -788,6 +813,9 @@ public sealed partial class CaptureOverlayWindow : Window
     private void OnOverlayClosed(object sender, WindowEventArgs e)
     {
         _closed = true;
+        // A reveal still pending (closed before the first frames) must not run on the torn-down window.
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFirstFrames;
+        _session++;
         _scanTimer?.Stop();
         _hoverTimer?.Stop();
         if (_selectionRenderHooked)
