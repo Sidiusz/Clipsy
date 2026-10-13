@@ -12,6 +12,8 @@ public static class Program
     // Local\ scope is per-session, preventing collisions across RDP / fast-user-switch.
     private const string MutexName = "Local\\Clipsy.SingleInstance.v1";
     private static readonly TimeSpan StartupGrace = TimeSpan.FromSeconds(20);
+    private const int HungConfirmations = 3;
+    private static readonly TimeSpan HungRecheckDelay = TimeSpan.FromSeconds(3);
 
     [STAThread]
     public static int Main(string[] args)
@@ -57,14 +59,26 @@ public static class Program
     private static bool TakeOver(Mutex mutex)
     {
         var sw = Stopwatch.StartNew();
+        int hungReplies = 0;
+        bool everConnected = false;
         while (true)
         {
-            switch (SingleInstanceService.Probe(out int pid))
+            var result = SingleInstanceService.Probe(out int pid);
+            if (pid != 0) everConnected = true;
+            if (result != SingleInstanceService.ProbeResult.Hung) hungReplies = 0;
+            switch (result)
             {
                 case SingleInstanceService.ProbeResult.Alive:
+                case SingleInstanceService.ProbeResult.Busy:
                     SingleInstanceService.TrySendRequest(CliService.SerializeRequest("activate", Array.Empty<string>()), out _);
                     return false;
                 case SingleInstanceService.ProbeResult.Hung:
+                    // A UI stall can pass (heavy load, a slow resume): replace it only if it stays hung.
+                    if (++hungReplies < HungConfirmations)
+                    {
+                        if (AcquireMutex(mutex, HungRecheckDelay)) return true;
+                        continue;
+                    }
                     Diagnostics.Log($"Existing instance pid={pid} is hung; replacing it.");
                     SingleInstanceService.KillInstance(pid);
                     return AcquireMutex(mutex, TimeSpan.FromSeconds(5));
@@ -72,6 +86,12 @@ public static class Program
                     // Starting up or shutting down: give it time before assuming it's wedged.
                     if (AcquireMutex(mutex, TimeSpan.FromMilliseconds(500))) return true;
                     if (sw.Elapsed < StartupGrace) continue;
+                    // Its pipe accepts connections, so the process is running (maybe recording): leave it be.
+                    if (everConnected)
+                    {
+                        Diagnostics.Log("Existing instance accepts connections but does not answer; leaving it running.");
+                        return false;
+                    }
                     Diagnostics.Log("Existing instance never answered; replacing it.");
                     SingleInstanceService.KillStaleInstances();
                     return AcquireMutex(mutex, TimeSpan.FromSeconds(5));

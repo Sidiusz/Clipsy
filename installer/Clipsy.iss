@@ -80,11 +80,19 @@ Filename: "{app}\{#ClipsyExeName}"; Description: "{cm:LaunchProgram,{#ClipsyName
     Flags: nowait postinstall runasoriginaluser; Check: ShouldLaunchAfterInstall
 
 [UninstallRun]
+; Elevated as the same account this is that user's HKCU. Under another admin's credentials it isn't
+; (ExecAsOriginalUser is unavailable when uninstalling); Clipsy drops a Run entry left pointing at
+; a missing exe the next time it starts.
 Filename: "{app}\{#ClipsyExeName}"; Parameters: "autostart-init --remove"; Flags: runhidden; RunOnceId: "ClipsyAutostartCleanup"
 
 [Code]
 const
   LegacyAutostartTaskName = 'ClipsyAutostart';
+
+function GetCurrentProcessId: Cardinal;
+  external 'GetCurrentProcessId@kernel32.dll stdcall';
+function ProcessIdToSessionId(ProcessId: Cardinal; var SessionId: Cardinal): BOOL;
+  external 'ProcessIdToSessionId@kernel32.dll stdcall';
 
 function HasSwitch(const Name: String): Boolean;
 var
@@ -125,17 +133,33 @@ begin
        ewWaitUntilTerminated, ResultCode);
 end;
 
-// True when a Clipsy from this install folder (app or watchdog) is running; Kill ends them.
-function ClipsyRunning(const Exe: String; Kill: Boolean): Boolean;
+// Only this session's Clipsy: another signed-in user's copy is not ours to stop.
+function SessionFilter(): String;
 var
+  SessionId: Cardinal;
+begin
+  Result := '';
+  if ProcessIdToSessionId(GetCurrentProcessId, SessionId) then
+    Result := ' AND SessionId = ' + IntToStr(SessionId)
+  else
+    Log('Could not determine the session id; checking all sessions.');
+end;
+
+// True when a Clipsy from this install folder (app or watchdog) runs in this session, or in any
+// session with AllSessions; Kill ends them.
+function ClipsyRunning(const Exe: String; Kill, AllSessions: Boolean): Boolean;
+var
+  Filter: String;
   Locator, Service, Procs, Proc: Variant;
   I: Integer;
 begin
   Result := False;
+  Filter := '';
+  if not AllSessions then Filter := SessionFilter;
   try
     Locator := CreateOleObject('WbemScripting.SWbemLocator');
     Service := Locator.ConnectServer('.', 'root\CIMV2');
-    Procs := Service.ExecQuery('SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name = ''{#ClipsyExeName}''');
+    Procs := Service.ExecQuery('SELECT ProcessId, ExecutablePath FROM Win32_Process WHERE Name = ''{#ClipsyExeName}''' + Filter);
     for I := 0 to Procs.Count - 1 do
     begin
       Proc := Procs.ItemIndex(I);
@@ -153,6 +177,8 @@ end;
 // Ask a running Clipsy to exit cleanly (it finishes saving a recording first), then make sure
 // nothing from the install folder is left holding files. Setup runs elevated and an elevated
 // process can't reach the user's Clipsy pipe, so 'quit' runs as the original user when possible.
+// The uninstaller can't (no ExecAsOriginalUser there); its elevated 'quit' signals Clipsy's quit
+// event instead and waits for it to exit.
 procedure QuitRunningClipsy(AsOriginalUser: Boolean);
 var
   ResultCode, I: Integer;
@@ -167,12 +193,17 @@ begin
   // The watchdog follows the app out within a few seconds.
   for I := 1 to 20 do
   begin
-    if not ClipsyRunning(Exe, False) then exit;
+    if not ClipsyRunning(Exe, False, False) then break;
     Sleep(500);
   end;
-  Log('Clipsy did not exit after quit; terminating it.');
-  ClipsyRunning(Exe, True);
-  Sleep(500);
+  // A copy in another user's session can't be asked to quit, but it holds the install
+  // folder's files too; end what's left only now, after this session had its clean quit.
+  if ClipsyRunning(Exe, False, True) then
+  begin
+    Log('Clipsy still running (this or another session); terminating it.');
+    ClipsyRunning(Exe, True, True);
+    Sleep(500);
+  end;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;

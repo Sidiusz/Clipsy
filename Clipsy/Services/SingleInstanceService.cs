@@ -13,15 +13,22 @@ namespace Clipsy.Services;
 /// <summary>Named-pipe liveness and command channel, scoped to the current user and session.</summary>
 public static class SingleInstanceService
 {
-    public enum ProbeResult { Alive, Hung, NoAnswer }
+    /// <summary>Busy: alive and recording, so it must never be replaced.</summary>
+    public enum ProbeResult { Alive, Busy, Hung, NoAnswer }
 
     private const int MaxServerInstances = 4;
     private const int HungAfterMs = 30_000;
+    private const int PingTimeoutMs = 5000;
+    private const int RequestReadTimeoutMs = 10_000;
+    private const uint THREAD_TERMINATE = 0x0001;
     // Settable so tests don't talk to a Clipsy running on the same machine.
     internal static string PipeName { get; set; } = BuildPipeName();
     private static volatile bool _running;
     private static Func<string, string>? _requestHandler;
+    private static Func<bool>? _busyCheck;
     private static long _uiHeartbeat;
+    private static EventWaitHandle? _quitEvent;
+    private static RegisteredWaitHandle? _quitWait;
 
     // SID + session in the name: other users can't collide with or squat on it,
     // and each RDP / fast-user-switch session gets its own instance.
@@ -40,18 +47,60 @@ public static class SingleInstanceService
         if (_running) return;
         _running = true;
         new Thread(AcceptLoop) { IsBackground = true, Name = "Clipsy.SingleInstancePipe" }.Start();
+        StartQuitListener();
     }
 
     public static void SetRequestHandler(Func<string, string>? handler) => _requestHandler = handler;
+
+    /// <summary>True while something that must not be killed (a recording) is in progress; PING then answers BUSY.</summary>
+    public static void SetBusyCheck(Func<bool>? check) => _busyCheck = check;
 
     public static void StopServer()
     {
         _running = false;
         _requestHandler = null;
+        _busyCheck = null;
+        _quitWait?.Unregister(null);
+        _quitWait = null;
     }
 
     /// <summary>Called from the UI thread's heartbeat; a stale value makes PING report HUNG.</summary>
-    public static void MarkUiAlive() => Interlocked.Exchange(ref _uiHeartbeat, Environment.TickCount64);
+    public static void MarkUiAlive() => Interlocked.Exchange(ref _uiHeartbeat, UnbiasedMilliseconds());
+
+    // Excludes time spent asleep / hibernated, so the heartbeat isn't stale right after resume.
+    private static long UnbiasedMilliseconds()
+    {
+        QueryUnbiasedInterruptTime(out ulong time);
+        return (long)(time / 10_000);
+    }
+
+    // An elevated uninstaller fails the pipe's owner check, but can still signal this
+    // event (same user, same session) to ask for a clean quit.
+    private static string QuitEventName => $"Local\\{PipeName}.Quit";
+
+    private static void StartQuitListener()
+    {
+        try
+        {
+            _quitEvent = new EventWaitHandle(false, EventResetMode.AutoReset, QuitEventName);
+            _quitWait = ThreadPool.RegisterWaitForSingleObject(_quitEvent, (_, _) =>
+            {
+                if (_running) _requestHandler?.Invoke(CliService.SerializeRequest("quit", Array.Empty<string>()));
+            }, null, Timeout.Infinite, executeOnlyOnce: false);
+        }
+        catch (Exception ex) { Diagnostics.Log($"Quit event setup failed: {ex.Message}"); }
+    }
+
+    /// <summary>Signals a running instance to quit without the pipe; false when none is listening.</summary>
+    public static bool TrySignalQuit()
+    {
+        try
+        {
+            using var quit = EventWaitHandle.OpenExisting(QuitEventName);
+            return quit.Set();
+        }
+        catch { return false; }
+    }
 
     private static void AcceptLoop()
     {
@@ -60,12 +109,14 @@ public static class SingleInstanceService
             NamedPipeServerStream? server = null;
             try
             {
+                // Synchronous I/O on dedicated threads: async pipe completions and Task.Run both need
+                // the thread pool, and a starved pool must never make a live instance look hung.
                 server = new NamedPipeServerStream(PipeName, PipeDirection.InOut, MaxServerInstances,
-                    PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly | PipeOptions.Asynchronous);
+                    PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly);
                 server.WaitForConnection();
                 var connected = server;
                 server = null;
-                _ = Task.Run(() => HandleConnectionAsync(connected));
+                new Thread(() => HandleConnection(connected)) { IsBackground = true, Name = "Clipsy.SingleInstanceRequest" }.Start();
             }
             catch (Exception ex)
             {
@@ -77,23 +128,45 @@ public static class SingleInstanceService
         }
     }
 
-    private static async Task HandleConnectionAsync(NamedPipeServerStream server)
+    // A client that connects and never sends a line must not hold one of the few pipe
+    // instances forever (new launches would then find no answer); abort the read after a while.
+    private static string? ReadRequestLine(StreamReader reader)
+    {
+        IntPtr thread = OpenThread(THREAD_TERMINATE, false, GetCurrentThreadId());
+        if (thread == IntPtr.Zero) return reader.ReadLine();
+        try
+        {
+            using var timer = new Timer(_ => CancelSynchronousIo(thread), null, RequestReadTimeoutMs, Timeout.Infinite);
+            try { return reader.ReadLine(); }
+            finally
+            {
+                // Wait out a callback already running before the handle is closed.
+                using var done = new ManualResetEvent(false);
+                if (timer.Dispose(done)) done.WaitOne();
+            }
+        }
+        finally { CloseHandle(thread); }
+    }
+
+    // Clients close their end when they give up, which ends a blocked read here.
+    private static void HandleConnection(NamedPipeServerStream server)
     {
         try
         {
             using (server)
-            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
             {
                 using var reader = new StreamReader(server, Encoding.UTF8, true, 1024, leaveOpen: true);
                 using var writer = new StreamWriter(server, new UTF8Encoding(false), 1024, leaveOpen: true) { AutoFlush = true };
-                var request = await reader.ReadLineAsync(cts.Token).ConfigureAwait(false);
+                var request = ReadRequestLine(reader);
                 if (!_running || string.IsNullOrWhiteSpace(request)) return;
 
                 string response;
                 if (request == "PING")
                 {
                     long hb = Interlocked.Read(ref _uiHeartbeat);
-                    response = hb != 0 && Environment.TickCount64 - hb > HungAfterMs ? "HUNG" : "PONG";
+                    response = _busyCheck?.Invoke() == true ? "BUSY"
+                        : hb != 0 && UnbiasedMilliseconds() - hb > HungAfterMs ? "HUNG"
+                        : "PONG";
                 }
                 else
                 {
@@ -102,17 +175,17 @@ public static class SingleInstanceService
                         ? handler(request)
                         : CliService.SerializeResult(new CliResult(3, "Clipsy is starting."));
                 }
-                await writer.WriteLineAsync(response.AsMemory(), cts.Token).ConfigureAwait(false);
+                writer.WriteLine(response);
             }
         }
-        catch (Exception ex) when (ex is IOException or OperationCanceledException or ObjectDisposedException) { }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or OperationCanceledException) { }
         catch (Exception ex)
         {
             Diagnostics.Log("Single-instance request failed", ex);
         }
     }
 
-    public static bool TryPingExisting() => Probe(out _) == ProbeResult.Alive;
+    public static bool TryPingExisting() => Probe(out _) is ProbeResult.Alive or ProbeResult.Busy;
 
     public static ProbeResult Probe(out int serverPid, int connectTimeoutMs = 1500)
     {
@@ -123,13 +196,14 @@ public static class SingleInstanceService
                 PipeOptions.CurrentUserOnly | PipeOptions.Asynchronous);
             client.Connect(connectTimeoutMs);
             if (GetNamedPipeServerProcessId(client.SafePipeHandle, out uint pid)) serverPid = (int)pid;
-            var response = Exchange(client, "PING", 3000);
+            var response = Exchange(client, "PING", PingTimeoutMs);
             return response switch
             {
                 "PONG" => ProbeResult.Alive,
+                "BUSY" => ProbeResult.Busy,
                 "HUNG" => ProbeResult.Hung,
-                // Connected but mute: the pipe thread itself is stuck.
-                _ => serverPid != 0 ? ProbeResult.Hung : ProbeResult.NoAnswer,
+                // Connected but mute is not proof of a hang (heavy load, slow start): never kill on it.
+                _ => ProbeResult.NoAnswer,
             };
         }
         catch
@@ -215,6 +289,21 @@ public static class SingleInstanceService
     [DllImport("user32.dll")]
     private static extern bool AllowSetForegroundWindow(uint processId);
 
+    [DllImport("kernel32.dll")]
+    private static extern bool QueryUnbiasedInterruptTime(out ulong unbiasedTime);
+
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetNamedPipeServerProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint serverProcessId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenThread(uint dwDesiredAccess, bool bInheritHandle, uint dwThreadId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CancelSynchronousIo(IntPtr hThread);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr hObject);
 }

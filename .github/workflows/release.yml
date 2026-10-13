@@ -6,14 +6,20 @@ on:
       - '[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     runs-on: windows-latest
+    # Write only for `gh release create`; the token reaches that step alone (GH_TOKEN below).
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Don't leave the token in .git/config where build, test and restore code could read it.
+          persist-credentials: false
 
       # Fail in seconds, not after a full build, when the tag and the repo disagree.
       - name: Check release inputs

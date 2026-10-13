@@ -81,29 +81,26 @@ internal static class CliInstallerService
         return LaunchDetached(uninstaller, switches, "uninstaller");
     }
 
-    // Highest version by file name (Clipsy-Setup-1.2.3.exe), not newest by date.
+    // Highest version by file name (Clipsy-Setup-1.2.3.exe), not newest by date. Only next to
+    // Clipsy itself: the current directory (Downloads, a share) may hold a setup nobody vetted.
     private static string? FindSetupExecutable(out Version version)
     {
         version = new Version(0, 0, 0);
-        foreach (var folder in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory }
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        try
         {
-            try
+            var best = Directory.GetFiles(AppContext.BaseDirectory, "Clipsy-Setup-*.exe")
+                .Select(f => (Path: f, Ok: UpdateService.TryParseVersion(
+                    Path.GetFileNameWithoutExtension(f)["Clipsy-Setup-".Length..], out var v), Version: v))
+                .Where(x => x.Ok)
+                .OrderByDescending(x => x.Version)
+                .FirstOrDefault();
+            if (best.Path != null)
             {
-                var best = Directory.GetFiles(folder, "Clipsy-Setup-*.exe")
-                    .Select(f => (Path: f, Ok: UpdateService.TryParseVersion(
-                        Path.GetFileNameWithoutExtension(f)["Clipsy-Setup-".Length..], out var v), Version: v))
-                    .Where(x => x.Ok)
-                    .OrderByDescending(x => x.Version)
-                    .FirstOrDefault();
-                if (best.Path != null)
-                {
-                    version = best.Version;
-                    return best.Path;
-                }
+                version = best.Version;
+                return best.Path;
             }
-            catch { }
         }
+        catch { }
         return null;
     }
 

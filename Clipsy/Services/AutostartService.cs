@@ -16,19 +16,41 @@ public static class AutostartService
     private const string OptOutValue = "AutostartOptOut";
     private const string MigrationDeclinedValue = "LegacyTaskElevationDeclined";
     private const string StartupApprovedKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+    private const string TaskCacheTreeKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\" + LegacyTaskName;
     private static readonly object _sync = new();
     private static bool _legacyChecked;
     private static bool _legacyPresent;
 
     public static bool IsEnabled()
     {
-        try { return (HasRunEntry() && !IsDisabledInTaskManager()) || CachedLegacyTaskExists(); }
+        try { return (HasRunEntry() && !IsDisabledInTaskManager()) || LegacyTaskPresentNoWait(); }
         catch (Exception ex) { Diagnostics.Log("AutostartService.IsEnabled", ex); return false; }
     }
 
-    /// <summary>Removes the legacy scheduled task off the UI thread; asks for UAC at most once.</summary>
+    /// <summary>Off the UI thread: drops a stale Run entry and removes the legacy scheduled task (UAC at most once).</summary>
     public static void MigrateLegacyScheduledTaskInBackground()
-        => System.Threading.Tasks.Task.Run(MigrateLegacyScheduledTask);
+        => System.Threading.Tasks.Task.Run(() =>
+        {
+            RemoveStaleRunEntry();
+            MigrateLegacyScheduledTask();
+        });
+
+    // An uninstall run under another admin account can leave this user's Run entry pointing
+    // at a deleted exe; drop it so sign-in doesn't try to start nothing.
+    private static void RemoveStaleRunEntry()
+    {
+        try
+        {
+            string? path;
+            using (var key = Registry.CurrentUser.OpenSubKey(RunKey))
+                path = (key?.GetValue(AppName) as string)?.Trim().Trim('"');
+            if (string.IsNullOrEmpty(path) || !path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || File.Exists(path))
+                return;
+            Diagnostics.Log($"AutostartService: removing Run entry for missing '{path}'");
+            DeleteRunEntry();
+        }
+        catch (Exception ex) { Diagnostics.Log("AutostartService.RemoveStaleRunEntry", ex); }
+    }
 
     private static void MigrateLegacyScheduledTask()
     {
@@ -78,6 +100,8 @@ public static class AutostartService
             }
             var path = GetExePath();
             if (string.IsNullOrEmpty(path)) return false;
+            // A Task Manager "Disabled" (StartupApproved) is the user's opt-out: it outlives the
+            // rewritten entry, so updates don't silently turn autostart back on.
             SetRunEntry(path);
             SetOptOut(false);
             return HasRunEntry();
@@ -98,19 +122,30 @@ public static class AutostartService
                 var path = GetExePath();
                 if (string.IsNullOrEmpty(path)) return;
                 SetRunEntry(path);
+                // Enabling it here is explicit, so it overrides a Task Manager disable.
+                ClearTaskManagerDisable();
                 SetOptOut(false);
-                bool present = !RemoveLegacyScheduledTask(elevateIfNeeded: false);
-                lock (_sync) { _legacyChecked = true; _legacyPresent = present; }
             }
             else
             {
                 DeleteRunEntry();
                 SetOptOut(true);
-                bool present = !RemoveLegacyScheduledTask(elevateIfNeeded: true);
-                lock (_sync) { _legacyChecked = true; _legacyPresent = present; }
             }
+            RemoveLegacyTaskInBackground(elevateIfNeeded: !enabled);
         }
         catch (Exception ex) { Diagnostics.Log("AutostartService.SetEnabled", ex); }
+    }
+
+    // Called from Settings on the UI thread: schtasks and a possible UAC prompt run in the background.
+    private static void RemoveLegacyTaskInBackground(bool elevateIfNeeded)
+    {
+        // Shown as gone while the removal runs; the outcome corrects it.
+        lock (_sync) { _legacyChecked = true; _legacyPresent = false; }
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            bool present = !RemoveLegacyScheduledTask(elevateIfNeeded);
+            lock (_sync) { _legacyChecked = true; _legacyPresent = present; }
+        });
     }
 
     // Entry must point at this exe; a stale path from a moved install doesn't count.
@@ -124,9 +159,8 @@ public static class AutostartService
 
     private static void SetRunEntry(string path)
     {
-        using (var key = Registry.CurrentUser.CreateSubKey(RunKey))
-            key?.SetValue(AppName, $"\"{path}\"", RegistryValueKind.String);
-        ClearTaskManagerDisable();
+        using var key = Registry.CurrentUser.CreateSubKey(RunKey);
+        key?.SetValue(AppName, $"\"{path}\"", RegistryValueKind.String);
     }
 
     private static void DeleteRunEntry()
@@ -189,8 +223,33 @@ public static class AutostartService
         }
     }
 
+    // IsEnabled runs on the UI thread: never spawn schtasks there. Until the startup migration
+    // has checked, the registry answers; if it can't, assume no legacy task.
+    private static bool LegacyTaskPresentNoWait()
+    {
+        lock (_sync)
+        {
+            if (_legacyChecked) return _legacyPresent;
+        }
+        return LegacyTaskInRegistry() ?? false;
+    }
+
     private static bool LegacyTaskExists()
-        => RunSchtasks($"/Query /TN \"{LegacyTaskName}\"") == 0;
+        => LegacyTaskInRegistry() ?? RunSchtasks($"/Query /TN \"{LegacyTaskName}\"") == 0;
+
+    // Task Scheduler mirrors every task under TaskCache\Tree; null when the key can't be read.
+    private static bool? LegacyTaskInRegistry()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(TaskCacheTreeKey);
+            return key != null;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     private static bool RemoveLegacyScheduledTask(bool elevateIfNeeded)
     {
@@ -230,6 +289,7 @@ public static class AutostartService
         }
     }
 
+    // Output isn't redirected, so the wait stays bounded even if schtasks never finishes.
     private static int RunSchtasks(string arguments)
     {
         using var p = Process.Start(new ProcessStartInfo
@@ -238,14 +298,11 @@ public static class AutostartService
             Arguments = arguments,
             UseShellExecute = false,
             CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
         });
         if (p == null) return -1;
-        p.StandardOutput.ReadToEnd();
-        p.StandardError.ReadToEnd();
-        p.WaitForExit(5000);
-        return p.HasExited ? p.ExitCode : -1;
+        if (p.WaitForExit(5000)) return p.ExitCode;
+        try { p.Kill(); } catch { }
+        return -1;
     }
 
     private static string? GetExePath()

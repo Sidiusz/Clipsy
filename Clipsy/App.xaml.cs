@@ -89,6 +89,8 @@ public partial class App : Application
         ToastService.Prewarm();
 
         SingleInstanceService.SetRequestHandler(HandleCliRequest);
+        // A second launch must never replace an instance that is recording or still saving.
+        SingleInstanceService.SetBusyCheck(() => RecordingController.Current != null);
 
         Hotkey = new HotkeyService(HostWindow.DispatcherQueue) { EscapePressed = CaptureOverlayHost.OnGlobalEscape };
         RegisterHotkeys();
@@ -175,17 +177,24 @@ public partial class App : Application
         if (dq == null) return CliService.SerializeResult(new CliResult(3, "UI is not ready."));
 
         var tcs = new TaskCompletionSource<CliResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        int state = CliPending;
         if (!dq.TryEnqueue(() =>
         {
+            // The caller was already told it timed out: running it now would surprise them.
+            if (System.Threading.Interlocked.CompareExchange(ref state, CliStarted, CliPending) != CliPending) return;
             try { tcs.TrySetResult(ExecuteCliCommand(request)); }
             catch (Exception ex) { tcs.TrySetResult(new CliResult(4, ex.Message)); }
         }))
             return CliService.SerializeResult(new CliResult(3, "Could not queue command on UI thread."));
 
-        if (!tcs.Task.Wait(TimeSpan.FromSeconds(5)))
+        if (!tcs.Task.Wait(TimeSpan.FromSeconds(5))
+            && (System.Threading.Interlocked.CompareExchange(ref state, CliAbandoned, CliPending) == CliPending
+                || !tcs.Task.Wait(TimeSpan.FromSeconds(5))))
             return CliService.SerializeResult(new CliResult(3, "Command timed out."));
         return CliService.SerializeResult(tcs.Task.Result);
     }
+
+    private const int CliPending = 0, CliStarted = 1, CliAbandoned = 2;
 
     private CliResult ExecuteCliCommand(CliIpcRequest request)
     {
@@ -308,6 +317,8 @@ public partial class App : Application
                 await recording.StopForExitAsync(TimeSpan.FromSeconds(90));
         }
         catch (Exception ex) { Diagnostics.Log("Exit: finishing recording failed", ex); }
+        try { SettingsService.Instance.Flush(); }
+        catch (Exception ex) { Diagnostics.Log("Exit: settings flush failed", ex); }
 
         SingleInstanceService.StopServer();
         ProcessWatchdog.MarkCleanExit();

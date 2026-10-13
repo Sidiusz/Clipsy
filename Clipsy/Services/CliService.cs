@@ -126,7 +126,7 @@ public static class CliService
             return DeserializeResponse(response);
 
         // Writing settings.json behind a running app would be overwritten by its next save.
-        if (SingleInstanceService.Probe(out _) != SingleInstanceService.ProbeResult.NoAnswer)
+        if (SingleInstanceService.Probe(out int pid) != SingleInstanceService.ProbeResult.NoAnswer || pid != 0)
             return new CliResult(3, "Clipsy is running but did not answer. Try again.");
         return CliConfigService.Execute(args);
     }
@@ -135,7 +135,14 @@ public static class CliService
     private static CliResult Quit()
     {
         if (SingleInstanceService.Probe(out int pid) == SingleInstanceService.ProbeResult.NoAnswer)
-            return new CliResult(0, "not running", new { running = false });
+        {
+            // Elevated (the uninstaller) fails the pipe's owner check; the quit event still reaches this user's Clipsy.
+            if (!SingleInstanceService.TrySignalQuit())
+                return new CliResult(0, "not running", new { running = false });
+            return WaitForOtherInstancesToExit(TimeSpan.FromMinutes(2))
+                ? new CliResult(0, "stopped", new { running = false })
+                : new CliResult(4, "Clipsy is still shutting down.");
+        }
         if (!SingleInstanceService.TrySendRequest(SerializeRequest("quit", Array.Empty<string>()), out var response))
             return new CliResult(3, "Clipsy did not answer.");
         var result = DeserializeResponse(response);
@@ -148,6 +155,27 @@ public static class CliService
         }
         catch (ArgumentException) { } // already gone
         return new CliResult(0, "stopped", new { running = false });
+    }
+
+    // The quit event carries no pid: wait for this session's other Clipsy processes (app and watchdog).
+    private static bool WaitForOtherInstancesToExit(TimeSpan timeout)
+    {
+        var sw = Stopwatch.StartNew();
+        using var me = Process.GetCurrentProcess();
+        foreach (var p in Process.GetProcessesByName("Clipsy"))
+        {
+            using (p)
+            {
+                try
+                {
+                    if (p.Id == me.Id || p.SessionId != me.SessionId) continue;
+                    var left = timeout - sw.Elapsed;
+                    if (left <= TimeSpan.Zero || !p.WaitForExit(left)) return false;
+                }
+                catch { }
+            }
+        }
+        return true;
     }
 
     private static CliResult ExecuteUiCommand(string command)
