@@ -27,8 +27,16 @@ public sealed class RecordingController
     // Codec fallback is only safe before anything worth keeping was recorded.
     private const long FallbackWindowMs = 3000;
 
+    // After Stop, give up on the recorder only once it has neither reported nor written anything this long.
+    private const long StallLimitMs = 60_000;
+
+    // Recovery deletes "recording_x.mp4" when "recording_x.mp4.discard" exists next to it.
+    private const string DiscardMarker = ".discard";
+
     private readonly DispatcherQueue _ui;
     private readonly TaskCompletionSource _finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    // Set once the recorder's outcome is claimed (complete, failed, or given up on); whoever claims it handles the temp file.
+    private readonly TaskCompletionSource _recorderDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Win32BorderOverlay? _border;
     private RecordingHudWindow? _hud;
     private Win32DrawingOverlay? _drawWin;
@@ -42,6 +50,7 @@ public sealed class RecordingController
     private StopMode _stopMode;
     private bool _stopping;
     private bool _micMuted;
+    private bool _drawOn;
     private IntPtr _hudHwnd;
     private (byte R, byte G, byte B) _drawColor = (0xFF, 0x00, 0x00);
 
@@ -58,6 +67,8 @@ public sealed class RecordingController
             ?? throw new InvalidOperationException("Recording must be started from the UI thread.");
         var c = new RecordingController(ui);
         _current = c;
+        // The record-save and mic hotkeys only hold their keys while a recording runs.
+        (Microsoft.UI.Xaml.Application.Current as App)?.Hotkey?.SetRecordingHotkeysActive(true);
         try
         {
             c.Start(x, y, w, h);
@@ -75,10 +86,14 @@ public sealed class RecordingController
 
     public void StopFromHotkey() => Stop(StopMode.Save);
 
-    /// <summary>Stops and saves (if still recording) and waits for the file to be written.</summary>
+    /// <summary>Stops and saves (if still recording) and waits for the file to be written. The recorder's
+    /// finalizing is always awaited (cut short, the MP4 is unplayable; the stall watchdog bounds it);
+    /// <paramref name="timeout"/> bounds only the save/convert after it, which is safe to cut short:
+    /// outputs are written under temporary names and the temp recording stays for startup recovery.</summary>
     public async Task StopForExitAsync(TimeSpan timeout)
     {
         if (!_stopping) Stop(StopMode.Save);
+        await Task.WhenAny(_finished.Task, _recorderDone.Task);
         await Task.WhenAny(_finished.Task, Task.Delay(timeout));
     }
 
@@ -172,13 +187,88 @@ public sealed class RecordingController
         _ = WatchStopAsync();
     }
 
-    // The recorder normally reports completion within seconds; never stay "busy" forever.
-    // The temp file is kept, so the next start recovers it if it's playable.
+    // The recorder normally reports within seconds, but finalizing (the MP4 fast-start rewrite of a
+    // multi-GB file on a slow or AV-scanned disk) can take minutes: give up only when it stops making
+    // progress. Only this phase is watched; the save after it keeps the session busy until done.
     private async Task WatchStopAsync()
     {
-        if (await Task.WhenAny(_finished.Task, Task.Delay(TimeSpan.FromSeconds(60))) == _finished.Task) return;
-        Diagnostics.Log("Recorder did not report completion after Stop; releasing the session.");
-        _ui.TryEnqueue(() => Cleanup(discardTemp: false));
+        var temp = _service?.TempPath;
+        var last = ProbeProgress(temp);
+        long lastProgressTick = Environment.TickCount64;
+        while (await Task.WhenAny(_recorderDone.Task, Task.Delay(TimeSpan.FromSeconds(5))) != _recorderDone.Task)
+        {
+            var now = ProbeProgress(temp);
+            // Small writes (log lines) don't count; the recorder writes megabytes while finalizing.
+            if (now.Size != last.Size || now.Written - last.Written >= 1 << 20)
+            {
+                last = now;
+                lastProgressTick = Environment.TickCount64;
+            }
+            else if (Environment.TickCount64 - lastProgressTick >= StallLimitMs)
+            {
+                Diagnostics.Log("Recorder made no progress after Stop; giving up on it.");
+                _ui.TryEnqueue(GiveUpOnRecorder);
+                return;
+            }
+        }
+    }
+
+    // Temp file size plus the bytes this process wrote: a rewrite in place keeps the size, not the write count.
+    private static (long Size, ulong Written) ProbeProgress(string? path)
+    {
+        long size = -1;
+        try
+        {
+            if (!string.IsNullOrEmpty(path) && new FileInfo(path) is { Exists: true } fi) size = fi.Length;
+        }
+        catch { }
+        ulong written = GetProcessIoCounters(GetCurrentProcess(), out var io) ? io.WriteTransferCount : 0;
+        return (size, written);
+    }
+
+    // The recorder stalled: release the session without waiting on it, keeping (or discarding) what it wrote.
+    private async void GiveUpOnRecorder()
+    {
+        if (!_recorderDone.TrySetResult()) return; // it reported meanwhile
+        var service = _service;
+        _service = null;
+        if (service != null)
+        {
+            service.RecordingComplete -= OnRecordingComplete;
+            service.RecordingFailed -= OnRecordingFailed;
+            // A hung recorder may block in Dispose; never on the UI thread. Give it a while to
+            // release the temp file before salvaging it, but don't wait on it forever.
+            var dispose = Task.Run(() =>
+            {
+                try { service.Dispose(); }
+                catch (Exception ex) { Diagnostics.Log("Stalled recorder Dispose", ex); }
+            });
+            await Task.WhenAny(dispose, Task.Delay(TimeSpan.FromSeconds(15)));
+        }
+        await SalvageAsync(service?.TempPath, discard: _stopMode == StopMode.Discard, unplayableKey: "ErrRecordStalled");
+    }
+
+    /// <summary>Ends the session after the recorder failed or stalled: discards the temp file, saves it as a
+    /// rescued recording when it's playable, or else leaves it for startup recovery.</summary>
+    private async Task SalvageAsync(string? tempPath, bool discard, string? unplayableKey)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(tempPath) || !File.Exists(tempPath)) return;
+            if (discard) TryDiscard(tempPath);
+            else if (await Task.Run(() => Mp4HasIndex(tempPath))) await RescueAsync(tempPath);
+            else
+            {
+                Diagnostics.Log("Recording has no index; left for startup recovery");
+                if (unplayableKey != null) NotificationService.Error(unplayableKey);
+            }
+        }
+        catch (Exception ex) { Diagnostics.Log("Recording salvage", ex); }
+        finally
+        {
+            try { Cleanup(discardTemp: false); }
+            catch (Exception ex) { Diagnostics.Log("Recording salvage Cleanup", ex); }
+        }
     }
 
     // Tear down the topmost border + draw overlay the moment recording stops,
@@ -237,6 +327,7 @@ public sealed class RecordingController
                     try { Recorder.SetExcludeFromCapture(_resizeWin.Hwnd, true); } catch { }
                 }
                 _resizeWin.MoveTo(_x, _y, _w, _h);
+                RaiseHud();
             }
             else
             {
@@ -262,6 +353,8 @@ public sealed class RecordingController
             _hud?.PositionBelowRegion(_x, _y, _w, _h);
             _drawWin?.MoveTo(_x, _y, _w, _h);
             _resizeWin?.MoveTo(_x, _y, _w, _h);
+            UpdateDrawCutout();
+            RaiseHud();
             _service?.UpdateRegion(_x, _y, _w, _h);
         }
         catch (Exception ex)
@@ -285,15 +378,14 @@ public sealed class RecordingController
                     try { Recorder.SetExcludeFromCapture(_drawWin.Hwnd, false); } catch { }
                 }
                 _drawWin.SetActive(true);
-
-                // Overlay swallows clicks via a 1/255 alpha bg; when the HUD tucks
-                // inside the region, cut a hole over it so its toolbar stays clickable.
-                if (_hud != null && GetWindowRect(_hud.Hwnd, out RECT hud))
-                    _drawWin.SetExcludeRect(hud.left, hud.top, hud.right - hud.left, hud.bottom - hud.top);
+                _drawOn = true;
+                UpdateDrawCutout();
+                RaiseHud();
             }
             else
             {
                 // Strokes stay when drawing is toggled off; RMB-drag erases them.
+                _drawOn = false;
                 _drawWin?.SetActive(false);
                 _drawWin?.ClearExcludeRect();
             }
@@ -304,9 +396,26 @@ public sealed class RecordingController
         }
     }
 
+    // Overlay swallows clicks via a 1/255 alpha bg; when the HUD tucks inside the region, cut a hole
+    // over its current rect (it moves with the region) so its toolbar stays clickable.
+    private void UpdateDrawCutout()
+    {
+        if (_drawOn && _drawWin != null && _hud != null && GetWindowRect(_hud.Hwnd, out RECT hud))
+            _drawWin.SetExcludeRect(hud.left, hud.top, hud.right - hud.left, hud.bottom - hud.top);
+    }
+
+    // The overlays are topmost too, and every create/move puts them above the HUD, where they would
+    // cover its buttons (the HUD tucks inside full-screen regions): raise it back on top.
+    private void RaiseHud()
+    {
+        if (_hud != null)
+            SetWindowPos(_hud.Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+
     private void OnRecordingComplete(string filePath)
     {
         Diagnostics.Log($"Recording complete: '{filePath}' exists={File.Exists(filePath)} mode={_stopMode} stopping={_stopping}");
+        if (!_recorderDone.TrySetResult()) return; // the stop watchdog already gave up on this recorder
         _ui.TryEnqueue(async () =>
         {
             try
@@ -317,7 +426,7 @@ public sealed class RecordingController
                 {
                     case StopMode.SaveAs: await OfferSaveAsync(filePath); break;
                     case StopMode.Save: await SilentSaveAsync(filePath); break;
-                    default: TryDelete(filePath); break;
+                    default: TryDiscard(filePath); break;
                 }
             }
             catch (Exception ex)
@@ -336,7 +445,7 @@ public sealed class RecordingController
     private void OnRecordingFailed(string error)
     {
         Diagnostics.Log($"Recording failed: {error}");
-        _ui.TryEnqueue(() =>
+        _ui.TryEnqueue(async () =>
         {
             // H.265 → H.264 fallback, only right after start: later it would silently drop what was
             // recorded, and after Stop it would start a hidden, unstoppable recording.
@@ -348,7 +457,7 @@ public sealed class RecordingController
                 NotificationService.Warning("WarnCodecFallback");
                 var failedTemp = _service.TempPath;
                 try { _service.Dispose(); } catch { }
-                TryDelete(failedTemp);
+                TryDiscard(failedTemp);
                 try
                 {
                     StartService(overrideCodec: "H.264");
@@ -361,9 +470,19 @@ public sealed class RecordingController
                 }
             }
 
+            if (!_recorderDone.TrySetResult()) return; // the stop watchdog already gave up on this recorder
             NotificationService.Error("ErrRecordRuntime");
-            try { Cleanup(discardTemp: true); }
-            catch (Exception ex) { Diagnostics.Log("OnRecordingFailed Cleanup", ex); }
+            // Only a failure inside the fallback window (nothing worth keeping) or of a cancelled recording
+            // discards; later ones (40 minutes in, or while finalizing) keep what was recorded.
+            bool discard = early || (_stopping && _stopMode == StopMode.Discard);
+            _stopping = true;
+            try { _hud?.Shutdown(); } catch (Exception ex) { Diagnostics.Log("OnRecordingFailed HUD shutdown", ex); }
+            DestroyVisualOverlays();
+            var temp = _service?.TempPath;
+            // Release the recorder's handle on the file before inspecting or moving it.
+            try { _service?.Dispose(); } catch (Exception ex) { Diagnostics.Log("OnRecordingFailed Dispose", ex); }
+            _service = null;
+            await SalvageAsync(temp, discard, unplayableKey: null);
         });
     }
 
@@ -421,7 +540,7 @@ public sealed class RecordingController
         }
         if (pick == null)
         {
-            TryDelete(tempPath); // user cancelled Save As = discard
+            TryDiscard(tempPath); // user cancelled Save As = discard
             return;
         }
 
@@ -458,7 +577,7 @@ public sealed class RecordingController
                 if (ok && truncated) NotificationService.Warning("WarnGifTruncated");
             }
             if (!ok) throw new InvalidOperationException("GIF conversion failed.");
-            TryDelete(src);
+            TryDiscard(src);
             return dest;
         }
 
@@ -482,19 +601,39 @@ public sealed class RecordingController
         }
         if (converted)
         {
-            TryDelete(src);
+            TryDiscard(src);
             return dest;
         }
 
         // Keep the MP4 rather than putting MP4 bytes behind an .avi/.mkv name.
-        TryDelete(dest);
+        // (ffmpeg writes to a temporary name, so a failed conversion never touched dest.)
         var mp4 = SaveDialogService.UniquePath(Path.GetDirectoryName(dest)!, Path.GetFileNameWithoutExtension(dest), "mp4", timestamp: false);
         await MoveAsync(src, mp4);
         return mp4;
     }
 
-    private static Task MoveAsync(string src, string dest)
-        => Task.Run(() => File.Move(src, dest, overwrite: true)); // copies + deletes across volumes, off the UI thread
+    // Off the UI thread. Across volumes File.Move copies straight into dest, so a kill mid-copy
+    // would leave a truncated file under the final name: copy to a temporary name, then rename.
+    private static Task MoveAsync(string src, string dest) => Task.Run(() =>
+    {
+        if (string.Equals(Path.GetPathRoot(Path.GetFullPath(src)), Path.GetPathRoot(Path.GetFullPath(dest)), StringComparison.OrdinalIgnoreCase))
+        {
+            File.Move(src, dest, overwrite: true);
+            return;
+        }
+        var partial = FFmpegService.PartialPath(dest);
+        try
+        {
+            File.Copy(src, partial, overwrite: true);
+            File.Move(partial, dest, overwrite: true);
+        }
+        catch
+        {
+            TryDelete(partial);
+            throw;
+        }
+        TryDiscard(src);
+    });
 
     /// <summary>Last resort after a failed save: move the recording where the user can find it.</summary>
     private static async Task RescueAsync(string tempPath)
@@ -540,24 +679,49 @@ public sealed class RecordingController
             DestroyVisualOverlays();
             var tempPath = _service?.TempPath;
             try { _service?.Dispose(); } catch (Exception ex) { Diagnostics.Log("Cleanup service.Dispose", ex); }
-            if (discardTemp && !string.IsNullOrEmpty(tempPath)) TryDelete(tempPath);
+            if (discardTemp && !string.IsNullOrEmpty(tempPath)) TryDiscard(tempPath);
         }
         finally
         {
             _hud = null;
             _service = null;
             _stopping = true;
-            if (ReferenceEquals(_current, this)) _current = null;
+            if (ReferenceEquals(_current, this))
+            {
+                _current = null;
+                (Microsoft.UI.Xaml.Application.Current as App)?.Hotkey?.SetRecordingHotkeysActive(false);
+            }
+            _recorderDone.TrySetResult();
             _finished.TrySetResult();
         }
     }
 
     /// <summary>Recordings left in %TEMP% by a crash or kill: playable ones (MP4 with an index) are moved
-    /// to the video folder, broken week-old ones are removed.</summary>
+    /// to the video folder, broken week-old ones are removed. Discarded/already-saved leftovers are deleted.</summary>
+    // "name.partial.ext" outputs of a save/convert cut short by exit or a crash; nothing writes
+    // them at startup (single instance), and the temp recording itself is recovered separately.
+    private static void DeleteLeftoverPartials()
+    {
+        try
+        {
+            var dir = SettingsService.Instance.GetEffectiveVideoFolder();
+            if (!Directory.Exists(dir)) return;
+            foreach (var file in Directory.EnumerateFiles(dir, "*.partial.*"))
+            {
+                var ext = Path.GetExtension(file).ToLowerInvariant();
+                if (ext is ".mp4" or ".mkv" or ".webm" or ".gif" or ".mov"
+                    && Path.GetFileNameWithoutExtension(file).EndsWith(".partial", StringComparison.OrdinalIgnoreCase))
+                    TryDelete(file);
+            }
+        }
+        catch (Exception ex) { Diagnostics.Log("Leftover partial cleanup failed", ex); }
+    }
+
     public static void RecoverOrphanedRecordings()
     {
         Task.Run(() =>
         {
+            DeleteLeftoverPartials();
             try
             {
                 var dir = RecordingService.TempDirectory;
@@ -566,6 +730,13 @@ public sealed class RecordingController
                 string? lastPath = null;
                 foreach (var file in Directory.GetFiles(dir, "recording_*.mp4"))
                 {
+                    // Discarded or already saved, but the delete failed back then: never "recover" it.
+                    if (File.Exists(file + DiscardMarker))
+                    {
+                        TryDelete(file);
+                        if (!File.Exists(file)) TryDelete(file + DiscardMarker);
+                        continue;
+                    }
                     var info = new FileInfo(file);
                     if (info.Length == 0) { TryDelete(file); continue; }
                     if (Mp4HasIndex(file))
@@ -581,6 +752,9 @@ public sealed class RecordingController
                     }
                 }
                 foreach (var file in Directory.GetFiles(dir, "palette_*.png")) TryDelete(file);
+                foreach (var file in Directory.GetFiles(dir, "discard_*")) TryDelete(file);
+                foreach (var file in Directory.GetFiles(dir, "*" + DiscardMarker))
+                    if (!File.Exists(file[..^DiscardMarker.Length])) TryDelete(file);
                 if (recovered > 0 && lastPath != null)
                 {
                     Diagnostics.Log($"Recovered {recovered} orphaned recording(s)");
@@ -632,9 +806,51 @@ public sealed class RecordingController
         catch (Exception ex) { Diagnostics.Log($"Delete '{path}' failed: {ex.Message}"); }
     }
 
+    /// <summary>Deletes a temp recording that was discarded or already saved. It is first moved out of
+    /// recovery's "recording_*" pattern (or marked), so a delete that fails (AV scan, lock) never
+    /// brings it back as Clipsy_recovered at the next start.</summary>
+    private static void TryDiscard(string path)
+    {
+        if (!File.Exists(path)) return;
+        try
+        {
+            var renamed = Path.Combine(Path.GetDirectoryName(path)!, "discard_" + Path.GetFileName(path));
+            File.Move(path, renamed, overwrite: true);
+            path = renamed;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log($"Rename '{path}' for discard failed: {ex.Message}");
+            try { File.WriteAllText(path + DiscardMarker, string.Empty); } catch { }
+        }
+        TryDelete(path);
+        if (!File.Exists(path)) TryDelete(path + DiscardMarker);
+    }
+
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct RECT { public int left, top, right, bottom; }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOACTIVATE = 0x0010;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct IO_COUNTERS
+    {
+        public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount;
+        public ulong ReadTransferCount, WriteTransferCount, OtherTransferCount;
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool GetProcessIoCounters(IntPtr process, out IO_COUNTERS counters);
 }

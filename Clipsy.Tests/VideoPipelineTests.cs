@@ -117,6 +117,36 @@ public sealed class VideoPipelineTests : IDisposable
         Assert.Equal(100, total);
     }
 
+    [Theory]
+    [InlineData(320, 180, 320, 180)]
+    [InlineData(3840, 2160, 1280, 720)]
+    [InlineData(1080, 1920, 720, 1280)]
+    [InlineData(5000, 3, 1280, 1)]
+    public void GifSizeIsCapped(int w, int h, int expectedW, int expectedH)
+        => Assert.Equal((expectedW, expectedH), NativeGifEncoder.FitSize(w, h, NativeGifEncoder.MaxSide));
+
+    [Fact]
+    public void PartialOutputKeepsExtensionNextToDestination()
+    {
+        var dest = Path.Combine(_dir, "Clipsy_1.mkv");
+        var partial = FFmpegService.PartialPath(dest);
+        Assert.Equal(_dir, Path.GetDirectoryName(partial));
+        Assert.Equal(".mkv", Path.GetExtension(partial));
+        Assert.NotEqual(dest, partial);
+    }
+
+    [Fact]
+    public async Task FailedRemuxLeavesNoOutput()
+    {
+        if (!FFmpegService.Instance.IsAvailable) return;
+        var notVideo = Path.Combine(_dir, "garbage.mp4");
+        File.WriteAllBytes(notVideo, new byte[] { 1, 2, 3, 4 });
+        var output = Path.Combine(_dir, "out.mkv");
+        Assert.False(await FFmpegService.Instance.RemuxAsync(notVideo, output));
+        Assert.False(File.Exists(output));
+        Assert.False(File.Exists(FFmpegService.PartialPath(output)));
+    }
+
     [Fact]
     public void Mp4IndexDetection()
     {

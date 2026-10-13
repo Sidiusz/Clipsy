@@ -185,14 +185,18 @@ public sealed class RecordingService : IDisposable
 
     private bool _paused;
     private bool _pendingRegionWhilePaused;
+    private bool? _micMuted; // last requested mute state; null = never toggled
 
     public void Pause() { _paused = true; _recorder?.Pause(); }
     public void Resume()
     {
         _paused = false;
+        // Paused ScreenRecorderLib ignores Apply(), so a mute toggled while paused would never
+        // reach the encoder and the mic would go live on resume. Sent before too, in case it's honored.
+        if (_micMuted is bool before) ApplyMicMuted(before);
         _recorder?.Resume();
-        // Paused ScreenRecorderLib ignores Apply(); the new SourceRect never
-        // reaches the encoder, so replay it on resume.
+        if (_micMuted is bool after) ApplyMicMuted(after);
+        // Same for the new SourceRect: replay it on resume.
         if (_pendingRegionWhilePaused)
         {
             _pendingRegionWhilePaused = false;
@@ -202,6 +206,12 @@ public sealed class RecordingService : IDisposable
     public void Stop() => _recorder?.Stop();
 
     public void SetMicMuted(bool muted)
+    {
+        _micMuted = muted;
+        ApplyMicMuted(muted);
+    }
+
+    private void ApplyMicMuted(bool muted)
     {
         if (_recorder == null) return;
         try

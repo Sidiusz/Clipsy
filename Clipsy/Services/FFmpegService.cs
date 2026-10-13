@@ -117,7 +117,8 @@ public sealed class FFmpegService
 
     public void Delete()
     {
-        try { if (File.Exists(_ffmpegExe)) File.Delete(_ffmpegExe); _encoders = null; }
+        _encoders = null;
+        try { if (File.Exists(_ffmpegExe)) File.Delete(_ffmpegExe); }
         catch (Exception ex) { Diagnostics.Log($"FFmpeg delete: {ex.Message}"); }
     }
 
@@ -137,14 +138,14 @@ public sealed class FFmpegService
             Directory.CreateDirectory(Path.GetDirectoryName(palette)!);
             if (!await RunAsync(new[] { "-i", input, "-vf", $"fps={fps},palettegen=max_colors={colors}:stats_mode=diff", "-y", palette }, ct: ct))
                 return false;
-            return await RunAsync(new[] { "-i", input, "-i", palette,
-                "-lavfi", $"fps={fps}[x];[x][1:v]paletteuse=dither={dither}:diff_mode=rectangle", "-y", outputGif }, ct: ct);
+            return await RunToFileAsync(new List<string> { "-i", input, "-i", palette,
+                "-lavfi", $"fps={fps}[x];[x][1:v]paletteuse=dither={dither}:diff_mode=rectangle" }, outputGif, ct);
         }
         finally { TryDeleteFile(palette); }
     }
 
     public Task<bool> RemuxAsync(string input, string output, CancellationToken ct = default)
-        => RunAsync(new[] { "-i", input, "-map", "0", "-c", "copy", "-y", output }, ct: ct);
+        => RunToFileAsync(new List<string> { "-i", input, "-map", "0", "-c", "copy" }, output, ct);
 
     /// <summary>Re-encodes a finished H.264 recording to VP9 or AV1 (Opus audio) in MKV.</summary>
     public async Task<bool> TranscodeAsync(string input, string output, string codec, int bitrateMbps, CancellationToken ct = default)
@@ -165,9 +166,32 @@ public sealed class FFmpegService
         }
         args.AddRange(new[] { "-b:v", $"{Math.Clamp(bitrateMbps, 1, 50)}M" });
         args.AddRange(encoders.Contains("libopus") ? new[] { "-c:a", "libopus", "-b:a", "128k" } : new[] { "-c:a", "copy" });
-        args.AddRange(new[] { "-y", output });
-        return await RunAsync(args, ct: ct);
+        return await RunToFileAsync(args, output, ct);
     }
+
+    /// <summary>Runs ffmpeg into a temporary name next to <paramref name="output"/> and renames it on
+    /// success, so a kill mid-write (exit, crash) never leaves a truncated file under the final name.</summary>
+    private async Task<bool> RunToFileAsync(List<string> args, string output, CancellationToken ct)
+    {
+        var partial = PartialPath(output);
+        args.AddRange(new[] { "-y", partial });
+        try
+        {
+            if (await RunAsync(args, ct: ct))
+            {
+                File.Move(partial, output, overwrite: true);
+                return true;
+            }
+        }
+        catch (Exception ex) { Diagnostics.Log("ffmpeg output rename failed", ex); }
+        TryDeleteFile(partial);
+        return false;
+    }
+
+    /// <summary>"name.partial.ext": keeps the extension, which ffmpeg picks the muxer from.</summary>
+    internal static string PartialPath(string output)
+        => Path.Combine(Path.GetDirectoryName(output) ?? string.Empty,
+            Path.GetFileNameWithoutExtension(output) + ".partial" + Path.GetExtension(output));
 
     private async Task<HashSet<string>> GetEncodersAsync(CancellationToken ct)
     {
@@ -179,7 +203,9 @@ public sealed class FFmpegService
             var parts = line.Trim().Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length >= 2 && parts[0].Length == 6) set.Add(parts[1]);
         }
-        return _encoders = set;
+        // A failed query (AV scan, timeout) must not disable VP9/AV1 until restart: cache only a real list.
+        if (set.Count > 0) _encoders = set;
+        return set;
     }
 
     // ─── Process runner ──────────────────────────────────────────────────────

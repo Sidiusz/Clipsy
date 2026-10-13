@@ -17,11 +17,21 @@ public static class NativeGifEncoder
 {
     // Frame grabbing through MediaComposition is slow; bound the work for very long clips.
     public const int MaxFrames = 3000;
+    // Full-resolution 4K frames are huge to quantize and make a GIF nobody can open; cap the longest side.
+    public const int MaxSide = 1280;
     private const int PaletteSampleFrames = 12;
 
     /// <returns>Number of frames written (0 on failure); <paramref name="truncated"/> when MaxFrames cut the clip.</returns>
-    public static async Task<(bool Ok, bool Truncated)> ConvertMp4ToGifAsync(string inputMp4, string outputGif, CancellationToken ct = default)
+    public static Task<(bool Ok, bool Truncated)> ConvertMp4ToGifAsync(string inputMp4, string outputGif, CancellationToken ct = default)
+        // Decoding and quantizing every frame is heavy CPU work: keep it off the UI thread.
+        => Task.Run(() => ConvertCoreAsync(inputMp4, outputGif, ct));
+
+    private static async Task<(bool Ok, bool Truncated)> ConvertCoreAsync(string inputMp4, string outputGif, CancellationToken ct)
     {
+        // Written under a temporary name and renamed on success, so a kill mid-write never leaves a truncated GIF.
+        var partial = FFmpegService.PartialPath(outputGif);
+        bool ok = false;
+        FrameReader? reader = null;
         try
         {
             var s = SettingsService.Instance.Settings;
@@ -41,16 +51,19 @@ public static class NativeGifEncoder
 
             // Pass 1: palette from evenly spaced frames.
             var samples = new List<byte[]>();
-            int width = 0, height = 0;
             for (int k = 0; k < Math.Min(PaletteSampleFrames, frameCount); k++)
             {
                 int index = (int)((long)k * frameCount / Math.Min(PaletteSampleFrames, frameCount));
                 using var bmp = await GrabFrameAsync(composition, At(index));
                 if (bmp == null) continue;
-                if (width == 0) { width = bmp.Width; height = bmp.Height; }
-                samples.Add(ReadRgb(bmp, width, height));
+                if (reader == null)
+                {
+                    var (w, h) = FitSize(bmp.Width, bmp.Height, MaxSide);
+                    reader = new FrameReader(w, h);
+                }
+                samples.Add((byte[])reader.Read(bmp).Clone());
             }
-            if (samples.Count == 0)
+            if (reader == null || samples.Count == 0)
             {
                 Diagnostics.Log("NativeGif: no frames extracted");
                 return (false, false);
@@ -58,23 +71,26 @@ public static class NativeGifEncoder
             var palette = MedianCut.BuildPalette(samples, colors);
             samples.Clear();
 
-            // Pass 2: stream every frame.
-            await using var fs = new FileStream(outputGif, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16);
-            var gif = new GifWriter(fs, width, height, palette, dither);
+            // Pass 2: stream every frame (one reused RGB buffer, so memory stays at one frame).
             int written = 0;
-            for (int i = 0; i < frameCount; i++)
+            await using (var fs = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16))
             {
-                ct.ThrowIfCancellationRequested();
-                using var bmp = await GrabFrameAsync(composition, At(i));
-                if (bmp == null) continue;
-                var rgb = ReadRgb(bmp, width, height);
-                int delay = FrameDelayCs(i, fps);
-                await Task.Run(() => gif.AddFrame(rgb, delay), ct);
-                written++;
+                var gif = new GifWriter(fs, reader.Width, reader.Height, palette, dither);
+                for (int i = 0; i < frameCount; i++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    using var bmp = await GrabFrameAsync(composition, At(i));
+                    if (bmp == null) continue;
+                    gif.AddFrame(reader.Read(bmp), FrameDelayCs(i, fps));
+                    written++;
+                }
+                gif.Finish();
             }
-            gif.Finish();
+            if (written == 0) return (false, false);
+            File.Move(partial, outputGif, overwrite: true);
+            ok = true;
             if (truncated) Diagnostics.Log($"NativeGif: clip truncated to {MaxFrames} frames");
-            return (written > 0, truncated);
+            return (true, truncated);
         }
         catch (OperationCanceledException)
         {
@@ -85,6 +101,20 @@ public static class NativeGifEncoder
             Diagnostics.Log("NativeGif failed", ex);
             return (false, false);
         }
+        finally
+        {
+            reader?.Dispose();
+            if (!ok) { try { File.Delete(partial); } catch { } }
+        }
+    }
+
+    /// <summary>Scales (w, h) down so the longest side is at most <paramref name="maxSide"/>.</summary>
+    internal static (int W, int H) FitSize(int w, int h, int maxSide)
+    {
+        int longest = Math.Max(w, h);
+        if (longest <= maxSide) return (w, h);
+        double scale = (double)maxSide / longest;
+        return (Math.Max(1, (int)Math.Round(w * scale)), Math.Max(1, (int)Math.Round(h * scale)));
     }
 
     private static async Task<Bitmap?> GrabFrameAsync(MediaComposition composition, TimeSpan at)
@@ -142,18 +172,44 @@ public static class NativeGifEncoder
         }
     }
 
-    /// <summary>Decode a bitmap into tightly packed RGB bytes at the target size.</summary>
-    private static byte[] ReadRgb(Bitmap src, int width, int height)
+    /// <summary>Decodes bitmaps into tightly packed RGB bytes at the target size; the canvas and
+    /// the returned buffer are reused for every frame (copy it to keep it).</summary>
+    private sealed class FrameReader : IDisposable
     {
-        using var canvas = new Bitmap(width, height, PixelFormat.Format32bppArgb);
-        using (var g = Graphics.FromImage(canvas))
+        private readonly Bitmap _canvas;
+        private readonly Graphics _g;
+        private readonly byte[] _rgb;
+
+        public int Width { get; }
+        public int Height { get; }
+
+        public FrameReader(int width, int height)
         {
-            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-            g.DrawImage(src, 0, 0, width, height);
+            Width = width;
+            Height = height;
+            _canvas = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            _g = Graphics.FromImage(_canvas);
+            _g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            _rgb = new byte[width * height * 3];
         }
 
+        public byte[] Read(Bitmap src)
+        {
+            _g.DrawImage(src, 0, 0, Width, Height);
+            return ReadRgb(_canvas, _rgb);
+        }
+
+        public void Dispose()
+        {
+            _g.Dispose();
+            _canvas.Dispose();
+        }
+    }
+
+    private static byte[] ReadRgb(Bitmap canvas, byte[] rgb)
+    {
+        int width = canvas.Width, height = canvas.Height;
         var data = canvas.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-        var rgb = new byte[width * height * 3];
         try
         {
             unsafe
@@ -421,10 +477,13 @@ public static class NativeGifEncoder
     {
         // Palette is fixed for the whole GIF, so nearest-colour lookups are shared across frames.
         private readonly Dictionary<int, byte> _cache = new();
+        // Reused across frames (same size for the whole GIF); WriteFrame consumes them before the next frame.
+        private byte[] _indices = Array.Empty<byte>();
+        private float[] _work = Array.Empty<float>();
 
         public byte[] MapNearest(byte[] rgb)
         {
-            var indices = new byte[rgb.Length / 3];
+            var indices = Reuse(ref _indices, rgb.Length / 3);
             for (int i = 0; i < indices.Length; i++)
                 indices[i] = Nearest(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
             return indices;
@@ -433,9 +492,9 @@ public static class NativeGifEncoder
         public byte[] MapDithered(byte[] rgb, int width, int height)
         {
             // Floyd–Steinberg on a float working copy of the RGB plane.
-            var work = new float[rgb.Length];
+            var work = Reuse(ref _work, rgb.Length);
             for (int i = 0; i < rgb.Length; i++) work[i] = rgb[i];
-            var indices = new byte[width * height];
+            var indices = Reuse(ref _indices, width * height);
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -453,6 +512,12 @@ public static class NativeGifEncoder
                 }
             }
             return indices;
+        }
+
+        private static T[] Reuse<T>(ref T[] buffer, int length)
+        {
+            if (buffer.Length != length) buffer = new T[length];
+            return buffer;
         }
 
         private static void Spread(float[] work, int width, int height, int x, int y, float er, float eg, float eb, float f)

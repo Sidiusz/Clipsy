@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Clipsy.Services;
 
@@ -19,6 +20,11 @@ public sealed class Win32DrawingOverlay
     private int _x, _y, _w, _h;
     private bool _active;
     private bool _trackingLeave;
+    private bool _renderPending;
+    // The Ctrl+Z hook runs on its own thread: on the UI thread, every key press system-wide
+    // would wait for rendering, and Windows drops hooks that answer too slowly.
+    private Thread? _kbThread;
+    private volatile uint _kbThreadId;
     private IntPtr _kbHook;
     private LowLevelKeyboardProcDelegate? _kbProcDelegate;
 
@@ -42,9 +48,13 @@ public sealed class Win32DrawingOverlay
         _engine.Changed += OnEngineChanged;
     }
 
+    // A mouse move changes the engine several times (cursor + stroke); coalesce into one
+    // render per timer tick, which runs after the queued input, instead of one per change.
     private void OnEngineChanged()
     {
-        if (_created) Render();
+        if (!_created || _renderPending) return;
+        _renderPending = true;
+        SetTimer(_hwnd, RenderTimerId, 15, IntPtr.Zero);
     }
 
     public bool Create(int x, int y, int w, int h)
@@ -158,6 +168,7 @@ public sealed class Win32DrawingOverlay
         FreeDib();
         DestroyWindow(_hwnd);
         _created = false;
+        _renderPending = false;
         _hwnd = IntPtr.Zero;
         _engine.ClearAll();
     }
@@ -204,6 +215,11 @@ public sealed class Win32DrawingOverlay
 
     private void Render()
     {
+        if (_renderPending)
+        {
+            _renderPending = false;
+            KillTimer(_hwnd, RenderTimerId);
+        }
         if (_g == null || _bitmap == null) return;
 
         // Bg alpha=1 black absorbs clicks across the region (per-pixel hit-test)
@@ -354,6 +370,16 @@ public sealed class Win32DrawingOverlay
                 _engine.HideCursor();
                 return IntPtr.Zero;
             }
+            case WM_TIMER when wParam == RenderTimerId:
+            {
+                Render();
+                return IntPtr.Zero;
+            }
+            case WM_APP_UNDO:
+            {
+                _engine.Undo();
+                return IntPtr.Zero;
+            }
             case WM_DESTROY:
                 return IntPtr.Zero;
         }
@@ -362,16 +388,48 @@ public sealed class Win32DrawingOverlay
 
     private void InstallKbHook()
     {
-        if (_kbHook != IntPtr.Zero) return;
-        _kbProcDelegate = LowLevelKeyboardProc;
-        _kbHook = SetWindowsHookEx(WH_KEYBOARD_LL, _kbProcDelegate, GetModuleHandle(null), 0);
+        if (_kbThread != null) return;
+        var ready = new ManualResetEventSlim(false);
+        _kbThread = new Thread(() => KbHookLoop(ready))
+        {
+            IsBackground = true,
+            Name = "Clipsy.DrawUndoHook",
+            Priority = ThreadPriority.Highest,
+        };
+        _kbThread.Start();
+        ready.Wait(TimeSpan.FromSeconds(2));
+    }
+
+    private void KbHookLoop(ManualResetEventSlim ready)
+    {
+        try
+        {
+            PeekMessage(out _, IntPtr.Zero, 0, 0, PM_NOREMOVE); // create the queue so WM_QUIT can be posted
+            _kbThreadId = GetCurrentThreadId();
+            _kbProcDelegate = LowLevelKeyboardProc;
+            _kbHook = SetWindowsHookEx(WH_KEYBOARD_LL, _kbProcDelegate, GetModuleHandle(null), 0);
+            if (_kbHook == IntPtr.Zero)
+                Diagnostics.Log("Draw overlay keyboard hook could not be installed");
+            ready.Set();
+            if (_kbHook == IntPtr.Zero) return;
+            while (GetMessage(out _, IntPtr.Zero, 0, 0) > 0) { } // hook calls are delivered inside GetMessage
+            UnhookWindowsHookEx(_kbHook);
+        }
+        catch (Exception ex) { Diagnostics.Log("Draw overlay keyboard hook thread", ex); }
+        finally
+        {
+            _kbHook = IntPtr.Zero;
+            ready.Set();
+        }
     }
 
     private void UninstallKbHook()
     {
-        if (_kbHook == IntPtr.Zero) return;
-        UnhookWindowsHookEx(_kbHook);
-        _kbHook = IntPtr.Zero;
+        if (_kbThread == null) return;
+        if (_kbThreadId != 0) PostThreadMessage(_kbThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+        try { _kbThread.Join(500); } catch { }
+        _kbThread = null;
+        _kbThreadId = 0;
         _kbProcDelegate = null;
     }
 
@@ -384,11 +442,12 @@ public sealed class Win32DrawingOverlay
             if (nCode >= 0 && wParam.ToInt64() == WM_KEYDOWN_MSG)
             {
                 var data = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
-                if (data.vkCode == VK_Z && (GetKeyState(VK_CONTROL) & 0x8000) != 0
+                // GetAsyncKeyState: this thread has no keyboard input of its own for GetKeyState.
+                if (data.vkCode == VK_Z && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
                     && GetCursorPos(out var pt)
                     && pt.X >= _x && pt.X < _x + _w && pt.Y >= _y && pt.Y < _y + _h)
                 {
-                    _engine.Undo();
+                    PostMessage(_hwnd, WM_APP_UNDO, IntPtr.Zero, IntPtr.Zero); // the engine lives on the UI thread
                     return new IntPtr(1);
                 }
             }
@@ -516,6 +575,22 @@ public sealed class Win32DrawingOverlay
     [DllImport("user32.dll")] private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProcDelegate lpfn, IntPtr hMod, uint dwThreadId);
     [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hhk);
     [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
+    [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern bool PostThreadMessage(uint threadId, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] private static extern int GetMessage(out MSG msg, IntPtr hWnd, uint min, uint max);
+    [DllImport("user32.dll")] private static extern bool PeekMessage(out MSG msg, IntPtr hWnd, uint min, uint max, uint remove);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] private static extern UIntPtr SetTimer(IntPtr hWnd, IntPtr id, uint elapseMs, IntPtr timerProc);
+    [DllImport("user32.dll")] private static extern bool KillTimer(IntPtr hWnd, IntPtr id);
+    private const uint WM_QUIT = 0x0012;
+    private const uint WM_TIMER = 0x0113;
+    private const uint WM_APP_UNDO = 0x8001; // WM_APP + 1
+    private const uint PM_NOREMOVE = 0x0000;
+    private static readonly IntPtr RenderTimerId = new(1);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam; public IntPtr lParam; public uint time; public int ptX, ptY; }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct TRACKMOUSEEVENT

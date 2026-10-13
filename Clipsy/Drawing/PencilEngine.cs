@@ -65,6 +65,8 @@ public sealed class PencilEngine
 
     public void SetCursor(float x, float y, bool visible = true)
     {
+        // Every mouse move lands here; an unchanged cursor needs no repaint.
+        if (_cursor.X == x && _cursor.Y == y && _cursorVisible == visible) return;
         _cursor = new System.Drawing.PointF(x, y);
         _cursorVisible = visible;
         Changed?.Invoke();
@@ -167,19 +169,9 @@ public sealed class PencilEngine
         bool removed = false;
         for (int i = _strokes.Count - 1; i >= 0; i--)
         {
-            var s = _strokes[i];
-            float hit = _eraserRadius + s.Thickness / 2f;
-            float hit2 = hit * hit;
-            foreach (var p in s.Points)
-            {
-                float dx = p.X - x, dy = p.Y - y;
-                if (dx * dx + dy * dy <= hit2)
-                {
-                    _strokes.RemoveAt(i);
-                    removed = true;
-                    break;
-                }
-            }
+            if (!HitsStroke(_strokes[i], x, y)) continue;
+            _strokes.RemoveAt(i);
+            removed = true;
         }
         return removed;
     }
@@ -190,36 +182,83 @@ public sealed class PencilEngine
         for (int i = _strokes.Count - 1; i >= 0; i--)
         {
             var s = _strokes[i];
-            float hit = _eraserRadius + s.Thickness / 2f;
-            float hit2 = hit * hit;
-            var runs = new List<List<System.Drawing.PointF>>();
-            List<System.Drawing.PointF>? run = null;
-            bool anyHit = false;
-            foreach (var p in s.Points)
-            {
-                float dx = p.X - x, dy = p.Y - y;
-                bool inside = dx * dx + dy * dy <= hit2;
-                if (inside)
-                {
-                    anyHit = true;
-                    if (run != null) { runs.Add(run); run = null; }
-                }
-                else
-                {
-                    run ??= new List<System.Drawing.PointF>();
-                    run.Add(p);
-                }
-            }
-            if (run != null) runs.Add(run);
-            if (!anyHit) continue;
+            if (!HitsStroke(s, x, y)) continue;
+            // A graze between two samples cuts nothing; leave the stroke (and the undo history) alone.
+            if (SplitAround(s, x, y) is not { } runs) continue;
             changed = true;
             _strokes.RemoveAt(i);
             foreach (var r in runs)
-            {
-                if (r.Count < 2) continue;
                 _strokes.Insert(i, new Stroke { Color = s.Color, Thickness = s.Thickness, Points = r });
-            }
         }
         return changed;
+    }
+
+    // Segments, not just points: fast strokes have long gaps between samples.
+    private bool HitsStroke(Stroke s, float x, float y)
+    {
+        float reach = _eraserRadius + s.Thickness / 2f;
+        float reach2 = reach * reach;
+        var pts = s.Points;
+        if (pts.Count == 0) return false;
+        if (DistanceSq(pts[0].X, pts[0].Y, x, y) <= reach2) return true;
+        for (int k = 1; k < pts.Count; k++)
+            if (SegmentDistanceSq(pts[k - 1], pts[k], x, y) <= reach2) return true;
+        return false;
+    }
+
+    // Densify long segments so the eraser can cut through their middle, then keep the runs outside it.
+    // Null when no sample falls inside the eraser.
+    private List<List<System.Drawing.PointF>>? SplitAround(Stroke s, float x, float y)
+    {
+        float reach = _eraserRadius + s.Thickness / 2f;
+        float reach2 = reach * reach;
+        float step = Math.Max(1f, reach * 0.5f);
+        var src = s.Points;
+        var pts = new List<System.Drawing.PointF>(src.Count * 2) { src[0] };
+        for (int k = 1; k < src.Count; k++)
+        {
+            var a = src[k - 1];
+            var b = src[k];
+            float len = MathF.Sqrt(DistanceSq(a.X, a.Y, b.X, b.Y));
+            int n = (int)(len / step);
+            for (int j = 1; j < n; j++)
+            {
+                float t = j / (float)n;
+                pts.Add(new System.Drawing.PointF(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t));
+            }
+            pts.Add(b);
+        }
+
+        var runs = new List<List<System.Drawing.PointF>>();
+        var run = new List<System.Drawing.PointF>();
+        bool cut = false;
+        foreach (var p in pts)
+        {
+            if (DistanceSq(p.X, p.Y, x, y) > reach2)
+            {
+                run.Add(p);
+                continue;
+            }
+            cut = true;
+            if (run.Count >= 2) runs.Add(run);
+            run = new List<System.Drawing.PointF>();
+        }
+        if (!cut) return null;
+        if (run.Count >= 2) runs.Add(run);
+        return runs;
+    }
+
+    private static float DistanceSq(float ax, float ay, float bx, float by)
+    {
+        float dx = ax - bx, dy = ay - by;
+        return dx * dx + dy * dy;
+    }
+
+    private static float SegmentDistanceSq(System.Drawing.PointF a, System.Drawing.PointF b, float px, float py)
+    {
+        float vx = b.X - a.X, vy = b.Y - a.Y;
+        float len2 = vx * vx + vy * vy;
+        float t = len2 < 1e-6f ? 0 : Math.Clamp(((px - a.X) * vx + (py - a.Y) * vy) / len2, 0f, 1f);
+        return DistanceSq(a.X + vx * t, a.Y + vy * t, px, py);
     }
 }
