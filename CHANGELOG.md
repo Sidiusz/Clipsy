@@ -4,6 +4,12 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.0.8
+
+A responsive capture overlay under heavy load, stricter hotkey rules with reset and clear buttons,
+translation only after confirmation, no more lost or resurrected recordings, a watchdog that respects
+Task Manager, and many fixes to saving, settings and updates. See [1.0.8.md](.github/release-notes/1.0.8.md).
+
 ## 1.0.7
 
 PP-OCRv5 as the default OCR engine with a one-time switch offer, Microsoft Translator as the default
