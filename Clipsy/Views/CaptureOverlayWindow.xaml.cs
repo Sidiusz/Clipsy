@@ -147,10 +147,19 @@ public sealed partial class CaptureOverlayWindow : Window
         BuildScreenMenu();
         Activated += OnActivated;
         Closed += OnOverlayClosed;
+        _appWindow.Changed += OnOverlayAppWindowChanged;
         RootGrid.SizeChanged += OnRootGridSizeChanged;
         ArmReveal();
 
         SetTool(ToolKind.None);
+    }
+
+    internal IntPtr Hwnd => _hwnd;
+
+    /// <summary>Cancel requested from outside the window (Esc pressed while another app has the focus).</summary>
+    internal void CancelFromOutside()
+    {
+        if (!_closed) CloseDeferred();
     }
 
     private void EnsureDrawingSurface()
@@ -198,6 +207,7 @@ public sealed partial class CaptureOverlayWindow : Window
         }
         catch { }
         _composedCount = 0;
+        _refitCount = 0;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFirstFrames;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFirstFrames;
         StartRevealWatchdog();
@@ -244,6 +254,11 @@ public sealed partial class CaptureOverlayWindow : Window
     {
         HideForClose();
         try { ShowWindow(_hwnd, SW_HIDE); } catch { }
+        // Closed before it was revealed (slow first frames under load): the pending reveal
+        // must not uncloak and focus the hidden window, which would swallow the keyboard.
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFirstFrames;
+        _cloaked = false;
+        _revealed = true;
         _session++;
         ResetForReuse();
         // Don't keep the last screenshot (tens of MB, and private) alive while idle in the tray.
@@ -519,10 +534,18 @@ public sealed partial class CaptureOverlayWindow : Window
 
     private void OnActivated(object sender, WindowActivatedEventArgs e)
     {
-        if (FrozenImage.Source == null && _frame.PixelWidth > 0) TryLoadFrozenImage();
-        RootGrid.Focus(FocusState.Programmatic);
+        if (_closed) return;
+        if (e.WindowActivationState == WindowActivationState.Deactivated)
+        {
+            OnOverlayDeactivated();
+            return;
+        }
 
-        UpdateDimGeometry(null);
+        if (FrozenImage.Source == null && _frame.PixelWidth > 0) TryLoadFrozenImage();
+        // Focus can come back after another app took it; keep the user's text entry.
+        if (_activeTextBox != null) _activeTextBox.Focus(FocusState.Programmatic);
+        else RootGrid.Focus(FocusState.Programmatic);
+        RefreshOverlayVisuals();
 
         if (string.Equals(
                 Environment.GetEnvironmentVariable("CLIPSY_DRAW_SURFACE_TEST"),
@@ -544,6 +567,58 @@ public sealed partial class CaptureOverlayWindow : Window
         }
     }
 
+    // Another app can take the foreground mid-gesture (a game grabbing focus under load)
+    // without a PointerCaptureLost; finish the gesture so the selection and toolbars
+    // aren't left half-built, and drop the hold-to-eyedrop whose key-up we won't see.
+    private void OnOverlayDeactivated()
+    {
+        if (_tempEyedropper) ExitTempEyedropper(pick: false);
+        _eyedropperSuppressed = false;
+        if (_mode == InteractionMode.Idle) return;
+        FinishPointerInteraction(_lastPointerPos);
+        try { RootGrid.ReleasePointerCaptures(); } catch { }
+    }
+
+    // Re-applies the current selection, dim hole, handles and toolbars, and repaints
+    // the drawings. Activation used to reset the dim to "nothing selected".
+    private void RefreshOverlayVisuals()
+    {
+        if (_mode != InteractionMode.Idle) return; // an active drag keeps updating itself
+        if (_hasSelection) UpdateSelectionVisual();
+        else UpdateDimGeometry(null);
+        if (_revealed) _drawing.InvalidateCommitted();
+    }
+
+    // A game switching display mode or the DPI can move or resize the overlay while it's
+    // open; put it back over the frozen frame so the selection and toolbars stay on screen.
+    private int _refitCount;
+    private void OnOverlayAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (!args.DidPositionChange && !args.DidSizeChange) return;
+        if (!_revealed || _closed) return;
+        DispatcherQueue.TryEnqueue(RefitToFrame);
+    }
+
+    private void RefitToFrame()
+    {
+        if (!_revealed || _closed || _frame is not { PixelWidth: > 0 } || !IsWindowVisible(_hwnd)) return;
+        var b = _frame.VirtualBounds;
+        var origin = new WIN32POINT();
+        if (!GetClientRect(_hwnd, out var client) || !ClientToScreen(_hwnd, ref origin)) return;
+        bool fits = origin.X == b.X && origin.Y == b.Y
+            && client.right - client.left == b.Width && client.bottom - client.top == b.Height;
+        if (!fits)
+        {
+            // Don't fight the system forever if it keeps overriding the placement.
+            if (++_refitCount > 8) return;
+            Diagnostics.LogInBackground($"Overlay moved while open to {origin.X},{origin.Y} " +
+                $"{client.right - client.left}x{client.bottom - client.top}; restoring {b.X},{b.Y} {b.Width}x{b.Height}");
+            SetOverlayClientBounds(b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE | SWP_NOZORDER);
+        }
+        SyncXamlSizeToWindowDpi();
+        RefreshOverlayVisuals();
+    }
+
     private bool _cloaked = true;
     private bool _revealed;
     private bool _closed;
@@ -562,9 +637,16 @@ public sealed partial class CaptureOverlayWindow : Window
         SyncXamlSizeToWindowDpi();
         PositionHintOnPrimaryScreen();
         int ticksAfterMove = 0;
+        int session = _session;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnPostMoveTick;
         void OnPostMoveTick(object? s, object e)
         {
+            // Dismissed or reopened meanwhile: this reveal belongs to a capture that's gone.
+            if (session != _session)
+            {
+                Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPostMoveTick;
+                return;
+            }
             ticksAfterMove++;
             if (ticksAfterMove == 2)
             {
@@ -609,9 +691,10 @@ public sealed partial class CaptureOverlayWindow : Window
         var wd = DispatcherQueue.CreateTimer();
         wd.Interval = TimeSpan.FromMilliseconds(450);
         wd.IsRepeating = false;
+        int session = _session;
         wd.Tick += (_, _) =>
         {
-            if (_revealed || _closed) return;
+            if (_revealed || _closed || session != _session) return;
             _cloaked = false;
             var b = _frame.VirtualBounds;
             SetOverlayClientBounds(b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);
@@ -817,7 +900,7 @@ public sealed partial class CaptureOverlayWindow : Window
             SetForegroundWindow(hwnd);
             BringWindowToTop(hwnd);
             if (attached) AttachThreadInput(fgThread, thisThread, false);
-            if (GetForegroundWindow() != hwnd) Diagnostics.Log("Overlay did not get foreground; keys go to the previous window");
+            if (GetForegroundWindow() != hwnd) Diagnostics.LogInBackground("Overlay did not get foreground; keys go to the previous window");
         }
         catch { SetForegroundWindow(hwnd); }
     }
@@ -836,6 +919,9 @@ public sealed partial class CaptureOverlayWindow : Window
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     private const int SW_HIDE = 0;
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
 
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     // Off-screen warm-up position for the first (black-erase) present.

@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace Clipsy.Services;
 
@@ -51,12 +53,45 @@ public static class Diagnostics
         {
             lock (_lock)
             {
-                File.AppendAllText(LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
+                File.AppendAllText(LogPath, FormatLine(message));
             }
         }
         catch { }
         System.Diagnostics.Debug.WriteLine($"[Clipsy] {message}");
     }
+
+    private static readonly ConcurrentQueue<string> _pending = new();
+    private static int _drainQueued;
+
+    /// <summary>Log without touching the disk on the calling thread: for the overlay's
+    /// UI-thread paths, where a disk busy with game I/O would stall the capture.</summary>
+    public static void LogInBackground(string message)
+    {
+        _pending.Enqueue(FormatLine(message));
+        System.Diagnostics.Debug.WriteLine($"[Clipsy] {message}");
+        if (Interlocked.Exchange(ref _drainQueued, 1) == 0)
+            ThreadPool.UnsafeQueueUserWorkItem(_ => Flush(), null);
+    }
+
+    /// <summary>Writes out lines queued by LogInBackground.</summary>
+    public static void Flush()
+    {
+        Volatile.Write(ref _drainQueued, 0);
+        if (_pending.IsEmpty) return;
+        var sb = new System.Text.StringBuilder();
+        while (_pending.TryDequeue(out var line)) sb.Append(line);
+        try
+        {
+            lock (_lock)
+            {
+                File.AppendAllText(LogPath, sb.ToString());
+            }
+        }
+        catch { }
+    }
+
+    private static string FormatLine(string message)
+        => $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}";
 
     public static void Log(string context, Exception ex)
     {

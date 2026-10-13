@@ -53,6 +53,10 @@ public sealed class HotkeyService : IDisposable
 
     public bool IsCaptureRegistered { get; private set; }
 
+    /// <summary>Raised on the hook thread for every Esc press, wherever focus is; the key
+    /// is never swallowed. Must return immediately.</summary>
+    public Action? EscapePressed { get; set; }
+
     public HotkeyService(DispatcherQueue uiDispatcher)
     {
         _dispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
@@ -102,6 +106,9 @@ public sealed class HotkeyService : IDisposable
         try
         {
             _threadId = GetCurrentThreadId();
+            // Above every Normal/High-class thread a game runs: the hook must answer within
+            // the OS timeout even when the CPU is saturated, or Windows skips (and may drop) it.
+            SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
             _wndProc = WndProc;
             _wndProcHandle = GCHandle.Alloc(_wndProc);
             string className = "ClipsyHotkeyMsgWnd_" + Guid.NewGuid().ToString("N");
@@ -243,6 +250,8 @@ public sealed class HotkeyService : IDisposable
             return false;
         }
         if (message != WM_KEYDOWN && message != WM_SYSKEYDOWN) return false;
+
+        if (vk == VK_ESCAPE) EscapePressed?.Invoke();
 
         uint mods = CurrentModifiers();
         Action? cb;
@@ -444,6 +453,15 @@ public sealed class HotkeyService : IDisposable
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
 
+    private const int THREAD_PRIORITY_TIME_CRITICAL = 15;
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentThread();
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetThreadPriority(IntPtr hThread, int nPriority);
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string? lpModuleName);
 
@@ -457,6 +475,7 @@ public sealed class HotkeyService : IDisposable
     private const int WM_KEYUP       = 0x0101;
     private const int WM_SYSKEYDOWN  = 0x0104;
     private const int WM_SYSKEYUP    = 0x0105;
+    private const int VK_ESCAPE      = 0x1B;
     private const int VK_SHIFT       = 0x10;
     private const int VK_CONTROL     = 0x11;
     private const int VK_MENU        = 0x12;

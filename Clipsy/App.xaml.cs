@@ -90,7 +90,7 @@ public partial class App : Application
 
         SingleInstanceService.SetRequestHandler(HandleCliRequest);
 
-        Hotkey = new HotkeyService(HostWindow.DispatcherQueue);
+        Hotkey = new HotkeyService(HostWindow.DispatcherQueue) { EscapePressed = CaptureOverlayHost.OnGlobalEscape };
         RegisterHotkeys();
         SettingsService.Instance.SettingsChanged += OnSettingsChangedRewireHotkeys;
 
@@ -139,7 +139,7 @@ public partial class App : Application
         {
             long now = Environment.TickCount64;
             // A late tick means the UI thread was blocked, which delays overlays and toasts.
-            if (now - lastTick > 8000) Diagnostics.Log($"UI thread stalled ~{now - lastTick - 5000} ms");
+            if (now - lastTick > 8000) Diagnostics.LogInBackground($"UI thread stalled ~{now - lastTick - 5000} ms");
             lastTick = now;
             ProcessWatchdog.Pulse();
             SingleInstanceService.MarkUiAlive();
