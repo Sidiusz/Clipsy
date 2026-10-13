@@ -53,7 +53,8 @@ public static class Diagnostics
         {
             lock (_lock)
             {
-                File.AppendAllText(LogPath, FormatLine(message));
+                // Lines queued by LogInBackground first, so the file stays in order.
+                File.AppendAllText(LogPath, DequeuePending() + FormatLine(message));
             }
         }
         catch { }
@@ -77,17 +78,23 @@ public static class Diagnostics
     public static void Flush()
     {
         Volatile.Write(ref _drainQueued, 0);
-        if (_pending.IsEmpty) return;
-        var sb = new System.Text.StringBuilder();
-        while (_pending.TryDequeue(out var line)) sb.Append(line);
         try
         {
             lock (_lock)
             {
-                File.AppendAllText(LogPath, sb.ToString());
+                var text = DequeuePending();
+                if (text.Length > 0) File.AppendAllText(LogPath, text);
             }
         }
         catch { }
+    }
+
+    private static string DequeuePending()
+    {
+        if (_pending.IsEmpty) return string.Empty;
+        var sb = new System.Text.StringBuilder();
+        while (_pending.TryDequeue(out var line)) sb.Append(line);
+        return sb.ToString();
     }
 
     private static string FormatLine(string message)

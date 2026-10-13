@@ -30,6 +30,7 @@ public sealed partial class CaptureOverlayWindow
     {
         var cp = e.GetCurrentPoint(RootGrid);
         var pos = cp.Position;
+        _lastPointerPos = pos;
         // The first move's history can hold hover samples from before the press.
         _lastStrokeTimestamp = cp.Timestamp;
         bool rmb = cp.Properties.IsRightButtonPressed;

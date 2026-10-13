@@ -53,9 +53,9 @@ public sealed class HotkeyService : IDisposable
 
     public bool IsCaptureRegistered { get; private set; }
 
-    /// <summary>Raised on the hook thread for every Esc press, wherever focus is; the key
-    /// is never swallowed. Must return immediately.</summary>
-    public Action? EscapePressed { get; set; }
+    /// <summary>Raised on the hook thread for every Esc press, wherever focus is, with
+    /// whether a modifier was held; the key is never swallowed. Must return immediately.</summary>
+    public Action<bool>? EscapePressed { get; set; }
 
     public HotkeyService(DispatcherQueue uiDispatcher)
     {
@@ -251,9 +251,9 @@ public sealed class HotkeyService : IDisposable
         }
         if (message != WM_KEYDOWN && message != WM_SYSKEYDOWN) return false;
 
-        if (vk == VK_ESCAPE) EscapePressed?.Invoke();
-
         uint mods = CurrentModifiers();
+        if (vk == VK_ESCAPE) EscapePressed?.Invoke(mods != 0);
+
         Action? cb;
         bool onUi = true;
         if (_captureViaLL && vk == _captureVk && mods == _captureMods) { cb = _captureCallback; onUi = false; }

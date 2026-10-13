@@ -156,6 +156,9 @@ public sealed partial class CaptureOverlayWindow : Window
 
     internal IntPtr Hwnd => _hwnd;
 
+    /// <summary>On screen in the current session (read from the hook thread).</summary>
+    internal bool IsRevealed => _revealed;
+
     /// <summary>Cancel requested from outside the window (Esc pressed while another app has the focus).</summary>
     internal void CancelFromOutside()
     {
@@ -620,7 +623,7 @@ public sealed partial class CaptureOverlayWindow : Window
     }
 
     private bool _cloaked = true;
-    private bool _revealed;
+    private volatile bool _revealed;
     private bool _closed;
     private const int DWMWA_CLOAK = 13;
     private const int DWMWA_BORDER_COLOR = 34;

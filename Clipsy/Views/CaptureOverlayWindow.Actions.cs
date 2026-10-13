@@ -46,8 +46,13 @@ public sealed partial class CaptureOverlayWindow
     {
         try { OverlayMenu.Hide(); } catch { }
         HideForClose();
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-            () => CaptureOverlayHost.Dismiss(this));
+        // Only this session: a second request (Esc auto-repeat) queued before the first ran
+        // must not dismiss the next capture, which reuses this window.
+        int session = _session;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (session == _session) CaptureOverlayHost.Dismiss(this);
+        });
     }
 
     // Everything a background render needs, copied so the overlay can be reset or reused meanwhile.
