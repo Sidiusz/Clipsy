@@ -27,6 +27,7 @@ public sealed partial class SettingsWindow
         public Visibility ClearVisibility { get; init; } = Visibility.Collapsed;
         public string ClearTip { get; init; } = string.Empty;
         public string DefaultTip { get; init; } = string.Empty;
+        public string DefaultBinding { get; init; } = string.Empty;
 
         private string _label = string.Empty;
         public required string Label
@@ -39,10 +40,21 @@ public sealed partial class SettingsWindow
         public string Binding
         {
             get => _binding;
-            set { if (_binding != value) { _binding = value; OnChanged(); OnChanged(nameof(Display)); } }
+            set
+            {
+                if (_binding == value) return;
+                _binding = value;
+                OnChanged();
+                OnChanged(nameof(Display));
+                OnChanged(nameof(DefaultVisibility));
+            }
         }
 
         public string Display => _binding.Length == 0 ? Strings.Get("HkNotSet") : _binding;
+
+        public Visibility DefaultVisibility =>
+            string.Equals(_binding, DefaultBinding, System.StringComparison.OrdinalIgnoreCase)
+                ? Visibility.Collapsed : Visibility.Visible;
 
         public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
         private void OnChanged([System.Runtime.CompilerServices.CallerMemberName] string? name = null)
@@ -86,6 +98,7 @@ public sealed partial class SettingsWindow
     {
         foreach (var existing in _hotkeyRows) existing.PropertyChanged -= OnHotkeyRowChanged;
         _hotkeyRows.Clear();
+        var defaults = new AppSettings();
         var specs = new (string Key, string LabelKey, string Binding, string? GroupKey)[]
         {
             ("capture", "HkOpenCapture", _draft.HotkeyCapture, "HkGroupGeneral"),
@@ -106,6 +119,7 @@ public sealed partial class SettingsWindow
             {
                 Key = s.Key,
                 Label = Strings.Get(s.LabelKey),
+                DefaultBinding = GetHotkey(defaults, s.Key),
                 Binding = s.Binding,
                 GroupLabel = s.GroupKey == null ? string.Empty : Strings.Get(s.GroupKey),
                 GroupVisibility = s.GroupKey == null ? Visibility.Collapsed : Visibility.Visible,
