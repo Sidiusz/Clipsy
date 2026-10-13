@@ -3,6 +3,8 @@ using System.IO;
 using System.Text;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Threading.Tasks;
 
 namespace Clipsy.Services;
 
@@ -82,6 +84,9 @@ public sealed class AppSettings
     public string TranslateFrom { get; set; } = "auto";
     public string TranslateTo { get; set; } = "ui"; // "ui" = current interface language
     public bool TranslationNoticeShown { get; set; }
+    // Separate from TranslationNoticeShown: that one was also set when the old notice was
+    // only a toast (or hidden), so it doesn't mean the user agreed.
+    public bool TranslationConsented { get; set; }
 
     // Notifications
     public bool NotificationsEnabled { get; set; } = true;
@@ -115,6 +120,48 @@ public sealed class AppSettings
         }
     }
 
+    /// <summary>Defaults for every preference, keeping runtime state (last folders, mic state,
+    /// update stamps, one-time offers and notices) so a reset doesn't re-prompt or forget.</summary>
+    internal static AppSettings DefaultsKeepingState(AppSettings current) => new()
+    {
+        OcrEngineOfferShown = current.OcrEngineOfferShown,
+        LastScreenshotFolder = current.LastScreenshotFolder,
+        LastVideoFolder = current.LastVideoFolder,
+        LastChangelogVersion = current.LastChangelogVersion,
+        MicrophoneMuted = current.MicrophoneMuted,
+        MicrophoneStateInitialized = current.MicrophoneStateInitialized,
+        LastUpdateCheckUtc = current.LastUpdateCheckUtc,
+        SkippedVersion = current.SkippedVersion,
+        TranslationNoticeShown = current.TranslationNoticeShown,
+        TranslationConsented = current.TranslationConsented,
+        ProEnabled = current.ProEnabled,
+    };
+
+    /// <summary>Reads known fields one by one onto defaults: a wrongly-typed field is
+    /// skipped instead of failing the whole file.</summary>
+    internal static AppSettings FromJson(JsonObject root, JsonSerializerOptions options)
+    {
+        var s = new AppSettings();
+        foreach (var p in Properties)
+        {
+            if (!root.TryGetPropertyValue(p.Name, out var node)) continue;
+            try
+            {
+                if (node is null)
+                {
+                    if (!p.PropertyType.IsValueType) p.SetValue(s, null);
+                    continue;
+                }
+                p.SetValue(s, node.Deserialize(p.PropertyType, options));
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log($"Settings field '{p.Name}' ignored: {ex.Message}");
+            }
+        }
+        return s;
+    }
+
     internal void FillNullStrings()
     {
         var defaults = new AppSettings();
@@ -138,6 +185,12 @@ public sealed class SettingsService
     private readonly string _tempPath;
     private readonly JsonSerializerOptions _json = new() { WriteIndented = true };
     private readonly object _saveLock = new();
+    // File writes are serialized here; a newer snapshot is never overwritten by an older one.
+    private readonly object _writeLock = new();
+    private long _snapshotSeq;
+    private long _writtenSeq;
+    private (byte[] Bytes, long Seq)? _pendingState;
+    private bool _stateWriterQueued;
     public AppSettings Settings { get; private set; }
 
     public event Action? SettingsChanged;
@@ -182,9 +235,9 @@ public sealed class SettingsService
         {
             if (!File.Exists(path)) return false;
             var json = File.ReadAllText(path);
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty(nameof(AppSettings.SettingsVersion), out var v))
-                v.TryGetInt32(out version);
+            if (JsonNode.Parse(json) is not JsonObject root) return false;
+            if (root[nameof(AppSettings.SettingsVersion)] is JsonValue v)
+                v.TryGetValue(out version);
             if (version > CurrentSettingsVersion)
             {
                 // Written by a newer build: keep a copy so a downgrade doesn't silently lose it.
@@ -192,8 +245,8 @@ public sealed class SettingsService
                 if (!File.Exists(keep)) File.Copy(path, keep);
                 Diagnostics.Log($"Settings '{Path.GetFileName(path)}' has newer version {version}; loading known fields.");
             }
-            settings = JsonSerializer.Deserialize<AppSettings>(json, _json);
-            return settings != null;
+            settings = AppSettings.FromJson(root, _json);
+            return true;
         }
         catch (Exception ex)
         {
@@ -241,32 +294,101 @@ public sealed class SettingsService
         s.GifColors = Math.Clamp(s.GifColors, 16, 256);
         s.GifFps = Math.Clamp(s.GifFps, 5, 30);
         s.NotificationDurationSeconds = Math.Clamp(s.NotificationDurationSeconds, 1, 30);
+
+        // A binding that is no longer allowed (Esc, Win, bare typing keys) falls back to its default.
+        var d = new AppSettings();
+        s.HotkeyCapture          = ValidHotkey(s.HotkeyCapture,          d.HotkeyCapture,          global: true,  optional: false);
+        s.HotkeyRecordSilentSave = ValidHotkey(s.HotkeyRecordSilentSave, d.HotkeyRecordSilentSave, global: true,  optional: true);
+        s.HotkeyMicToggle        = ValidHotkey(s.HotkeyMicToggle,        d.HotkeyMicToggle,        global: true,  optional: true);
+        s.HotkeyScreenshotSilent = ValidHotkey(s.HotkeyScreenshotSilent, d.HotkeyScreenshotSilent, global: false, optional: true);
+        s.HotkeyCopy             = ValidHotkey(s.HotkeyCopy,             d.HotkeyCopy,             global: false, optional: true);
+        s.HotkeyUndo             = ValidHotkey(s.HotkeyUndo,             d.HotkeyUndo,             global: false, optional: true);
+        s.HotkeyRedo             = ValidHotkey(s.HotkeyRedo,             d.HotkeyRedo,             global: false, optional: true);
+        s.HotkeySelectAll        = ValidHotkey(s.HotkeySelectAll,        d.HotkeySelectAll,        global: false, optional: true);
+        s.HotkeySelectMonitor    = ValidHotkey(s.HotkeySelectMonitor,    d.HotkeySelectMonitor,    global: false, optional: true);
+        if (HotkeyService.IsReservedKey(s.EyedropperModifier)) s.EyedropperModifier = d.EyedropperModifier;
     }
 
+    private static string ValidHotkey(string value, string fallback, bool global, bool optional)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return optional ? string.Empty : fallback;
+        if (HotkeyService.IsValidBinding(value, global)) return value;
+        Diagnostics.Log($"Hotkey '{value}' is not allowed; reset to '{fallback}'.");
+        return fallback;
+    }
+
+    // Returns the canonical spelling, so "PNG" is stored and compared as "png".
     private static string OneOf(string? value, string fallback, params string[] allowed)
-        => allowed.Contains(value ?? string.Empty, StringComparer.OrdinalIgnoreCase) ? value! : fallback;
+        => allowed.FirstOrDefault(a => string.Equals(a, value, StringComparison.OrdinalIgnoreCase)) ?? fallback;
 
     /// <summary>Persists and notifies subscribers (hotkeys, theme, language, open windows).</summary>
     public bool Save()
     {
-        if (!Write()) return false;
+        var bytes = Snapshot(out long seq);
+        if (bytes == null || !WriteSnapshot(bytes, seq)) return false;
         try { SettingsChanged?.Invoke(); }
         catch (Exception ex) { Diagnostics.Log("SettingsChanged subscriber failed", ex); }
         return true;
     }
 
-    /// <summary>Persists runtime state (last folder, mic, update stamps) without rebuilding the UI.</summary>
-    public bool SaveState() => Write();
+    /// <summary>Persists runtime state (last folder, mic, update stamps) without rebuilding the UI.
+    /// Serialized here, written on a background thread; bursts coalesce into one write.</summary>
+    public bool SaveState()
+    {
+        var bytes = Snapshot(out long seq);
+        if (bytes == null) return false;
+        lock (_saveLock)
+        {
+            _pendingState = (bytes, seq);
+            if (_stateWriterQueued) return true;
+            _stateWriterQueued = true;
+        }
+        Task.Run(WritePendingState);
+        return true;
+    }
 
-    private bool Write()
+    /// <summary>Synchronously writes state queued by SaveState (call before exit).</summary>
+    public void Flush() => WritePendingState();
+
+    private void WritePendingState()
+    {
+        // Held across the take so Flush also waits out a background write already in progress.
+        lock (_writeLock)
+        {
+            (byte[] Bytes, long Seq)? next;
+            lock (_saveLock)
+            {
+                next = _pendingState;
+                _pendingState = null;
+                _stateWriterQueued = false;
+            }
+            if (next is { } p) WriteSnapshot(p.Bytes, p.Seq);
+        }
+    }
+
+    private byte[]? Snapshot(out long seq)
     {
         lock (_saveLock)
         {
             Normalize(Settings);
             Settings.SettingsVersion = CurrentSettingsVersion;
+            seq = ++_snapshotSeq;
+            try { return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(Settings, _json)); }
+            catch (Exception ex)
+            {
+                Diagnostics.Log("Settings serialize failed", ex);
+                return null;
+            }
+        }
+    }
+
+    private bool WriteSnapshot(byte[] bytes, long seq)
+    {
+        lock (_writeLock)
+        {
+            if (seq <= _writtenSeq) return true; // a newer snapshot is already on disk
             try
             {
-                var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(Settings, _json));
                 using (var fs = new FileStream(_tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
                 {
                     fs.Write(bytes, 0, bytes.Length);
@@ -274,6 +396,7 @@ public sealed class SettingsService
                 }
                 if (IsReadableJson(_path)) File.Copy(_path, _backupPath, overwrite: true);
                 File.Move(_tempPath, _path, overwrite: true);
+                _writtenSeq = seq;
                 return true;
             }
             catch (Exception ex)
@@ -311,7 +434,7 @@ public sealed class SettingsService
     public bool ResetToDefaults()
     {
         var previous = Settings;
-        Settings = new AppSettings();
+        Settings = AppSettings.DefaultsKeepingState(previous);
         if (Save()) return true;
         Settings = previous;
         return false;

@@ -94,8 +94,14 @@ public static class UpdateManager
             string.Format(Strings.Get("NotifyUpdateAvailable"), info.Version),
             ToastCategory.Update,
             action1Icon: "\uE894", action1Tooltip: Strings.Get("ToastSkipVersion"), action1: SkipCurrent,
-            action2Icon: "\uE896", action2Tooltip: Strings.Get("ToastDownload"), action2: () => _ = StartDownloadAsync(),
+            action2Icon: "\uE896", action2Tooltip: Strings.Get("ToastDownload"), action2: DownloadFromToast,
             action2IsPrimary: true);
+
+    // The toast can outlive its state: a download already running or ready must not restart.
+    private static void DownloadFromToast()
+    {
+        if (Phase == UpdatePhase.Available) _ = StartDownloadAsync();
+    }
 
     // Tray/Settings primary action: download when available, install when ready; after a failed
     // download send the user to the release page, after a failed check re-check.
@@ -112,9 +118,11 @@ public static class UpdateManager
         }
     }
 
+    private static bool _skipAfterDownload;
+
     public static async Task StartDownloadAsync()
     {
-        if (_downloading || Info == null) return;
+        if (_downloading || Info == null || Phase == UpdatePhase.Ready) return;
         if (string.IsNullOrEmpty(Info.InstallerUrl))
         {
             // No installer asset — send the user to the release page instead.
@@ -127,6 +135,13 @@ public static class UpdateManager
         var prog = new Progress<double>(p => { Progress = p; Raise(); });
         var installer = await UpdateService.DownloadInstallerAsync(Info, prog);
         _downloading = false;
+        if (_skipAfterDownload)
+        {
+            // Skipped while downloading: the download can't be cancelled, so drop its result.
+            _skipAfterDownload = false;
+            installer?.Dispose();
+            return;
+        }
         if (installer == null)
         {
             _downloadFailed = true;
@@ -164,6 +179,11 @@ public static class UpdateManager
         if (Info == null) return;
         SettingsService.Instance.Settings.SkippedVersion = Info.Version;
         SettingsService.Instance.SaveState();
+        // A running download is discarded when it finishes (StartDownloadAsync).
+        if (_downloading) _skipAfterDownload = true;
+        // Release the locked installer file of a ready download.
+        _installer?.Dispose();
+        _installer = null;
         Info = null;
         SetPhase(UpdatePhase.UpToDate);
     }
@@ -176,7 +196,25 @@ public static class UpdateManager
         if (Phase != UpdatePhase.Available || _downloading) return;
         if (Info == null || string.IsNullOrEmpty(Info.InstallerUrl)) return;
         if (IdleMilliseconds() < AutoDownloadIdleMs) return;
+        if (!IsUnmeteredConnection()) return;
         _ = StartDownloadAsync();
+    }
+
+    // Auto-download only on a connection the user isn't paying per byte for.
+    private static bool IsUnmeteredConnection()
+    {
+        try
+        {
+            var cost = Windows.Networking.Connectivity.NetworkInformation.GetInternetConnectionProfile()?.GetConnectionCost();
+            return cost != null
+                && cost.NetworkCostType == Windows.Networking.Connectivity.NetworkCostType.Unrestricted
+                && !cost.Roaming && !cost.OverDataLimit;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("UpdateManager.IsUnmeteredConnection", ex);
+            return false;
+        }
     }
 
     private static uint IdleMilliseconds()

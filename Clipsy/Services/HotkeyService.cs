@@ -12,6 +12,7 @@ public sealed class HotkeyService : IDisposable
     private const int WM_HOTKEY       = 0x0312;
     private const int WM_QUIT         = 0x0012;
     private const int WM_USER_REREG   = 0x0401;
+    private const int WM_USER_RECORDING = 0x0402;
     private const uint MOD_ALT        = 0x0001;
     private const uint MOD_CONTROL    = 0x0002;
     private const uint MOD_SHIFT      = 0x0004;
@@ -51,6 +52,10 @@ public sealed class HotkeyService : IDisposable
     private bool _micViaLL;
     private uint _heldVk;
 
+    // Record-save/mic-toggle only act during a recording; registering them all the
+    // time would take those keys away from every other app.
+    private volatile bool _recordingHotkeysActive;
+
     public bool IsCaptureRegistered { get; private set; }
 
     /// <summary>Raised on the hook thread for every Esc press, wherever focus is, with
@@ -70,9 +75,9 @@ public sealed class HotkeyService : IDisposable
         _recordCallback  = recordCallback;
         _micCallback     = micCallback;
 
-        ParseBinding(captureBinding, out _captureVk, out _captureMods);
-        ParseBinding(recordBinding,  out _recordVk,  out _recordMods);
-        ParseBinding(micBinding,     out _micVk,     out _micMods);
+        ParseGlobalBinding(captureBinding, out _captureVk, out _captureMods);
+        ParseGlobalBinding(recordBinding,  out _recordVk,  out _recordMods);
+        ParseGlobalBinding(micBinding,     out _micVk,     out _micMods);
 
         _running = true;
         var ready = new ManualResetEventSlim(false);
@@ -93,12 +98,21 @@ public sealed class HotkeyService : IDisposable
     /// <summary>Re-register all hotkeys with new bindings without restarting the thread.</summary>
     public void Reregister(string captureBinding, string? recordBinding, string? micBinding = null)
     {
-        ParseBinding(captureBinding, out _captureVk, out _captureMods);
-        ParseBinding(recordBinding,  out _recordVk,  out _recordMods);
-        ParseBinding(micBinding,     out _micVk,     out _micMods);
+        ParseGlobalBinding(captureBinding, out _captureVk, out _captureMods);
+        ParseGlobalBinding(recordBinding,  out _recordVk,  out _recordMods);
+        ParseGlobalBinding(micBinding,     out _micVk,     out _micMods);
         // Posted to the window, not the thread: thread messages never reach WndProc.
         if (_hwnd != IntPtr.Zero)
             PostMessageW(_hwnd, WM_USER_REREG, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    /// <summary>Registers the record-save and mic-toggle hotkeys while a recording runs, releases them otherwise.</summary>
+    public void SetRecordingHotkeysActive(bool active)
+    {
+        if (_recordingHotkeysActive == active) return;
+        _recordingHotkeysActive = active;
+        if (_hwnd != IntPtr.Zero)
+            PostMessageW(_hwnd, WM_USER_RECORDING, IntPtr.Zero, IntPtr.Zero);
     }
 
     private void MessageLoop(ManualResetEventSlim ready)
@@ -167,11 +181,7 @@ public sealed class HotkeyService : IDisposable
     private void DoRegister()
     {
         UnregisterHotKey(_hwnd, HOTKEY_CAPTURE);
-        UnregisterHotKey(_hwnd, HOTKEY_RECORD);
-        UnregisterHotKey(_hwnd, HOTKEY_MIC);
         _captureViaLL = false;
-        _recordViaLL  = false;
-        _micViaLL     = false;
         IsCaptureRegistered = false;
 
         bool captureHotkey = false;
@@ -183,14 +193,28 @@ public sealed class HotkeyService : IDisposable
             captureHotkey = RegisterHotKey(_hwnd, HOTKEY_CAPTURE, _captureMods | MOD_NOREPEAT, _captureVk);
         }
 
-        if (_recordVk != 0 && _recordCallback != null
+        RegisterRecordingHotkeys();
+
+        if (_captureVk != 0)
+            IsCaptureRegistered = _llHook != IntPtr.Zero || captureHotkey;
+    }
+
+    private void RegisterRecordingHotkeys()
+    {
+        UnregisterHotKey(_hwnd, HOTKEY_RECORD);
+        UnregisterHotKey(_hwnd, HOTKEY_MIC);
+        _recordViaLL = false;
+        _micViaLL    = false;
+        bool active = _recordingHotkeysActive;
+
+        if (active && _recordVk != 0 && _recordCallback != null
             && !RegisterHotKey(_hwnd, HOTKEY_RECORD, _recordMods | MOD_NOREPEAT, _recordVk))
         {
             Diagnostics.Log($"RegisterHotKey(record-stop) failed err=0x{Marshal.GetLastWin32Error():X}; using LL hook");
             _recordViaLL = true;
         }
 
-        if (_micVk != 0 && _micCallback != null
+        if (active && _micVk != 0 && _micCallback != null
             && !RegisterHotKey(_hwnd, HOTKEY_MIC, _micMods | MOD_NOREPEAT, _micVk))
         {
             Diagnostics.Log($"RegisterHotKey(mic-toggle) failed err=0x{Marshal.GetLastWin32Error():X}; using LL hook");
@@ -198,9 +222,6 @@ public sealed class HotkeyService : IDisposable
         }
 
         SyncLowLevelHook();
-
-        if (_captureVk != 0)
-            IsCaptureRegistered = _llHook != IntPtr.Zero || captureHotkey;
     }
 
     private void SyncLowLevelHook()
@@ -308,6 +329,11 @@ public sealed class HotkeyService : IDisposable
                 DoRegister();
                 return IntPtr.Zero;
             }
+            if (msg == WM_USER_RECORDING)
+            {
+                RegisterRecordingHotkeys();
+                return IntPtr.Zero;
+            }
         }
         catch (Exception ex)
         {
@@ -340,21 +366,65 @@ public sealed class HotkeyService : IDisposable
                 case "shift":                mods |= MOD_SHIFT;   break;
                 case "alt":  case "menu":    mods |= MOD_ALT;     break;
                 case "win":  case "windows": mods |= MOD_WIN;     break;
+                default: mods = 0; return; // unknown modifier: don't silently bind the bare key
             }
         }
         vk = KeyNameToVk(parts[^1].Trim());
     }
 
-    public static bool IsValidBinding(string? binding)
+    // An invalid global binding is never registered: the LL hook would swallow that key everywhere.
+    private static void ParseGlobalBinding(string? binding, out uint vk, out uint mods)
     {
-        ParseBinding(binding, out uint vk, out _);
-        return vk != 0;
+        ParseBinding(binding, out vk, out mods);
+        if (vk != 0 && CheckBinding(binding, global: true) != HotkeyProblem.None)
+        {
+            Diagnostics.Log($"Hotkey '{binding}' rejected as a global hotkey");
+            vk = 0; mods = 0;
+        }
     }
+
+    /// <summary>The one rule set for every binding (Settings recorder, CLI, settings load).
+    /// Esc and the Windows keys are never allowed; global hotkeys without Ctrl/Alt are
+    /// limited to keys that don't type anything.</summary>
+    public static HotkeyProblem CheckBinding(string? binding, bool global)
+    {
+        ParseBinding(binding, out uint vk, out uint mods);
+        if (vk == 0) return HotkeyProblem.NoKey;
+        if (vk == VK_ESCAPE || (mods & MOD_WIN) != 0) return HotkeyProblem.Reserved;
+        if (global && (mods & (MOD_CONTROL | MOD_ALT)) == 0 && !IsStandaloneKey(vk)) return HotkeyProblem.NeedsModifier;
+        return HotkeyProblem.None;
+    }
+
+    public static bool IsValidBinding(string? binding, bool global = false)
+        => CheckBinding(binding, global) == HotkeyProblem.None;
+
+    /// <summary>Same key and modifiers, whatever the spelling ("PrintScreen" vs "Snapshot").</summary>
+    public static bool SameBinding(string? a, string? b)
+    {
+        ParseBinding(a, out uint va, out uint ma);
+        ParseBinding(b, out uint vb, out uint mb);
+        return va != 0 && va == vb && ma == mb;
+    }
+
+    /// <summary>Esc and the Windows keys, which can't be bound to anything (e.g. the eyedropper hold key).</summary>
+    public static bool IsReservedKey(string? name)
+    {
+        var n = name?.Trim() ?? string.Empty;
+        if (n.Equals("esc", StringComparison.OrdinalIgnoreCase) || n.Equals("win", StringComparison.OrdinalIgnoreCase)
+            || n.Equals("windows", StringComparison.OrdinalIgnoreCase)) return true;
+        return Enum.TryParse<Windows.System.VirtualKey>(n, ignoreCase: true, out var k)
+            && k is Windows.System.VirtualKey.Escape or Windows.System.VirtualKey.LeftWindows or Windows.System.VirtualKey.RightWindows;
+    }
+
+    // PrintScreen, Pause, Scroll Lock, F1-F24, media play/stop/next/prev.
+    private static bool IsStandaloneKey(uint vk)
+        => vk is 0x2C or 0x13 or 0x91 or (>= 0x70 and <= 0x87) or (>= 0xB0 and <= 0xB3);
 
     public static bool MatchesBinding(string? binding, Windows.System.VirtualKey key)
     {
         ParseBinding(binding, out uint vk, out uint mods);
-        return vk != 0 && vk == (uint)key && mods == CurrentModifiers();
+        return vk != 0 && vk != VK_ESCAPE && (mods & MOD_WIN) == 0
+            && vk == (uint)key && mods == CurrentModifiers();
     }
 
     internal static uint KeyNameToVk(string name)
@@ -505,3 +575,5 @@ public sealed class HotkeyService : IDisposable
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
 }
+
+public enum HotkeyProblem { None, NoKey, Reserved, NeedsModifier }

@@ -7,7 +7,7 @@ namespace Clipsy.Services;
 
 internal static class CliConfigService
 {
-    private enum Kind { Plain, Path, Hotkey, OptionalHotkey, TessLanguages, TranslateFrom, TranslateTo, Modifier }
+    private enum Kind { Plain, Path, GlobalHotkey, OptionalGlobalHotkey, OptionalHotkey, TessLanguages, TranslateFrom, TranslateTo, Modifier }
 
     private sealed record Entry(string Property, string[]? Allowed = null, int? Min = null, int? Max = null, Kind Kind = Kind.Plain);
 
@@ -42,15 +42,15 @@ internal static class CliConfigService
         ["gif.colors"] = new(nameof(AppSettings.GifColors), null, 16, 256),
         ["gif.fps"] = new(nameof(AppSettings.GifFps), null, 5, 30),
         ["gif.dither"] = new(nameof(AppSettings.GifDither)),
-        ["hotkey.capture"] = new(nameof(AppSettings.HotkeyCapture), Kind: Kind.Hotkey),
+        ["hotkey.capture"] = new(nameof(AppSettings.HotkeyCapture), Kind: Kind.GlobalHotkey),
         ["hotkey.screenshot"] = new(nameof(AppSettings.HotkeyScreenshotSilent), Kind: Kind.OptionalHotkey),
         ["hotkey.copy"] = new(nameof(AppSettings.HotkeyCopy), Kind: Kind.OptionalHotkey),
         ["hotkey.undo"] = new(nameof(AppSettings.HotkeyUndo), Kind: Kind.OptionalHotkey),
         ["hotkey.redo"] = new(nameof(AppSettings.HotkeyRedo), Kind: Kind.OptionalHotkey),
         ["hotkey.select-all"] = new(nameof(AppSettings.HotkeySelectAll), Kind: Kind.OptionalHotkey),
         ["hotkey.select-monitor"] = new(nameof(AppSettings.HotkeySelectMonitor), Kind: Kind.OptionalHotkey),
-        ["hotkey.record-save"] = new(nameof(AppSettings.HotkeyRecordSilentSave), Kind: Kind.OptionalHotkey),
-        ["hotkey.mic"] = new(nameof(AppSettings.HotkeyMicToggle), Kind: Kind.OptionalHotkey),
+        ["hotkey.record-save"] = new(nameof(AppSettings.HotkeyRecordSilentSave), Kind: Kind.OptionalGlobalHotkey),
+        ["hotkey.mic"] = new(nameof(AppSettings.HotkeyMicToggle), Kind: Kind.OptionalGlobalHotkey),
         ["translation.service"] = new(nameof(AppSettings.TranslateService), ["Bing", "Google", "MyMemory"]),
         ["translation.from"] = new(nameof(AppSettings.TranslateFrom), Kind: Kind.TranslateFrom),
         ["translation.to"] = new(nameof(AppSettings.TranslateTo), Kind: Kind.TranslateTo),
@@ -213,16 +213,24 @@ internal static class CliConfigService
                 }
                 value = System.IO.Path.GetFullPath(expanded);
                 return true;
-            case Kind.Hotkey:
+            case Kind.GlobalHotkey:
+            case Kind.OptionalGlobalHotkey:
             case Kind.OptionalHotkey:
-                if (raw.Length == 0 && entry.Kind == Kind.OptionalHotkey) return true;
-                if (!HotkeyService.IsValidBinding(raw))
+                if (raw.Length == 0 && entry.Kind != Kind.GlobalHotkey) return true;
+                error = HotkeyService.CheckBinding(raw, global: entry.Kind != Kind.OptionalHotkey) switch
                 {
-                    error = $"Invalid hotkey: {raw}. Example: Ctrl+Shift+S, PrintScreen, F9.";
+                    HotkeyProblem.None => null,
+                    HotkeyProblem.Reserved => $"Invalid hotkey: {raw}. Esc and the Windows key can't be used in hotkeys.",
+                    HotkeyProblem.NeedsModifier => $"Invalid hotkey: {raw}. Global hotkeys need Ctrl or Alt, except PrintScreen, Pause, Scroll Lock, F1-F24 and media keys.",
+                    _ => $"Invalid hotkey: {raw}. Example: Ctrl+Shift+S, PrintScreen, F9.",
+                };
+                return error == null;
+            case Kind.Modifier:
+                if (HotkeyService.IsReservedKey(raw))
+                {
+                    error = "Esc and the Windows key can't be used.";
                     return false;
                 }
-                return true;
-            case Kind.Modifier:
                 if (raw is "Alt" or "Ctrl" or "Shift" ||
                     (Enum.TryParse<Windows.System.VirtualKey>(raw, true, out var vk) && vk != Windows.System.VirtualKey.None))
                     return true;

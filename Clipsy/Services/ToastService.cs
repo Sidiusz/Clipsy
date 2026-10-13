@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
 using Clipsy.Views;
 
 namespace Clipsy.Services;
@@ -34,6 +36,9 @@ public static class ToastService
 
     private const int MaxVisibleToasts = 4;
     private const int MaxIncomingToasts = 16;
+    // Persistent toasts wait for the user, so they may hold only some of the slots.
+    private const int MaxPersistentToasts = 2;
+    private const int MaxWaitingToasts = 16;
 
     private sealed record ToastKey(
         ToastCategory Category,
@@ -41,7 +46,7 @@ public static class ToastService
         string Title,
         string Body);
 
-    private sealed record ActiveToast(ToastWindow Window, ToastKey Key);
+    private sealed record ActiveToast(ToastWindow Window, ToastKey Key, bool Persistent);
 
     private static readonly object _incomingGate = new();
     private static readonly Queue<ToastOptions> _incoming = new();
@@ -52,6 +57,8 @@ public static class ToastService
     private static readonly List<ToastWindow> _pool = new();
     private static readonly List<ActiveToast> _active = new();
     private static readonly HashSet<ToastKey> _known = new();
+    // Toasts that found no free slot; shown as slots free up.
+    private static readonly List<(ToastOptions Opts, ToastKey Key)> _waiting = new();
 
     internal static void Prewarm()
     {
@@ -82,6 +89,7 @@ public static class ToastService
         if (opts.Category == ToastCategory.Error      && !s.NotifyErrors)           return;
         if (opts.Category == ToastCategory.Update     && !s.NotifyUpdateAvailable)  return;
         if (opts.Category == ToastCategory.Hint       && !s.NotifyHints)            return;
+        if (IsUnsolicited(opts) && UserIsBusy()) return;
 
         var dq = App.Current?.HostWindow?.DispatcherQueue;
         if (dq == null) return;
@@ -117,6 +125,22 @@ public static class ToastService
         }
     }
 
+    // Not a direct result of something the user just did (update news, hints, offers,
+    // "already running"): these stay hidden over fullscreen games and presentations.
+    private static bool IsUnsolicited(ToastOptions opts) =>
+        opts.Category is ToastCategory.Update or ToastCategory.Hint
+        || (opts.Category == ToastCategory.Prompt && opts.Persistent);
+
+    private static bool UserIsBusy()
+    {
+        try
+        {
+            return SHQueryUserNotificationState(out int state) == 0
+                && state is QUNS_BUSY or QUNS_RUNNING_D3D_FULL_SCREEN or QUNS_PRESENTATION_MODE;
+        }
+        catch { return false; }
+    }
+
     private static ToastKey KeyOf(ToastOptions opts) =>
         new(opts.Category, opts.Level, opts.Title, opts.Body ?? string.Empty);
 
@@ -144,11 +168,36 @@ public static class ToastService
         if (_known.Contains(key))
             return;
 
-        if (_active.Count >= MaxVisibleToasts)
-            return;
-
         _known.Add(key);
+        if (!HasSlotFor(opts))
+        {
+            // Overflow waits for a free slot instead of being dropped.
+            if (_waiting.Count < MaxWaitingToasts) _waiting.Add((opts, key));
+            else _known.Remove(key);
+            return;
+        }
         ShowNow(opts, key);
+    }
+
+    private static bool HasSlotFor(ToastOptions opts)
+        => _active.Count < MaxVisibleToasts
+           && (!opts.Persistent || _active.Count(a => a.Persistent) < MaxPersistentToasts);
+
+    private static void ShowWaiting()
+    {
+        for (int i = 0; i < _waiting.Count && _active.Count < MaxVisibleToasts;)
+        {
+            var (opts, key) = _waiting[i];
+            if (IsUnsolicited(opts) && UserIsBusy())
+            {
+                _waiting.RemoveAt(i);
+                _known.Remove(key);
+                continue;
+            }
+            if (!HasSlotFor(opts)) { i++; continue; }
+            _waiting.RemoveAt(i);
+            ShowNow(opts, key);
+        }
     }
 
     private static void ShowNow(ToastOptions opts, ToastKey key)
@@ -172,7 +221,7 @@ public static class ToastService
         try
         {
             toast.ShowToast(opts, _active.Count);
-            _active.Add(new ActiveToast(toast, key));
+            _active.Add(new ActiveToast(toast, key, opts.Persistent));
         }
         catch (Exception ex)
         {
@@ -197,6 +246,7 @@ public static class ToastService
         }
 
         RepositionAll();
+        ShowWaiting();
     }
 
     internal static void RepositionAll()
@@ -204,4 +254,11 @@ public static class ToastService
         for (int i = 0; i < _active.Count; i++)
             _active[i].Window.PositionAtSlot(i);
     }
+
+    private const int QUNS_BUSY = 2;
+    private const int QUNS_RUNNING_D3D_FULL_SCREEN = 3;
+    private const int QUNS_PRESENTATION_MODE = 4;
+
+    [DllImport("shell32.dll")]
+    private static extern int SHQueryUserNotificationState(out int state);
 }

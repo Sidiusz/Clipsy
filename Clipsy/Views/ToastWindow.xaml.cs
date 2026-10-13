@@ -184,7 +184,7 @@ public sealed partial class ToastWindow : Window
         _action2 = null;
         _persistent = false;
         _dismissSeconds = 0;
-        SetWindowPos(_hwnd, HWND_TOPMOST, -32000, -32000, _w, _h, SWP_NOACTIVATE);
+        SetWindowPos(_hwnd, IntPtr.Zero, -32000, -32000, _w, _h, SWP_NOACTIVATE | SWP_NOZORDER);
         Dismissed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -200,7 +200,8 @@ public sealed partial class ToastWindow : Window
         int fromX = _currentX;
         int fromY = _currentY;
         var startTime = DateTime.UtcNow;
-        const int flags = SWP_NOACTIVATE | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS;
+        // Z-order is set once on show; re-asserting HWND_TOPMOST every frame fights fullscreen apps.
+        const int flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSENDCHANGING | SWP_ASYNCWINDOWPOS;
 
         _renderHandler = (_, _) =>
         {
@@ -209,7 +210,7 @@ public sealed partial class ToastWindow : Window
             double eased = easing(t);
             _currentX = (int)Math.Round(fromX + (toX - fromX) * eased);
             _currentY = (int)Math.Round(fromY + (toY - fromY) * eased);
-            SetWindowPos(_hwnd, HWND_TOPMOST, _currentX, _currentY, _w, _h, flags);
+            SetWindowPos(_hwnd, IntPtr.Zero, _currentX, _currentY, _w, _h, flags);
             if (t >= 1.0)
             {
                 _currentX = toX;

@@ -1222,6 +1222,7 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="160" />
+                                                <ColumnDefinition Width="60" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock x:Name="LblColAction" Grid.Column="0" Text="ACTION" Style="{StaticResource ClipsyLabel}" />
                                             <TextBlock x:Name="LblColBinding" Grid.Column="1" Text="BINDING" Style="{StaticResource ClipsyLabel}"
@@ -1266,6 +1267,7 @@
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*" />
                                                             <ColumnDefinition Width="160" />
+                                                            <ColumnDefinition Width="60" />
                                                         </Grid.ColumnDefinitions>
                                                         <TextBlock Grid.Column="0"
                                                                    Text="{Binding Label}"
@@ -1278,8 +1280,26 @@
                                                                 Click="OnHotkeyRebindClick"
                                                                 Tag="{Binding Key}"
                                                                 VerticalAlignment="Center">
-                                                            <TextBlock Text="{Binding Binding}" />
+                                                            <TextBlock Text="{Binding Display}" />
                                                         </Button>
+                                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4"
+                                                                    VerticalAlignment="Center">
+                                                            <Button Style="{StaticResource ClipsyIconButton}"
+                                                                    Width="28" Height="28"
+                                                                    Click="OnHotkeyDefaultClick"
+                                                                    Tag="{Binding Key}"
+                                                                    ToolTipService.ToolTip="{Binding DefaultTip}">
+                                                                <FontIcon Glyph="&#xE777;" FontSize="13" />
+                                                            </Button>
+                                                            <Button Style="{StaticResource ClipsyIconButton}"
+                                                                    Width="28" Height="28"
+                                                                    Click="OnHotkeyClearClick"
+                                                                    Tag="{Binding Key}"
+                                                                    Visibility="{Binding ClearVisibility}"
+                                                                    ToolTipService.ToolTip="{Binding ClearTip}">
+                                                                <FontIcon Glyph="&#xE711;" FontSize="13" />
+                                                            </Button>
+                                                        </StackPanel>
                                                     </Grid>
                                                     <Border Grid.Row="2" Height="1"
                                                             Visibility="{Binding SeparatorVisibility}"

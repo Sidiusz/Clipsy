@@ -76,8 +76,70 @@ public sealed class SettingsTests : IDisposable
         svc.SettingsChanged += () => raised++;
 
         Assert.True(svc.SaveState());
+        svc.Flush();
         Assert.Equal(0, raised);
         Assert.True(svc.Save());
         Assert.Equal(1, raised);
+    }
+
+    [Fact]
+    public void SaveStateIsWrittenByFlush()
+    {
+        var svc = new SettingsService(_dir);
+        svc.Settings.SkippedVersion = "9.9.9";
+        Assert.True(svc.SaveState());
+        svc.Flush();
+
+        Assert.Equal("9.9.9", new SettingsService(_dir).Settings.SkippedVersion);
+    }
+
+    [Fact]
+    public void DisallowedHotkeysFallBackToDefaults()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "settings.json"),
+            "{\"SettingsVersion\":2,\"HotkeyCapture\":\"A\",\"HotkeyCopy\":\"Escape\",\"HotkeyMicToggle\":\"Win+M\",\"HotkeyRecordSilentSave\":\"F9\",\"HotkeyUndo\":\"\"}");
+
+        var s = new SettingsService(_dir).Settings;
+
+        Assert.Equal("PrintScreen", s.HotkeyCapture);
+        Assert.Equal("Ctrl+C", s.HotkeyCopy);
+        Assert.Equal("", s.HotkeyMicToggle);
+        Assert.Equal("F9", s.HotkeyRecordSilentSave);
+        Assert.Equal("", s.HotkeyUndo);
+    }
+
+    [Fact]
+    public void WronglyTypedFieldDoesNotDiscardTheFile()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "settings.json"),
+            "{\"SettingsVersion\":2,\"JpgQuality\":\"high\",\"ScreenshotFormat\":\"PNG\",\"VideoCodec\":\"h.265\",\"SkippedVersion\":\"1.2.3\"}");
+
+        var s = new SettingsService(_dir).Settings;
+
+        Assert.Equal(90, s.JpgQuality);
+        Assert.Equal("png", s.ScreenshotFormat);
+        Assert.Equal("H.265", s.VideoCodec);
+        Assert.Equal("1.2.3", s.SkippedVersion);
+    }
+
+    [Fact]
+    public void ResetToDefaultsKeepsRuntimeState()
+    {
+        var svc = new SettingsService(_dir);
+        svc.Settings.ScreenshotFormat = "jpg";
+        svc.Settings.SkippedVersion = "2.0.0";
+        svc.Settings.LastScreenshotFolder = @"C:\shots";
+        svc.Settings.OcrEngineOfferShown = true;
+        svc.Settings.TranslationNoticeShown = true;
+
+        Assert.True(svc.ResetToDefaults());
+
+        Assert.Equal("png", svc.Settings.ScreenshotFormat);
+        Assert.Equal("2.0.0", svc.Settings.SkippedVersion);
+        Assert.Equal(@"C:\shots", svc.Settings.LastScreenshotFolder);
+        Assert.True(svc.Settings.OcrEngineOfferShown);
+        Assert.True(svc.Settings.TranslationNoticeShown);
     }
 }

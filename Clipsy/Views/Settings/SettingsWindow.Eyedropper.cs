@@ -1,5 +1,6 @@
 using System;
 using Clipsy.Localization;
+using Clipsy.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -79,6 +80,12 @@ public sealed partial class SettingsWindow
         var binding = NormalizeEyedropperKey(e.Key);
         if (string.IsNullOrEmpty(binding))
         {
+            e.Handled = true;
+            return;
+        }
+        if (HotkeyService.IsReservedKey(binding))
+        {
+            ShowNotification("HkReservedKey", "warning");
             e.Handled = true;
             return;
         }

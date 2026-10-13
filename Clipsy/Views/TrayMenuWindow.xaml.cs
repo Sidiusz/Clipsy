@@ -30,6 +30,8 @@ public sealed partial class TrayMenuWindow : Window
     private bool _hiding;
     private bool _closed;
     private EventHandler<object>? _fadeHandler;
+    // Foreground window before the menu opened, to hand focus back on Esc.
+    private IntPtr _previousForeground;
 
     private static readonly SolidColorBrush s_transparent = new(Colors.Transparent);
 
@@ -54,7 +56,7 @@ public sealed partial class TrayMenuWindow : Window
         Closed += (_, _) => PrepareForShutdown();
         RootGrid.KeyDown += (_, e) =>
         {
-            if (e.Key == Windows.System.VirtualKey.Escape) { HideMenu(); e.Handled = true; }
+            if (e.Key == Windows.System.VirtualKey.Escape) { HideMenu(restoreFocus: true); e.Handled = true; }
         };
         WarmUp();
 
@@ -143,6 +145,8 @@ public sealed partial class TrayMenuWindow : Window
             return;
         }
         Cloak(false); // reveal the already-composed frame — no black swapchain flash
+        var fg = GetForegroundWindow();
+        _previousForeground = fg != _hwnd ? fg : IntPtr.Zero;
         Activate();
         // The tray runs a nested message pump; without an explicit foreground
         // request the window never goes active, so Deactivated never fires.
@@ -158,7 +162,8 @@ public sealed partial class TrayMenuWindow : Window
         {
             Cloak(true);
             _appWindow.MoveAndResize(new RectInt32(-32000, -32000, MenuW, CurrentMenuH));
-            Activate();
+            // Show without activating: activation at startup steals focus at login.
+            _appWindow.Show(false);
         }
         catch (Exception ex) { Diagnostics.Log("TrayMenuWindow.WarmUp", ex); }
     }
@@ -323,7 +328,7 @@ public sealed partial class TrayMenuWindow : Window
             HideMenu();
     }
 
-    private void HideMenu()
+    private void HideMenu(bool restoreFocus = false)
     {
         if (_hiding || _closed) return;
         _hiding = true;
@@ -331,6 +336,12 @@ public sealed partial class TrayMenuWindow : Window
         Cloak(true); // keep the swapchain warm; do not tear it down with Hide()
         foreach (var row in _parts.Keys)
             SetHover(row, false);
+        // A cloaked window keeps keyboard focus: give it back when nothing else takes it
+        // (item clicks open a window that does; deactivation already moved it).
+        if (restoreFocus && GetForegroundWindow() == _hwnd
+            && _previousForeground != IntPtr.Zero && IsWindow(_previousForeground))
+            SetForegroundWindow(_previousForeground);
+        _previousForeground = IntPtr.Zero;
         _hiding = false;
     }
 
@@ -431,6 +442,8 @@ public sealed partial class TrayMenuWindow : Window
     [DllImport("user32.dll")]  private static extern bool  SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
     [DllImport("user32.dll")]  private static extern bool  GetCursorPos(out POINT pt);
     [DllImport("user32.dll")]  private static extern bool  SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")]  private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]  private static extern bool  IsWindow(IntPtr hWnd);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, int dwFlags);
     [DllImport("user32.dll")]  private static extern uint  GetDpiForWindow(IntPtr h);
     [DllImport("user32.dll")]  private static extern IntPtr MonitorFromPoint(POINT pt, uint f);

@@ -54,6 +54,10 @@ public sealed partial class SettingsWindow : Window
     // Autostart lives in the registry, not AppSettings; tracked separately.
     private bool _initialAutostart;
 
+    // The slider range depends on resolution, so a stored bitrate outside it (set via CLI)
+    // is kept until the user actually moves the slider.
+    private bool _bitrateTouched;
+
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _notifyTimer;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _revealFallback;
     private bool _revealed = true;
@@ -481,10 +485,7 @@ public sealed partial class SettingsWindow : Window
         VideoFolderBox.Text = string.IsNullOrEmpty(_draft.VideoFolder)
             ? SettingsService.Instance.DefaultVideoFolder
             : _draft.VideoFolder!;
-        // Mirror displayed defaults back into the draft so the _initial snapshot
-        // matches Collect(), else the folder rows falsely mark dirty after Load().
-        _draft.ScreenshotFolder = ScreenshotFolderBox.Text;
-        _draft.VideoFolder      = VideoFolderBox.Text;
+        MirrorDisplayedFolders();
         RememberFolderSwitch.IsChecked = _draft.RememberLastFolder;
         _initialAutostart = AutostartService.IsEnabled();
         AutostartSwitch.IsChecked = _initialAutostart;
@@ -521,9 +522,12 @@ public sealed partial class SettingsWindow : Window
 
         SelectRadio(_draft.VideoCodec, RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
         SelectSegment(_draft.VideoResolution, ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal);
-        SelectSegment(_draft.VideoFramerate.ToString(), FpsBtn60, FpsBtn15, FpsBtn30, FpsBtnNative);
+        // A framerate with no button (e.g. 24 via CLI) shows none selected and is kept by Collect().
+        foreach (var btn in new[] { FpsBtn15, FpsBtn30, FpsBtn60, FpsBtnNative })
+            btn.IsChecked = string.Equals(btn.Tag as string, _draft.VideoFramerate.ToString(), StringComparison.Ordinal);
         UpdateBitrateBounds(_draft.VideoResolution);
         BitrateSlider.Value = System.Math.Clamp(_draft.VideoBitrateMbps, (int)BitrateSlider.Minimum, (int)BitrateSlider.Maximum);
+        _bitrateTouched = false;
         UpdateBitrateLabel();
 
         MicEnabledSwitch.IsChecked = _draft.MicrophoneEnabled;
@@ -571,6 +575,14 @@ public sealed partial class SettingsWindow : Window
         return tag.Length == 0 ? current : tag;
     }
 
+    // Mirror displayed defaults back into the draft so the _initial snapshot
+    // matches Collect(), else the folder rows falsely mark dirty.
+    private void MirrorDisplayedFolders()
+    {
+        _draft.ScreenshotFolder = ScreenshotFolderBox.Text;
+        _draft.VideoFolder      = VideoFolderBox.Text;
+    }
+
     private static string SelectedComboTag(ComboBox box)
     {
         return (box.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
@@ -612,8 +624,9 @@ public sealed partial class SettingsWindow : Window
 
         _draft.VideoCodec = SelectedRadioTag(RadioCodecH264, RadioCodecH265, RadioCodecVp9, RadioCodecAv1);
         _draft.VideoResolution = SelectedSegmentTag(ResBtn480p, ResBtn720p, ResBtn1080p, ResBtn1440p, ResBtnOriginal);
-        _draft.VideoFramerate = int.TryParse(SelectedSegmentTag(FpsBtn15, FpsBtn30, FpsBtn60, FpsBtnNative), out var vfps) ? vfps : 60;
-        _draft.VideoBitrateMbps = (int)BitrateSlider.Value;
+        foreach (var btn in new[] { FpsBtn15, FpsBtn30, FpsBtn60, FpsBtnNative })
+            if (btn.IsChecked == true && int.TryParse(btn.Tag as string, out var vfps)) _draft.VideoFramerate = vfps;
+        if (_bitrateTouched) _draft.VideoBitrateMbps = (int)BitrateSlider.Value;
 
         _draft.MicrophoneEnabled = MicEnabledSwitch.IsChecked == true;
         if (!_draft.MicrophoneEnabled) _draft.MicrophoneMuted = true;
@@ -1070,7 +1083,9 @@ public sealed partial class SettingsWindow : Window
                 ShowNotification("NotifySaveFailed", "error");
                 return;
             }
-            _draft = merged.Clone();
+            // Same snapshot as Load(): stored values plus the displayed default folders.
+            _draft = SettingsService.Instance.Settings.Clone();
+            MirrorDisplayedFolders();
             bool wantAutostart = AutostartSwitch.IsChecked == true;
             if (wantAutostart != _initialAutostart)
             {
@@ -1126,16 +1141,14 @@ public sealed partial class SettingsWindow : Window
     private async void OnReset(object sender, RoutedEventArgs e)
     {
         if (!await ConfirmReset()) return;
-        // Persist defaults immediately, not just the UI draft.
-        var defaults = new AppSettings();
-        if (!SettingsService.Instance.Replace(defaults))
+        // Persist defaults immediately, not just the UI draft. Runtime state and
+        // autostart (a registry choice, not a preference here) are left as they are.
+        if (!SettingsService.Instance.ResetToDefaults())
         {
             ShowNotification("NotifySaveFailed", "error");
             return;
         }
-        _draft = defaults.Clone();
-        // Autostart lives outside AppSettings; the installer default is on.
-        AutostartService.SetEnabled(true);
+        _draft = SettingsService.Instance.Settings.Clone();
         Load();
         ThemeService.ApplyTo(Content as FrameworkElement);
         ApplyTitleBarColors();

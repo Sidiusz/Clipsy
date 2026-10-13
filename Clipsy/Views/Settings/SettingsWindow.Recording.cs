@@ -183,7 +183,9 @@ public sealed partial class SettingsWindow
     private void OnBitrateChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         UpdateBitrateLabel();
-        if (!_loading) MarkChanged();
+        if (_loading) return;
+        _bitrateTouched = true;
+        MarkChanged();
     }
 
     private void UpdateBitrateLabel()
@@ -222,6 +224,13 @@ public sealed partial class SettingsWindow
         catch (Exception ex)
         {
             Debug.WriteLine($"[Clipsy] PopulateMicDevices failed: {ex.Message}");
+        }
+
+        // An unplugged saved mic stays selected, else saving anything else would reset it to Default.
+        if (toSelect == defaultItem && !string.IsNullOrEmpty(selectedDeviceName))
+        {
+            toSelect = new ComboBoxItem { Content = Strings.Get("OptMicUnavailable"), Tag = selectedDeviceName };
+            MicDeviceBox.Items.Add(toSelect);
         }
 
         MicDeviceBox.SelectedItem = toSelect;
