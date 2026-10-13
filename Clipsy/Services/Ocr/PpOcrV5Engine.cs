@@ -121,16 +121,18 @@ public sealed class PpOcrV5Engine : IOcrEngine
                     }
 
                     IReadOnlyList<Rect> detectorBounds;
+                    RapidOCRSharpOnnx.Inference.PPOCR_Det.DetResult? detected = null;
                     try
                     {
-                        var detected = _detector!.TextDetect(detectorInput).Data;
+                        detected = _detector!.TextDetect(detectorInput).Data;
                         detectorBounds = GetDetectorBounds(
                             detected,
                             detectorScale);
-                        detected?.ImgCropList?.Dispose();
                     }
                     finally
                     {
+                        // Native crop Mats: freed even when post-processing throws.
+                        detected?.ImgCropList?.Dispose();
                         scaledDetectorImage?.Dispose();
                     }
                     ct.ThrowIfCancellationRequested();
@@ -520,20 +522,29 @@ public sealed class PpOcrV5Engine : IOcrEngine
         var crops =
             new DisposableList<RapidOCRSharpOnnx.Inference.PPOCR_Rec.Models.ImageIndex>();
 
-        for (int i = 0; i < bounds.Count; i++)
+        try
         {
-            var cropRect = ToPaddedCropRect(
-                bounds[i],
-                image.Width,
-                image.Height,
-                padFraction);
+            for (int i = 0; i < bounds.Count; i++)
+            {
+                var cropRect = ToPaddedCropRect(
+                    bounds[i],
+                    image.Width,
+                    image.Height,
+                    padFraction);
 
-            using var roi = new OpenCvSharp.Mat(image, cropRect);
-            var crop = roi.Clone();
-            crops.Add(
-                new RapidOCRSharpOnnx.Inference.PPOCR_Rec.Models.ImageIndex(
-                    crop,
-                    i));
+                using var roi = new OpenCvSharp.Mat(image, cropRect);
+                var crop = roi.Clone();
+                crops.Add(
+                    new RapidOCRSharpOnnx.Inference.PPOCR_Rec.Models.ImageIndex(
+                        crop,
+                        i));
+            }
+        }
+        catch
+        {
+            // The caller never gets the partial list, so free its native Mats here.
+            crops.Dispose();
+            throw;
         }
 
         return crops;

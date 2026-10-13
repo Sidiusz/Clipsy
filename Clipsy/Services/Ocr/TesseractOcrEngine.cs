@@ -19,6 +19,10 @@ public sealed class TesseractOcrEngine : IOcrEngine
     private static readonly object Sync = new();
     private static readonly Dictionary<string, Tesseract.TesseractEngine> Engines = new();
 
+    // Each loaded engine holds its model in memory (tens of MB per language): drop them after a while without OCR.
+    private static readonly TimeSpan IdleEviction = TimeSpan.FromMinutes(2);
+    private static readonly Timer EvictTimer = new(_ => Reset(), null, Timeout.Infinite, Timeout.Infinite);
+
     public static void Reset()
     {
         lock (Sync)
@@ -53,6 +57,7 @@ public sealed class TesseractOcrEngine : IOcrEngine
 
             bool scaled = scaleUp > 1.01f;
             Tesseract.Pix pix = scaled ? srcPix.Scale(scaleUp, scaleUp) : srcPix;
+            EvictTimer.Change(Timeout.Infinite, Timeout.Infinite); // re-armed in finally
             try
             {
                 // Best mean-confidence single language: a combined eng+rus pass
@@ -60,11 +65,13 @@ public sealed class TesseractOcrEngine : IOcrEngine
                 List<OcrWord>? best = null;
                 float bestConf = -1f;
                 Exception? lastError = null;
-                lock (Sync)
+                foreach (var lang in langs)
                 {
-                    foreach (var lang in langs)
+                    // A pass can't be interrupted (the wrapper has no cancel hook), so check between
+                    // passes and take the lock per pass: Reset and other runs don't wait for every language.
+                    ct.ThrowIfCancellationRequested();
+                    lock (Sync)
                     {
-                        ct.ThrowIfCancellationRequested();
                         try
                         {
                             var (w, conf) = RunSingle(lang, pix, scaleUp);
@@ -84,6 +91,7 @@ public sealed class TesseractOcrEngine : IOcrEngine
             finally
             {
                 if (scaled) pix.Dispose();
+                EvictTimer.Change(IdleEviction, Timeout.InfiniteTimeSpan);
             }
         }, ct);
     }

@@ -16,7 +16,7 @@ public sealed record TranslationLang(string Code, string En, string Ru);
 public sealed record TranslationResult(string? Text, string? ErrorKey = null);
 
 /// <summary>Translation via Microsoft (Bing web translator), Google (unofficial endpoint) or MyMemory,
-/// falling back to the next service when one fails. Text leaves the machine; the overlay tells the
+/// falling back to the next service when one fails. Text leaves the machine; the overlay asks the
 /// user once before the first request.</summary>
 public static class TranslationService
 {
@@ -112,6 +112,7 @@ public static class TranslationService
             var sb = new StringBuilder();
             foreach (var (chunk, separator) in chunks)
             {
+                ct.ThrowIfCancellationRequested(); // Esc in the overlay: send no further chunks
                 var translated = service switch
                 {
                     Bing => await BingTranslator.TranslateAsync(chunk, from, to, ct),
@@ -141,8 +142,10 @@ public static class TranslationService
 
     private static async Task<TranslationResult> TranslateChunkMyMemoryAsync(string chunk, string from, string to, CancellationToken ct)
     {
-        var url = $"https://api.mymemory.translated.net/get?q={Uri.EscapeDataString(chunk)}&langpair={Uri.EscapeDataString(from)}|{Uri.EscapeDataString(to)}";
-        using var response = await _http.GetAsync(url, ct);
+        // POST like Google: the endpoint takes q from a form body, keeping screen text out of URLs.
+        var url = $"https://api.mymemory.translated.net/get?langpair={Uri.EscapeDataString(from)}|{Uri.EscapeDataString(to)}";
+        using var content = new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("q", chunk) });
+        using var response = await _http.PostAsync(url, content, ct);
         if (response.StatusCode == HttpStatusCode.TooManyRequests) return new TranslationResult(null, "TranslateQuota");
         response.EnsureSuccessStatusCode();
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));

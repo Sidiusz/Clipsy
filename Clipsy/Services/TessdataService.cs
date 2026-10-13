@@ -81,27 +81,28 @@ public static class TessdataService
         var tmp = PathFor(code) + ".tmp";
         try
         {
-            using (var response = await Http.GetAsync(BaseUrl + code + ".traineddata", HttpCompletionOption.ResponseHeadersRead, ct))
+            using (var response = await Http.GetAsync(BaseUrl + code + ".traineddata", HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
             {
                 response.EnsureSuccessStatusCode();
                 long total = response.Content.Headers.ContentLength ?? lang.Bytes;
-                await using var stream = await response.Content.ReadAsStreamAsync(ct);
+                await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
                 await using var file = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 65536, useAsync: true);
                 var buffer = new byte[65536];
                 long downloaded = 0;
                 int read;
-                while ((read = await stream.ReadAsync(buffer, ct)) > 0)
+                while ((read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
                 {
-                    await file.WriteAsync(buffer.AsMemory(0, read), ct);
+                    await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
                     downloaded += read;
                     if (total > 0) progress?.Report((int)Math.Min(99, downloaded * 100 / total));
                 }
             }
 
-            var sha = await GitBlobSha1Async(tmp, ct);
+            var sha = await GitBlobSha1Async(tmp, ct).ConfigureAwait(false);
             if (!string.Equals(sha, lang.GitBlobSha1, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"tessdata '{code}' failed verification (got {sha}).");
 
+            // Off the UI thread (ConfigureAwait above): Reset waits for an OCR run in progress.
             TesseractOcrEngine.Reset();
             File.Move(tmp, PathFor(code), overwrite: true);
             progress?.Report(100);
@@ -111,6 +112,9 @@ public static class TessdataService
             try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
         }
     }
+
+    // Off the UI thread: Reset waits for an OCR run in progress to release its engines.
+    public static Task<bool> DeleteAsync(string code) => Task.Run(() => Delete(code));
 
     /// <summary>Returns false when the file is locked or can't be removed.</summary>
     public static bool Delete(string code)
@@ -137,7 +141,7 @@ public static class TessdataService
         sha.AppendData(Encoding.ASCII.GetBytes($"blob {fs.Length}\0"));
         var buffer = new byte[65536];
         int read;
-        while ((read = await fs.ReadAsync(buffer, ct)) > 0)
+        while ((read = await fs.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
             sha.AppendData(buffer, 0, read);
         return Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant();
     }

@@ -90,12 +90,16 @@ public sealed partial class SettingsWindow
         grid.Children.Add(progress);
         grid.Children.Add(btn);
 
-        btn.Click += (_, _) =>
+        btn.Click += async (_, _) =>
         {
             if (TessdataService.IsInstalled(lang.Code))
             {
-                if (!TessdataService.Delete(lang.Code))
+                btn.IsEnabled = false;
+                bool deleted = await TessdataService.DeleteAsync(lang.Code);
+                if (_windowClosed) return;
+                if (!deleted)
                 {
+                    btn.IsEnabled = true;
                     ShowNotification("ErrDeleteFailed", "error");
                     return;
                 }
@@ -258,6 +262,8 @@ public sealed partial class SettingsWindow
                 var idx = PpOcrModelList.Children.IndexOf(grid);
                 if (idx >= 0)
                     PpOcrModelList.Children[idx] = CreatePpOcrModelRow(model);
+                if (PpOcrV5Service.InstalledRecognizerModels().Count == 0 && _ppOcrDownloadCts.Count == 0)
+                    FallBackToWindowsOcr();
             }
             else
             {
@@ -266,6 +272,28 @@ public sealed partial class SettingsWindow
         };
 
         return grid;
+    }
+
+    // The user removed every model: PP-OCRv5 would fetch them again at the next start, so switch
+    // to Windows OCR and save that right away, like the deletion itself.
+    private void FallBackToWindowsOcr()
+    {
+        const string winRt = "WinRT";
+        bool switched = false;
+        var live = SettingsService.Instance.Settings;
+        if (string.Equals(live.OcrEngine, OcrEngineMigration.PpEngine, StringComparison.OrdinalIgnoreCase))
+        {
+            live.OcrEngine = winRt;
+            SettingsService.Instance.SaveState();
+            _initial.OcrEngine = winRt;
+            switched = true;
+        }
+        if (string.Equals(SelectedComboTag(OcrEngineBox), OcrEngineMigration.PpEngine, StringComparison.OrdinalIgnoreCase))
+        {
+            SelectComboByTag(OcrEngineBox, winRt); // OnOcrEngineChanged updates sections and dirty state
+            switched = true;
+        }
+        if (switched) ShowNotification("PpOcrFallbackWinRt", "info");
     }
 
     private async Task DownloadPpOcrModelAsync(

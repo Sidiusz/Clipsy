@@ -58,17 +58,23 @@ public static class OcrEngineMigration
         var tessCodes = TessdataService.Catalog.Select(c => c.Code).Where(TessdataService.IsInstalled).ToList();
 
         svc.Settings.OcrEngineOfferShown = true;
+        svc.SaveState();
+
+        // Engine, languages and Tesseract data change only once PP-OCRv5 works,
+        // so a failed download leaves the user's engine as it was.
+        if (!await DownloadModelsAsync(keys, notify: true)) return;
         svc.Settings.OcrEngine = PpEngine;
         svc.Settings.TesseractLanguages = string.Empty;
+        // Save (not SaveState) so an open Settings window shows the new engine; the awaits
+        // above resume on the UI thread this started on (the offer toast's button).
         svc.Save();
 
-        bool ok = await DownloadModelsAsync(keys, notify: true);
-        // Tesseract data goes only once PP-OCRv5 works, so a failed download leaves a usable engine behind.
-        if (ok)
+        // Off the UI thread: Reset waits for an OCR run in progress to release its engines.
+        await Task.Run(() =>
         {
             TesseractOcrEngine.Reset(); // cached engines keep the .traineddata files open
             foreach (var code in tessCodes) TessdataService.Delete(code);
-        }
+        });
     }
 
     private static async Task<bool> DownloadModelsAsync(IReadOnlyList<string> keys, bool notify)
@@ -85,7 +91,7 @@ public static class OcrEngineMigration
         }
         catch (Exception ex)
         {
-            Diagnostics.Log("OCR: PP-OCRv5 model download failed; Windows OCR stays in use", ex);
+            Diagnostics.Log("OCR: PP-OCRv5 model download failed; the current engine stays in use", ex);
             if (notify) NotificationService.Prompt(Strings.Get("OcrOfferFailed"), NotificationLevel.Error);
             return false;
         }

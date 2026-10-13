@@ -89,6 +89,10 @@ public sealed partial class CaptureOverlayWindow
         _ocrCts?.Cancel();
         _ocrCts = null;
         _translateRun++;
+        // Esc or a closed overlay stops remaining chunks and fallbacks from being sent.
+        _translateCts?.Cancel();
+        _translateCts = null;
+        _translateConsentFlyout?.Hide();
         StopScanAnimation();
         OcrLayer.Visibility = Visibility.Collapsed;
         ClearOcrVisuals();
@@ -275,6 +279,7 @@ public sealed partial class CaptureOverlayWindow
             ? OcrTextBox.SelectedText
             : OcrTextBox.Text;
         if (string.IsNullOrWhiteSpace(text)) return;
+        int run = _ocrRun;
         try
         {
             await ClipboardService.SetTextAsync(text);
@@ -285,6 +290,8 @@ public sealed partial class CaptureOverlayWindow
             NotificationService.Error("ErrCopyFailed");
             return;
         }
+        // Esc or a new capture meanwhile: the label belongs to the next session now.
+        if (run != _ocrRun || !_inOcrMode) return;
         OcrStatusLabel.Text = Strings.Get("Copied");
         Canvas.SetLeft(OcrStatusLabel, System.Math.Max(8, _selectionRect.Width / 2 - 30));
         Canvas.SetTop(OcrStatusLabel, 8);
@@ -294,6 +301,8 @@ public sealed partial class CaptureOverlayWindow
 
     private string? _lastTranslateSource;
     private int _translateRun;
+    private System.Threading.CancellationTokenSource? _translateCts;
+    private Flyout? _translateConsentFlyout;
 
     private async void OnOcrTranslate(object sender, RoutedEventArgs e)
     {
@@ -307,29 +316,87 @@ public sealed partial class CaptureOverlayWindow
     private async System.Threading.Tasks.Task DoTranslateAsync(string text)
     {
         int run = ++_translateRun;
+        _translateCts?.Cancel();
+        _translateCts = null;
+        var cfg = SettingsService.Instance.Settings;
+
+        // Text leaves the machine only after the user agrees once, here in the overlay:
+        // Cancel or dismissing sends nothing (TranslationConsented records the consent).
+        if (!cfg.TranslationConsented)
+        {
+            if (!await ConfirmTranslationAsync(cfg.TranslateService)) return;
+            cfg.TranslationConsented = true;
+            SettingsService.Instance.SaveState();
+            if (run != _translateRun || !_inOcrMode) return;
+        }
+
         _lastTranslateSource = text;
         TranslateTarget.Text = "...";
         TranslatePanel.Width = OcrTextPanel.ActualWidth;
         TranslatePanel.Visibility = Visibility.Visible;
         UpdateTranslateButtons();
 
-        var cfg = SettingsService.Instance.Settings;
         string from = cfg.TranslateFrom;
         string to   = cfg.TranslateTo == "ui" ? Strings.Lang : cfg.TranslateTo;
 
-        if (!cfg.TranslationNoticeShown)
+        var cts = _translateCts = new System.Threading.CancellationTokenSource();
+        TranslationResult result;
+        try
         {
-            string serviceName = TranslationService.DisplayName(cfg.TranslateService);
-            NotificationService.Post(NotificationLevel.Info, "Clipsy",
-                string.Format(Strings.Get("TranslateNotice"), serviceName), ToastCategory.Hint);
-            cfg.TranslationNoticeShown = true;
-            SettingsService.Instance.SaveState();
+            result = await TranslationService.TranslateAsync(text, from, to, cfg.TranslateService, cts.Token);
         }
-
-        var result = await TranslationService.TranslateAsync(text, from, to, cfg.TranslateService);
+        catch (OperationCanceledException)
+        {
+            return; // Esc, a closed overlay or a newer request
+        }
+        finally
+        {
+            if (ReferenceEquals(_translateCts, cts)) _translateCts = null;
+            cts.Dispose();
+        }
         // A slower earlier request (language switched meanwhile) must not overwrite the newer one.
         if (run != _translateRun || !_inOcrMode) return;
         TranslateTarget.Text = result.Text ?? Strings.Get(result.ErrorKey ?? "TranslateUnavailable");
+    }
+
+    // Names the chosen service and the fallbacks, since any of them may receive the text.
+    private Task<bool> ConfirmTranslationAsync(string service)
+    {
+        var tcs = new TaskCompletionSource<bool>();
+        var names = TranslationService.FallbackOrder(service).Select(TranslationService.DisplayName).ToList();
+        var message = new TextBlock
+        {
+            Text = string.Format(Strings.Get("TranslateNotice"), names[0], string.Join(", ", names.Skip(1))),
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 320,
+        };
+        var accept = new Button
+        {
+            Content = Strings.Get("TipOcrTranslate"),
+            Style = (Style)Application.Current.Resources["ClipsyButtonPrimary"],
+        };
+        var cancel = new Button
+        {
+            Content = Strings.Get("BtnCancel"),
+            Style = (Style)Application.Current.Resources["ClipsyButtonGhost"],
+        };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(accept);
+        var panel = new StackPanel { Spacing = 12 };
+        panel.Children.Add(message);
+        panel.Children.Add(buttons);
+
+        var flyout = _translateConsentFlyout = new Flyout { Content = panel };
+        accept.Click += (_, _) => { tcs.TrySetResult(true); flyout.Hide(); };
+        cancel.Click += (_, _) => flyout.Hide();
+        flyout.Closed += (_, _) =>
+        {
+            tcs.TrySetResult(false);
+            if (ReferenceEquals(_translateConsentFlyout, flyout)) _translateConsentFlyout = null;
+        };
+        flyout.ShowAt(OcrTranslateBtn);
+        return tcs.Task;
     }
 
     private void UpdateTranslateButtons()
@@ -435,12 +502,17 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnOcrExit(object sender, RoutedEventArgs e) => ExitOcrMode();
 
+    private int _ocrStatusSerial;
+
     private async Task FadeOutLaterAsync(UIElement el, int delayMs)
     {
+        // A newer status or another OCR session owns the label by then: leave it alone.
+        int run = _ocrRun;
+        int serial = ++_ocrStatusSerial;
         try
         {
             await Task.Delay(delayMs);
-            el.Visibility = Visibility.Collapsed;
+            if (run == _ocrRun && serial == _ocrStatusSerial) el.Visibility = Visibility.Collapsed;
         }
         catch { /* ignore */ }
     }

@@ -125,6 +125,9 @@ public static class PpOcrV5Service
                 progress,
                 ct);
 
+            // Deleting the last other model meanwhile also removes the detector.
+            await EnsureDetectorAsync(client, progress: null, ct);
+
             progress?.Report(100);
         }
         finally
@@ -147,10 +150,19 @@ public static class PpOcrV5Service
         TryDelete(model.Path);
         TryDelete(model.Path + ".tmp");
 
-        if (!RecognizerModels.Any(m => File.Exists(m.Path)))
+        // Under the detector gate so a download finishing now re-checks after this.
+        DetectorDownloadGate.Wait();
+        try
         {
-            TryDelete(DetectorPath);
-            TryDelete(DetectorPath + ".tmp");
+            if (!RecognizerModels.Any(m => File.Exists(m.Path)))
+            {
+                TryDelete(DetectorPath);
+                TryDelete(DetectorPath + ".tmp");
+            }
+        }
+        finally
+        {
+            DetectorDownloadGate.Release();
         }
 
         CleanupEmptyDirectory();
