@@ -24,7 +24,7 @@ public sealed partial class SettingsWindow
         public Visibility SeparatorVisibility { get; init; } = Visibility.Visible;
         // Global rows are registered system-wide and follow the stricter key rules.
         public bool IsGlobal { get; init; }
-        public Visibility ClearVisibility { get; init; } = Visibility.Collapsed;
+        public bool CanClear { get; init; }
         public string ClearTip { get; init; } = string.Empty;
         public string DefaultTip { get; init; } = string.Empty;
         public string DefaultBinding { get; init; } = string.Empty;
@@ -47,8 +47,11 @@ public sealed partial class SettingsWindow
                 OnChanged();
                 OnChanged(nameof(Display));
                 OnChanged(nameof(DefaultVisibility));
+                OnChanged(nameof(ClearVisibility));
             }
         }
+
+        public Visibility ClearVisibility => CanClear && _binding.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         public string Display => _binding.Length == 0 ? Strings.Get("HkNotSet") : _binding;
 
@@ -128,7 +131,7 @@ public sealed partial class SettingsWindow
                 SeparatorVisibility = lastInGroup ? Visibility.Collapsed : Visibility.Visible,
                 IsGlobal = IsGlobalHotkey(s.Key),
                 // Only the optional recording hotkeys can be left unset.
-                ClearVisibility = s.Key is "record-save" or "mic-toggle" ? Visibility.Visible : Visibility.Collapsed,
+                CanClear = s.Key is "record-save" or "mic-toggle",
                 ClearTip = Strings.Get("HkClear"),
                 DefaultTip = Strings.Get("HkDefault"),
             };
