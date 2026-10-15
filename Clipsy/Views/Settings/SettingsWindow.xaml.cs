@@ -107,7 +107,6 @@ public sealed partial class SettingsWindow : Window
         ["ss-format"] = "capture",
         ["jpg-q"] = "capture",
         ["ss-cursor"] = "capture",
-        ["modern-capture"] = "capture",
         ["dyn-islands"] = "capture",
         ["eyedropper-mod"] = "capture",
         ["eyedropper-copy"] = "capture",
