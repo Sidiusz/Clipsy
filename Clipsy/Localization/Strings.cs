@@ -124,7 +124,7 @@ public static class Strings
         ["LblScreenshotCursor"] = New("Include cursor",            "Включить курсор"),
         ["HelperScreenshotCursor"] = New("Show the mouse pointer in screenshots. Default: off.", "Показывать указатель мыши на скриншотах. По умолчанию: выкл."),
         ["LblModernCapture"]    = New("Modern capture engine",     "Современный движок захвата"),
-        ["HelperModernCapture"] = New("Captures the screen with Windows Graphics Capture: exact colors and no artifacts on video. Default: on.", "Захват экрана через Windows Graphics Capture: точные цвета и никаких артефактов на видео. По умолчанию: вкл."),
+        ["HelperModernCapture"] = New("Capture screenshots with Windows Graphics Capture. Default: on.", "Делать скриншоты через Windows Graphics Capture. По умолчанию: вкл."),
         ["LegacyCaptureWarning"] = New("You're using the legacy screen capture method. Screenshots may contain artifacts and wrong colors.", "Вы используете устаревший метод захвата экрана. На снимках возможны артефакты и неверная цветопередача."),
         ["ConfirmLegacyCaptureTitle"] = New("Turn off the modern capture engine?", "Выключить современный движок захвата?"),
         ["ConfirmLegacyCaptureBody"]  = New("The legacy method (GDI) can corrupt screenshots: speckles and blocks in dark areas of video, wrong colors and other artifacts.", "Устаревший метод (GDI) может портить снимки: пятна и блоки в тёмных участках видео, неверная цветопередача и другие артефакты."),

@@ -590,7 +590,7 @@
                                             <TextBlock x:Name="LblModernCapture" Text="Modern capture engine"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
                                             <TextBlock x:Name="HelperModernCapture"
-                                                       Text="Captures the screen with Windows Graphics Capture: exact colors and no artifacts on video. Default: on."
+                                                       Text="Capture screenshots with Windows Graphics Capture. Default: on."
                                                        Style="{StaticResource ClipsyHelper}" TextWrapping="Wrap" />
                                         </StackPanel>
                                         <ToggleButton x:Name="ModernCaptureSwitch" Grid.Column="1"
