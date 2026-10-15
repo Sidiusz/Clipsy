@@ -50,7 +50,6 @@ public sealed class AppSettings
 
     // Cursor capture
     public bool CaptureScreenshotCursor { get; set; } = false;
-    public bool ExperimentalModernScreenshotCapture { get; set; } = false;
     public bool CaptureVideoCursor { get; set; } = true;
 
     // Capture overlay: dock toolbars to the corner where the selection drag ended

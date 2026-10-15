@@ -116,6 +116,7 @@ public partial class App : Application
         {
             // Touch the freeze service (loads GDI handles, screen-bounds calc).
             _ = Services.ScreenFreezeService.GetVirtualScreenBounds();
+            Services.ModernScreenCaptureService.Warmup();
             // Force-load the overlay window type so its XAML resources are
             // parsed/JITted before the user presses PrintScreen the first time.
             _ = typeof(Views.CaptureOverlayWindow).Assembly;

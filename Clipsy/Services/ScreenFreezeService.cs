@@ -36,9 +36,9 @@ public sealed class ScreenFreezeService
 
     private FrozenFrame CaptureSelectedBackend(bool? includeCursor)
     {
-        var settings = SettingsService.Instance.Settings;
-        bool captureCursor = includeCursor ?? settings.CaptureScreenshotCursor;
-        if (settings.ExperimentalModernScreenshotCapture && ModernScreenCaptureService.IsSupported)
+        bool captureCursor = includeCursor ?? SettingsService.Instance.Settings.CaptureScreenshotCursor;
+        // GDI reads browser video through a lossy YUV path: dark areas come out speckled.
+        if (ModernScreenCaptureService.IsSupported)
         {
             try
             {
@@ -46,7 +46,7 @@ public sealed class ScreenFreezeService
             }
             catch (Exception ex)
             {
-                Diagnostics.Log("Modern screenshot capture failed; using GDI fallback", ex);
+                Diagnostics.Log("WGC screenshot capture failed; using GDI fallback", ex);
             }
         }
         return CaptureCore(captureCursor);

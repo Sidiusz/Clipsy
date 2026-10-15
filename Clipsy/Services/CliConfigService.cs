@@ -26,7 +26,6 @@ internal static class CliConfigService
         ["screenshot.format"] = new(nameof(AppSettings.ScreenshotFormat), ["png", "jpg", "webp"]),
         ["screenshot.jpeg-quality"] = new(nameof(AppSettings.JpgQuality), null, 50, 100),
         ["screenshot.cursor"] = new(nameof(AppSettings.CaptureScreenshotCursor)),
-        ["capture.modern"] = new(nameof(AppSettings.ExperimentalModernScreenshotCapture)),
         ["capture.dynamic-toolbar"] = new(nameof(AppSettings.DynamicToolbarIslands)),
         ["video.format"] = new(nameof(AppSettings.VideoFormat), ["mp4", "avi", "mkv", "gif"]),
         ["video.codec"] = new(nameof(AppSettings.VideoCodec), ["H.264", "H.265", "VP9", "AV1"]),

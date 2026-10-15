@@ -441,8 +441,6 @@ public sealed partial class SettingsWindow : Window
         RememberFolderSwitch.IsChecked   = _draft.RememberLastFolder;
         AutostartSwitch.IsChecked        = _initialAutostart;
         ScreenshotCursorSwitch.IsChecked = _draft.CaptureScreenshotCursor;
-        ModernCaptureSwitch.IsChecked    = _draft.ExperimentalModernScreenshotCapture;
-        ModernCaptureSwitch.IsEnabled    = ModernScreenCaptureService.IsSupported;
         DynamicIslandsSwitch.IsChecked   = _draft.DynamicToolbarIslands;
         EyedropperCopyHexSwitch.IsChecked = _draft.CopyEyedropperHexToClipboard;
         VideoCursorSwitch.IsChecked      = _draft.CaptureVideoCursor;
@@ -492,7 +490,6 @@ public sealed partial class SettingsWindow : Window
 
         SelectComboByTag(ScreenshotFormatBox, _draft.ScreenshotFormat);
         ScreenshotCursorSwitch.IsChecked = _draft.CaptureScreenshotCursor;
-        ModernCaptureSwitch.IsChecked    = _draft.ExperimentalModernScreenshotCapture;
         DynamicIslandsSwitch.IsChecked   = _draft.DynamicToolbarIslands;
         EyedropperCopyHexSwitch.IsChecked = _draft.CopyEyedropperHexToClipboard;
         SelectComboByTag(VideoFormatBox, _draft.VideoFormat);
@@ -602,7 +599,6 @@ public sealed partial class SettingsWindow : Window
         _draft.RememberLastFolder = RememberFolderSwitch.IsChecked == true;
         _draft.ScreenshotFormat = ComboTagOr(ScreenshotFormatBox, _draft.ScreenshotFormat);
         _draft.CaptureScreenshotCursor = ScreenshotCursorSwitch.IsChecked == true;
-        _draft.ExperimentalModernScreenshotCapture = ModernCaptureSwitch.IsChecked == true;
         _draft.DynamicToolbarIslands = DynamicIslandsSwitch.IsChecked == true;
         _draft.VideoFormat = ComboTagOr(VideoFormatBox, _draft.VideoFormat);
         _draft.CaptureVideoCursor = VideoCursorSwitch.IsChecked == true;
@@ -804,7 +800,6 @@ public sealed partial class SettingsWindow : Window
         if ((AutostartSwitch.IsChecked == true) != _initialAutostart) _dirty.Add("autostart");
         if (_draft.ScreenshotFormat != _initial.ScreenshotFormat) _dirty.Add("ss-format");
         if (_draft.CaptureScreenshotCursor != _initial.CaptureScreenshotCursor) _dirty.Add("ss-cursor");
-        if (_draft.ExperimentalModernScreenshotCapture != _initial.ExperimentalModernScreenshotCapture) _dirty.Add("modern-capture");
         if (_draft.DynamicToolbarIslands != _initial.DynamicToolbarIslands) _dirty.Add("dyn-islands");
         if (_draft.VideoFormat != _initial.VideoFormat) _dirty.Add("vid-format");
         if (_draft.CaptureVideoCursor != _initial.CaptureVideoCursor) _dirty.Add("vid-cursor");
@@ -861,7 +856,6 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblAutostart, "LblAutostart", _dirty.Contains("autostart"));
         SetLabel(LblScreenshotFormat, "LblScreenshotFormat", _dirty.Contains("ss-format"));
         SetLabel(LblScreenshotCursor, "LblScreenshotCursor", _dirty.Contains("ss-cursor"));
-        SetLabel(LblModernCapture, "LblModernCapture", _dirty.Contains("modern-capture"));
         SetLabel(LblDynamicIslands, "LblDynamicIslands", _dirty.Contains("dyn-islands"));
         SetLabel(LblEyedropperMod, "LblEyedropperMod", _dirty.Contains("eyedropper-mod"));
         SetLabel(LblEyedropperCopyHex, "LblEyedropperCopyHex", _dirty.Contains("eyedropper-copy"));

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -16,6 +17,7 @@ internal static class ModernScreenCaptureService
 {
     private static readonly Guid GraphicsCaptureItemGuid = new("79C3F95B-31F7-4EC2-A464-632EF5D30760");
     private static readonly Guid CaptureInteropGuid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
+    private static readonly Guid CaptureSession3Guid = new("F2CDD966-22AE-5EA1-9596-3A289344C3BE");
     private static readonly Guid IdxgiDeviceGuid = new("54EC77FA-1377-44E6-8C32-88FD5F44C84C");
 
     private sealed record MonitorTarget(IntPtr Handle, ScreenFreezeService.MonitorInfo Info);
@@ -25,6 +27,15 @@ internal static class ModernScreenCaptureService
 
     // Device creation costs tens of ms; captures run on one worker thread, so keep it.
     private static IDirect3DDevice? _device;
+    private static readonly object _deviceLock = new();
+
+    /// <summary>Pays device creation and JIT at startup so the first PrintScreen isn't slow.</summary>
+    public static void Warmup()
+    {
+        if (!IsSupported) return;
+        try { Capture(includeCursor: false); }
+        catch (Exception ex) { Diagnostics.Log("WGC warmup failed", ex); }
+    }
 
     public static ScreenFreezeService.FrozenFrame Capture(bool includeCursor)
     {
@@ -43,24 +54,27 @@ internal static class ModernScreenCaptureService
         if (bounds.Width <= 0 || bounds.Height <= 0 || targets.Count == 0)
             throw new InvalidOperationException("No monitors are available for capture.");
 
-        var device = _device ??= CreateDirect3DDevice();
+        IDirect3DDevice device;
+        lock (_deviceLock) device = _device ??= CreateDirect3DDevice();
         int stride = checked(bounds.Width * 4);
         var pixels = new byte[checked(stride * bounds.Height)];
         var monitors = new List<ScreenFreezeService.MonitorInfo>(targets.Count);
 
         try
         {
-            foreach (var target in targets)
+            // In parallel: each monitor waits up to a frame for its first capture.
+            var captures = await Task.WhenAll(targets.Select(t => CaptureMonitorAsync(device, t.Handle, includeCursor)));
+            for (int i = 0; i < targets.Count; i++)
             {
-                var captured = await CaptureMonitorAsync(device, target.Handle, includeCursor);
-                CopyMonitor(captured, pixels, stride, bounds, target.Info.Bounds);
-                monitors.Add(target.Info);
+                CopyMonitor(captures[i], pixels, stride, bounds, targets[i].Info.Bounds);
+                monitors.Add(targets[i].Info);
             }
         }
         catch
         {
             // Device may be lost (driver reset); rebuild on the next capture.
-            _device = null;
+            lock (_deviceLock)
+                if (ReferenceEquals(_device, device)) _device = null;
             device.Dispose();
             throw;
         }
@@ -86,6 +100,8 @@ internal static class ModernScreenCaptureService
         using var session = pool.CreateCaptureSession(item);
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
             try { session.IsCursorCaptureEnabled = includeCursor; } catch { }
+        // Otherwise Windows 11 flashes a yellow capture border around the screen.
+        DisableBorder(session);
 
         var tcs = new TaskCompletionSource<Direct3D11CaptureFrame>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -109,6 +125,24 @@ internal static class ModernScreenCaptureService
             return CopySoftwareBitmap(bitmap);
         }
         finally { pool.FrameArrived -= handler; }
+    }
+
+    // IGraphicsCaptureSession3 isn't in the 19041 projection; unpackaged apps may set it without an access request.
+    private static unsafe void DisableBorder(GraphicsCaptureSession session)
+    {
+        var iid = CaptureSession3Guid;
+        IntPtr unk = MarshalInspectable<GraphicsCaptureSession>.FromManaged(session);
+        try
+        {
+            if (Marshal.QueryInterface(unk, ref iid, out var session3) < 0) return;
+            try
+            {
+                var put = (delegate* unmanaged[Stdcall]<IntPtr, byte, int>)(*(IntPtr**)session3)[7];
+                put(session3, 0);
+            }
+            finally { Marshal.Release(session3); }
+        }
+        finally { Marshal.Release(unk); }
     }
 
     private static CapturedMonitor CopySoftwareBitmap(SoftwareBitmap source)
