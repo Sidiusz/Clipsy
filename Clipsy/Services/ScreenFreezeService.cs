@@ -36,9 +36,10 @@ public sealed class ScreenFreezeService
 
     private FrozenFrame CaptureSelectedBackend(bool? includeCursor)
     {
-        bool captureCursor = includeCursor ?? SettingsService.Instance.Settings.CaptureScreenshotCursor;
+        var settings = SettingsService.Instance.Settings;
+        bool captureCursor = includeCursor ?? settings.CaptureScreenshotCursor;
         // GDI reads browser video through a lossy YUV path: dark areas come out speckled.
-        if (ModernScreenCaptureService.IsSupported)
+        if (settings.ModernScreenshotCapture && ModernScreenCaptureService.IsSupported)
         {
             try
             {

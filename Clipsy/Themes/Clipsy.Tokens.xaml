@@ -50,6 +50,7 @@
             <Color x:Key="ClipsyDangerHover">#FFD43539</Color>
             <Color x:Key="ClipsyDangerDim">#28F23F42</Color>
             <Color x:Key="ClipsySuccess">#FF23A55A</Color>
+            <Color x:Key="ClipsySuccessHover">#FF1F9150</Color>
             <Color x:Key="ClipsyWarning">#FFF0B232</Color>
 
             <!-- Selection on capture overlay (alpha for cut-outs) -->
@@ -86,6 +87,7 @@
             <SolidColorBrush x:Key="ClipsyDangerHoverBrush"    Color="{StaticResource ClipsyDangerHover}" />
             <SolidColorBrush x:Key="ClipsyDangerDimBrush"      Color="{StaticResource ClipsyDangerDim}" />
             <SolidColorBrush x:Key="ClipsySuccessBrush"        Color="{StaticResource ClipsySuccess}" />
+            <SolidColorBrush x:Key="ClipsySuccessHoverBrush"   Color="{StaticResource ClipsySuccessHover}" />
             <SolidColorBrush x:Key="ClipsyWarningBrush"        Color="{StaticResource ClipsyWarning}" />
             <SolidColorBrush x:Key="ClipsyWarningDimBrush"     Color="#28F0B232" />
 
@@ -184,6 +186,7 @@
             <Color x:Key="ClipsyDangerHover">#FFBC3134</Color>
             <Color x:Key="ClipsyDangerDim">#28F23F42</Color>
             <Color x:Key="ClipsySuccess">#FF1D8E4E</Color>
+            <Color x:Key="ClipsySuccessHover">#FF187A43</Color>
             <Color x:Key="ClipsyWarning">#FFCC8F12</Color>
 
             <!-- Capture overlay stays dark regardless of theme; same values -->
@@ -219,6 +222,7 @@
             <SolidColorBrush x:Key="ClipsyDangerHoverBrush"    Color="{StaticResource ClipsyDangerHover}" />
             <SolidColorBrush x:Key="ClipsyDangerDimBrush"      Color="{StaticResource ClipsyDangerDim}" />
             <SolidColorBrush x:Key="ClipsySuccessBrush"        Color="{StaticResource ClipsySuccess}" />
+            <SolidColorBrush x:Key="ClipsySuccessHoverBrush"   Color="{StaticResource ClipsySuccessHover}" />
             <SolidColorBrush x:Key="ClipsyWarningBrush"        Color="{StaticResource ClipsyWarning}" />
             <SolidColorBrush x:Key="ClipsyWarningDimBrush"     Color="#28F0B232" />
 

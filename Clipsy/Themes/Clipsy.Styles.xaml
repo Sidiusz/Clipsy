@@ -37,6 +37,7 @@
          ClipsyButtonPrimary   : accent CTA
          ClipsyButtonGhost     : transparent with subtle border
          ClipsyButtonDanger    : danger CTA (stop, delete)
+         ClipsyButtonSuccess   : safe CTA (keep, confirm)
     -->
     <Style x:Key="ClipsyButton" TargetType="Button">
         <Setter Property="Background" Value="{ThemeResource ClipsyBg3Brush}" />
@@ -204,6 +205,37 @@
                                 <VisualState x:Name="PointerOver">
                                     <VisualState.Setters>
                                         <Setter Target="RootGrid.Background" Value="{ThemeResource ClipsyDangerHoverBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ClipsyButtonSuccess" TargetType="Button" BasedOn="{StaticResource ClipsyButtonPrimary}">
+        <Setter Property="Background" Value="{ThemeResource ClipsySuccessBrush}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="RootGrid"
+                          Background="{TemplateBinding Background}"
+                          CornerRadius="{TemplateBinding CornerRadius}">
+                        <ContentPresenter
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Padding="{TemplateBinding Padding}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="RootGrid.Background" Value="{ThemeResource ClipsySuccessHoverBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>

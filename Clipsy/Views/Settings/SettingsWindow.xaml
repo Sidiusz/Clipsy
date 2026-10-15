@@ -580,6 +580,41 @@
                                                       Click="OnAnyToggleChanged"
                                                       VerticalAlignment="Center" />
                                     </Grid>
+                                    <Border Style="{StaticResource ClipsyHairline}" />
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LblModernCapture" Text="Modern capture engine"
+                                                       Style="{StaticResource ClipsyBodyStrong}" />
+                                            <TextBlock x:Name="HelperModernCapture"
+                                                       Text="Captures the screen with Windows Graphics Capture: exact colors and no artifacts on video. Default: on."
+                                                       Style="{StaticResource ClipsyHelper}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <ToggleButton x:Name="ModernCaptureSwitch" Grid.Column="1"
+                                                      Style="{StaticResource ClipsyMiniToggle}"
+                                                      Click="OnModernCaptureToggled"
+                                                      VerticalAlignment="Center" />
+                                    </Grid>
+                                    <Border x:Name="LegacyCaptureWarning" Visibility="Collapsed"
+                                            Background="{ThemeResource ClipsyWarningDimBrush}"
+                                            BorderBrush="{ThemeResource ClipsyWarningBrush}" BorderThickness="1"
+                                            CornerRadius="6" Padding="12,10">
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <FontIcon Glyph="&#xE7BA;" FontSize="16" VerticalAlignment="Top"
+                                                      Foreground="{ThemeResource ClipsyWarningBrush}" />
+                                            <TextBlock x:Name="LegacyCaptureWarningText" Grid.Column="1"
+                                                       Text="You're using the legacy screen capture method. Screenshots may contain artifacts and wrong colors."
+                                                       Style="{StaticResource ClipsyHelper}" TextWrapping="Wrap"
+                                                       Foreground="{ThemeResource ClipsyTextBrush}" />
+                                        </Grid>
+                                    </Border>
                                 </StackPanel>
                             </Border>
 
