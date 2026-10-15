@@ -4,6 +4,12 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.0.9
+
+Screenshots through Windows Graphics Capture by default, which removes blocks in dark areas of video,
+with a confirmation and a warning when switching to the legacy capture method.
+See [1.0.9.md](.github/release-notes/1.0.9.md).
+
 ## 1.0.8
 
 A responsive capture overlay under heavy load, stricter hotkey rules with reset and clear buttons,
