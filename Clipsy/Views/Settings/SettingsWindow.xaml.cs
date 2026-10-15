@@ -790,7 +790,8 @@ public sealed partial class SettingsWindow : Window
             CloseButtonText = Strings.Get("BtnKeepOn"),
             PrimaryButtonStyle = (Style)Application.Current.Resources["ClipsyButtonDanger"],
             CloseButtonStyle = (Style)Application.Current.Resources["ClipsyButtonSuccess"],
-            DefaultButton = ContentDialogButton.Close,
+            // A default button gets the accent style, which would override the green one.
+            DefaultButton = ContentDialogButton.None,
             XamlRoot = Content.XamlRoot,
         };
         return await dlg.ShowAsync() == ContentDialogResult.Primary;
