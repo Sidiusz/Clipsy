@@ -21,7 +21,10 @@ public static class NotificationService
         Action? action2             = null,
         bool    action2IsPrimary    = false,
         bool    persistent          = false,
-        int     dismissSeconds      = 0)
+        int     dismissSeconds      = 0,
+        string? action3Icon         = null,
+        string? action3Tooltip      = null,
+        Action? action3             = null)
     {
         int duration = dismissSeconds > 0
             ? Math.Clamp(dismissSeconds, 1, 30)
@@ -40,6 +43,9 @@ public static class NotificationService
             Action2Tooltip  = action2Tooltip,
             Action2Callback = action2,
             Action2IsPrimary = action2IsPrimary,
+            Action3Icon     = action3Icon,
+            Action3Tooltip  = action3Tooltip,
+            Action3Callback = action3,
             Persistent      = persistent,
             DismissSeconds  = duration,
         });
@@ -90,6 +96,9 @@ public static class NotificationService
             Strings.Get("ToastScreenshotSaved"),
             $"{fileName} · {FormatSize(sizeKb)}",
             ToastCategory.Screenshot,
+            action3Icon:    CopyGlyph,
+            action3Tooltip: Strings.Get("ToastCopyToClipboard"),
+            action3:        () => CopyInBackground(() => ClipboardService.SetImageFile(filePath)),
             action1Icon:    "\xE8E5",
             action1Tooltip: Strings.Get("ToastOpenFile"),
             action1:        () => OpenFile(filePath),
@@ -161,6 +170,24 @@ public static class NotificationService
     }
 
     // ── Clipboard ────────────────────────────────────────────────
+
+    private const string CopyGlyph = "\xE8C8";
+
+    // Decoding a large screenshot and waiting out a busy clipboard must not block the UI thread.
+    private static void CopyInBackground(Action copy)
+        => System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                copy();
+                CopiedToClipboard();
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log("Copy from notification failed", ex);
+                Error("ErrCopyFailed");
+            }
+        });
 
     public static void CopiedToClipboard()
         => Post(NotificationLevel.Info, Strings.Get("ToastCopied"), null, ToastCategory.Clipboard);

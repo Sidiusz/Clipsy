@@ -53,6 +53,11 @@
                                 Spacing="4"
                                 VerticalAlignment="Center"
                                 Margin="8,0,0,0">
+                        <Button x:Name="Action3Btn"
+                                Style="{StaticResource ClipsyButtonGhost}"
+                                Width="28" Height="28" Padding="0"
+                                Visibility="Collapsed"
+                                Click="OnAction3Click" />
                         <Button x:Name="Action1Btn"
                                 Style="{StaticResource ClipsyButtonGhost}"
                                 Width="28" Height="28" Padding="0"

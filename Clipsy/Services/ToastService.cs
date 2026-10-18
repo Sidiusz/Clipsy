@@ -24,6 +24,10 @@ public static class ToastService
         public string? Action2Tooltip  { get; init; }
         public Action? Action2Callback { get; init; }
         public bool    Action2IsPrimary { get; init; }
+        // Shown left of Action1.
+        public string? Action3Icon     { get; init; }
+        public string? Action3Tooltip  { get; init; }
+        public Action? Action3Callback { get; init; }
         // Labelled buttons under the text instead of icons, for choices that need words.
         public string? Action1Text     { get; init; }
         public string? Action2Text     { get; init; }

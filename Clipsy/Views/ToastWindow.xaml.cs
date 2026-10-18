@@ -33,6 +33,7 @@ public sealed partial class ToastWindow : Window
     private readonly AppWindow _appWindow;
     private Action? _action1;
     private Action? _action2;
+    private Action? _action3;
     private bool _persistent;
     private int _dismissSeconds;
     private DispatcherTimer? _dismissTimer;
@@ -87,6 +88,7 @@ public sealed partial class ToastWindow : Window
 
         _action1 = opts.Action1Callback;
         _action2 = opts.Action2Callback;
+        _action3 = opts.Action3Callback;
         _persistent = opts.Persistent;
         _dismissSeconds = opts.DismissSeconds;
         _isHovered = false;
@@ -182,6 +184,7 @@ public sealed partial class ToastWindow : Window
         _isFadingOut = false;
         _action1 = null;
         _action2 = null;
+        _action3 = null;
         _persistent = false;
         _dismissSeconds = 0;
         SetWindowPos(_hwnd, IntPtr.Zero, -32000, -32000, _w, _h, SWP_NOACTIVATE | SWP_NOZORDER);
@@ -289,6 +292,7 @@ public sealed partial class ToastWindow : Window
         BodyText.Visibility = Visibility.Collapsed;
         ResetActionButton(Action1Btn);
         ResetActionButton(Action2Btn);
+        ResetActionButton(Action3Btn);
 
         Color accent = opts.Category switch
         {
@@ -316,6 +320,7 @@ public sealed partial class ToastWindow : Window
 
         SetupActionButton(Action1Btn, opts.Action1Icon, opts.Action1Tooltip, isPrimary: false);
         SetupActionButton(Action2Btn, opts.Action2Icon, opts.Action2Tooltip, isPrimary: opts.Action2IsPrimary);
+        SetupActionButton(Action3Btn, opts.Action3Icon, opts.Action3Tooltip, isPrimary: false);
 
         bool textActions = !string.IsNullOrEmpty(opts.Action1Text) || !string.IsNullOrEmpty(opts.Action2Text);
         TextActions.Visibility = textActions ? Visibility.Visible : Visibility.Collapsed;
@@ -374,6 +379,12 @@ public sealed partial class ToastWindow : Window
     {
         BeginFadeOut();
         try { _action2?.Invoke(); } catch (Exception ex) { Diagnostics.Log("ToastWindow.Action2", ex); }
+    }
+
+    private void OnAction3Click(object sender, RoutedEventArgs e)
+    {
+        BeginFadeOut();
+        try { _action3?.Invoke(); } catch (Exception ex) { Diagnostics.Log("ToastWindow.Action3", ex); }
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => BeginFadeOut();

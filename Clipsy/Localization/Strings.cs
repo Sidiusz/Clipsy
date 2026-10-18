@@ -412,6 +412,7 @@ public static class Strings
         ["ToastScreenshotSaved"]    = New("Screenshot saved",                              "Скриншот сохранён"),
         ["ToastVideoSaved"]         = New("Recording saved",                               "Запись сохранена"),
         ["ToastCopied"]             = New("Copied to clipboard",                           "Скопировано в буфер обмена"),
+        ["ToastCopyToClipboard"]    = New("Copy to clipboard",                             "Скопировать в буфер обмена"),
         ["ToastOpenFile"]           = New("Open file",                                     "Открыть файл"),
         ["ToastOpenFolder"]         = New("Open folder",                                   "Открыть папку"),
         ["ToastDownload"]           = New("Download update",                               "Скачать обновление"),

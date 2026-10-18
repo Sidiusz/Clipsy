@@ -35,4 +35,17 @@ public class ClipboardTests
         Assert.Equal(0, dib[40 + w * 4 + 1]);
         Assert.Equal(2, dib[40 + 2 * 4]);
     }
+
+    [Fact]
+    public void DropFiles_is_wide_and_double_null_terminated()
+    {
+        var path = System.IO.Path.GetFullPath(@"C:\shots\Clipsy 1.png");
+        var data = ClipboardService.BuildDropFiles(path);
+
+        Assert.Equal(20, BinaryPrimitives.ReadInt32LittleEndian(data));
+        Assert.Equal(1, BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(16)));
+        Assert.Equal(path, System.Text.Encoding.Unicode.GetString(data, 20, path.Length * 2));
+        Assert.Equal(20 + (path.Length + 2) * 2, data.Length);
+        Assert.All(data[^4..], b => Assert.Equal(0, b));
+    }
 }
