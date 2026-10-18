@@ -21,6 +21,7 @@ public sealed class HotkeyService : IDisposable
     private const int HOTKEY_CAPTURE  = 0xC1170;
     private const int HOTKEY_RECORD   = 0xC1171;
     private const int HOTKEY_MIC      = 0xC1172;
+    private const int HOTKEY_QUICK_FIRST = 0xC1180;
     private const int HWND_MESSAGE    = -3;
 
     private readonly DispatcherQueue _dispatcher;
@@ -51,6 +52,15 @@ public sealed class HotkeyService : IDisposable
     private bool _recordViaLL;
     private bool _micViaLL;
     private uint _heldVk;
+
+    // Always-on shortcuts that act without the overlay (quick screenshot, quick recordings).
+    private sealed class QuickKey
+    {
+        public uint Vk, Mods;
+        public Action? Callback;
+        public bool ViaLL;
+    }
+    private QuickKey[] _quick = Array.Empty<QuickKey>();
 
     // Record-save/mic-toggle only act during a recording; registering them all the
     // time would take those keys away from every other app.
@@ -102,6 +112,20 @@ public sealed class HotkeyService : IDisposable
         ParseGlobalBinding(recordBinding,  out _recordVk,  out _recordMods);
         ParseGlobalBinding(micBinding,     out _micVk,     out _micMods);
         // Posted to the window, not the thread: thread messages never reach WndProc.
+        if (_hwnd != IntPtr.Zero)
+            PostMessageW(_hwnd, WM_USER_REREG, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    /// <summary>Replaces the always-on quick hotkeys; an empty binding leaves that one unregistered.</summary>
+    public void SetQuickHotkeys(params (string? Binding, Action Callback)[] keys)
+    {
+        var next = new QuickKey[keys.Length];
+        for (int i = 0; i < keys.Length; i++)
+        {
+            ParseGlobalBinding(keys[i].Binding, out uint vk, out uint mods);
+            next[i] = new QuickKey { Vk = vk, Mods = mods, Callback = keys[i].Callback };
+        }
+        _quick = next;
         if (_hwnd != IntPtr.Zero)
             PostMessageW(_hwnd, WM_USER_REREG, IntPtr.Zero, IntPtr.Zero);
     }
@@ -168,6 +192,7 @@ public sealed class HotkeyService : IDisposable
                     UnregisterHotKey(_hwnd, HOTKEY_CAPTURE);
                     UnregisterHotKey(_hwnd, HOTKEY_RECORD);
                     UnregisterHotKey(_hwnd, HOTKEY_MIC);
+                    for (int i = 0; i < _quick.Length; i++) UnregisterHotKey(_hwnd, HOTKEY_QUICK_FIRST + i);
                     DestroyWindow(_hwnd);
                     _hwnd = IntPtr.Zero;
                 }
@@ -193,10 +218,29 @@ public sealed class HotkeyService : IDisposable
             captureHotkey = RegisterHotKey(_hwnd, HOTKEY_CAPTURE, _captureMods | MOD_NOREPEAT, _captureVk);
         }
 
+        RegisterQuickHotkeys();
         RegisterRecordingHotkeys();
 
         if (_captureVk != 0)
             IsCaptureRegistered = _llHook != IntPtr.Zero || captureHotkey;
+    }
+
+    private void RegisterQuickHotkeys()
+    {
+        // Unregister the whole id range: the table may have shrunk since the last call.
+        for (int i = 0; i < 8; i++) UnregisterHotKey(_hwnd, HOTKEY_QUICK_FIRST + i);
+        var quick = _quick;
+        for (int i = 0; i < quick.Length; i++)
+        {
+            var q = quick[i];
+            q.ViaLL = false;
+            if (q.Vk == 0 || q.Callback == null) continue;
+            if (!RegisterHotKey(_hwnd, HOTKEY_QUICK_FIRST + i, q.Mods | MOD_NOREPEAT, q.Vk))
+            {
+                Diagnostics.Log($"RegisterHotKey(quick {i}) failed err=0x{Marshal.GetLastWin32Error():X}; using LL hook");
+                q.ViaLL = true;
+            }
+        }
     }
 
     private void RegisterRecordingHotkeys()
@@ -226,7 +270,7 @@ public sealed class HotkeyService : IDisposable
 
     private void SyncLowLevelHook()
     {
-        bool need = _captureViaLL || _recordViaLL || _micViaLL;
+        bool need = _captureViaLL || _recordViaLL || _micViaLL || Array.Exists(_quick, q => q.ViaLL);
         if (need && _llHook == IntPtr.Zero)
         {
             _llProc = LowLevelKbProc;
@@ -280,6 +324,7 @@ public sealed class HotkeyService : IDisposable
         if (_captureViaLL && vk == _captureVk && mods == _captureMods) { cb = _captureCallback; onUi = false; }
         else if (_recordViaLL && vk == _recordVk && mods == _recordMods) cb = _recordCallback;
         else if (_micViaLL && vk == _micVk && mods == _micMods) cb = _micCallback;
+        else if (Array.Find(_quick, q => q.ViaLL && q.Vk == vk && q.Mods == mods) is { } quick) cb = quick.Callback;
         else return false;
 
         // Auto-repeat while held must not retrigger.
@@ -320,6 +365,11 @@ public sealed class HotkeyService : IDisposable
                 else if (id == HOTKEY_MIC)
                 {
                     var cb = _micCallback;
+                    if (cb != null) _dispatcher.TryEnqueue(() => cb());
+                }
+                else if (id - HOTKEY_QUICK_FIRST is var qi && qi >= 0 && qi < _quick.Length)
+                {
+                    var cb = _quick[qi].Callback;
                     if (cb != null) _dispatcher.TryEnqueue(() => cb());
                 }
                 return IntPtr.Zero;

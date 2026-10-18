@@ -129,6 +129,20 @@ public sealed class ScreenFreezeService
         return list;
     }
 
+    public static MonitorInfo? MonitorUnderCursor(IReadOnlyList<MonitorInfo> monitors)
+    {
+        if (monitors.Count == 0) return null;
+        if (GetCursorPos(out var p))
+            foreach (var m in monitors)
+                if (m.Bounds.Contains(p.X, p.Y)) return m;
+        foreach (var m in monitors)
+            if (m.IsPrimary) return m;
+        return monitors[0];
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out CURSORPOINT point);
+
     private const int SM_XVIRTUALSCREEN = 76;
     private const int SM_YVIRTUALSCREEN = 77;
     private const int SM_CXVIRTUALSCREEN = 78;

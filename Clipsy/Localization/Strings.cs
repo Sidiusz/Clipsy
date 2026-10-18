@@ -372,6 +372,7 @@ public static class Strings
         ["HkGroupScreenshot"]     = New("Screenshot", "Снимок экрана"),
         ["HkGroupVideo"]          = New("Screen recording", "Запись экрана"),
         ["HkOpenCapture"]         = New("Open screen capture", "Открыть захват экрана"),
+        ["HkQuickScreenshot"]     = New("Instant screenshot of the screen under the cursor", "Мгновенный скриншот экрана под курсором"),
         ["HkSaveSilent"]          = New("Quick-save screenshot",                           "Быстрое сохранение"),
         ["HkCopy"]                = New("Copy to clipboard",                               "Скопировать в буфер обмена"),
         ["HkUndo"]                = New("Undo action",                                     "Отменить действие"),

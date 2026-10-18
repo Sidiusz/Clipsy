@@ -77,6 +77,7 @@ public sealed partial class SettingsWindow
             case "select-monitor": _draft.HotkeySelectMonitor = binding; break;
             case "record-save": _draft.HotkeyRecordSilentSave = binding; break;
             case "mic-toggle":  _draft.HotkeyMicToggle = binding; break;
+            case "quick-screenshot": _draft.HotkeyQuickScreenshot = binding; break;
         }
     }
 
@@ -91,11 +92,12 @@ public sealed partial class SettingsWindow
         "select-monitor" => s.HotkeySelectMonitor,
         "record-save" => s.HotkeyRecordSilentSave,
         "mic-toggle" => s.HotkeyMicToggle,
+        "quick-screenshot" => s.HotkeyQuickScreenshot,
         _ => string.Empty,
     };
 
     // Registered system-wide (the rest only work inside the capture overlay).
-    private static bool IsGlobalHotkey(string key) => key is "capture" or "record-save" or "mic-toggle";
+    private static bool IsGlobalHotkey(string key) => key is "capture" or "record-save" or "mic-toggle" or "quick-screenshot";
 
     private void BuildHotkeyRows()
     {
@@ -105,6 +107,7 @@ public sealed partial class SettingsWindow
         var specs = new (string Key, string LabelKey, string Binding, string? GroupKey)[]
         {
             ("capture", "HkOpenCapture", _draft.HotkeyCapture, "HkGroupGeneral"),
+            ("quick-screenshot", "HkQuickScreenshot", _draft.HotkeyQuickScreenshot, null),
             ("undo", "HkUndo", _draft.HotkeyUndo, "HkGroupEditing"),
             ("redo", "HkRedo", _draft.HotkeyRedo, null),
             ("save-silent", "HkSaveSilent", _draft.HotkeyScreenshotSilent, "HkGroupScreenshot"),
@@ -130,8 +133,7 @@ public sealed partial class SettingsWindow
                 GroupBorder = i == 0 ? new Thickness(0, 0, 0, 1) : new Thickness(0, 1, 0, 1),
                 SeparatorVisibility = lastInGroup ? Visibility.Collapsed : Visibility.Visible,
                 IsGlobal = IsGlobalHotkey(s.Key),
-                // Only the optional recording hotkeys can be left unset.
-                CanClear = s.Key is "record-save" or "mic-toggle",
+                CanClear = s.Key is "record-save" or "mic-toggle" or "quick-screenshot",
                 ClearTip = Strings.Get("HkClear"),
                 DefaultTip = Strings.Get("HkDefault"),
             };

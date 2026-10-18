@@ -271,6 +271,7 @@ public partial class App : Application
         string capture = string.IsNullOrWhiteSpace(s.HotkeyCapture) ? "Snapshot" : s.HotkeyCapture;
         string? record = string.IsNullOrWhiteSpace(s.HotkeyRecordSilentSave) ? null : s.HotkeyRecordSilentSave;
         string? mic    = string.IsNullOrWhiteSpace(s.HotkeyMicToggle) ? null : s.HotkeyMicToggle;
+        SetQuickHotkeys(s);
         bool ok = Hotkey!.Register(OnCaptureHotkeyRequested, capture, OnRecordStopRequested, record, OnMicToggleRequested, mic);
         if (!ok)
         {
@@ -288,8 +289,12 @@ public partial class App : Application
         string capture = string.IsNullOrWhiteSpace(s.HotkeyCapture) ? "Snapshot" : s.HotkeyCapture;
         string? record = string.IsNullOrWhiteSpace(s.HotkeyRecordSilentSave) ? null : s.HotkeyRecordSilentSave;
         string? mic    = string.IsNullOrWhiteSpace(s.HotkeyMicToggle) ? null : s.HotkeyMicToggle;
+        SetQuickHotkeys(s);
         Hotkey?.Reregister(capture, record, mic);
     }
+
+    private void SetQuickHotkeys(AppSettings s)
+        => Hotkey?.SetQuickHotkeys((s.HotkeyQuickScreenshot, QuickCaptureService.ScreenshotUnderCursor));
 
     private void OnRecordStopRequested()
     {

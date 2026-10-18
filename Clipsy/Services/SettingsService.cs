@@ -75,6 +75,7 @@ public sealed class AppSettings
     public string HotkeySelectAll { get; set; } = "Ctrl+A";
     public string HotkeySelectMonitor { get; set; } = "Ctrl+B";
     public string HotkeyRecordSilentSave { get; set; } = ""; // disabled by default
+    public string HotkeyQuickScreenshot { get; set; } = "";  // screen under cursor, no overlay
 
     // Updates
     public DateTime LastUpdateCheckUtc { get; set; } = DateTime.MinValue;
@@ -301,6 +302,7 @@ public sealed class SettingsService
         s.HotkeyCapture          = ValidHotkey(s.HotkeyCapture,          d.HotkeyCapture,          global: true,  optional: false);
         s.HotkeyRecordSilentSave = ValidHotkey(s.HotkeyRecordSilentSave, d.HotkeyRecordSilentSave, global: true,  optional: true);
         s.HotkeyMicToggle        = ValidHotkey(s.HotkeyMicToggle,        d.HotkeyMicToggle,        global: true,  optional: true);
+        s.HotkeyQuickScreenshot  = ValidHotkey(s.HotkeyQuickScreenshot,  d.HotkeyQuickScreenshot,  global: true,  optional: true);
         s.HotkeyScreenshotSilent = ValidHotkey(s.HotkeyScreenshotSilent, d.HotkeyScreenshotSilent, global: false, optional: true);
         s.HotkeyCopy             = ValidHotkey(s.HotkeyCopy,             d.HotkeyCopy,             global: false, optional: true);
         s.HotkeyUndo             = ValidHotkey(s.HotkeyUndo,             d.HotkeyUndo,             global: false, optional: true);

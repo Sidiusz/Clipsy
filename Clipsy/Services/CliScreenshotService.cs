@@ -135,14 +135,7 @@ internal static class CliScreenshotService
         if (value.Equals("primary", StringComparison.OrdinalIgnoreCase))
             return monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors[0];
         if (value.Equals("cursor", StringComparison.OrdinalIgnoreCase))
-        {
-            if (GetCursorPos(out var p))
-            {
-                var hit = monitors.FirstOrDefault(m => m.Bounds.Contains(p.X, p.Y));
-                if (hit != null) return hit;
-            }
-            return monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors[0];
-        }
+            return ScreenFreezeService.MonitorUnderCursor(monitors)!;
         if (int.TryParse(value, out int index))
         {
             var found = monitors.FirstOrDefault(m => m.Index == index);
@@ -216,10 +209,4 @@ internal static class CliScreenshotService
     }
 
     private static CliResult Missing(string option) => new(2, $"Missing value for {option}.");
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct POINT { public int X; public int Y; }
-
-    [DllImport("user32.dll")]
-    private static extern bool GetCursorPos(out POINT point);
 }

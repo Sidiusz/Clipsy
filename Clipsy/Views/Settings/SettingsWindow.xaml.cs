@@ -877,6 +877,7 @@ public sealed partial class SettingsWindow : Window
         if (_draft.HotkeySelectMonitor != _initial.HotkeySelectMonitor) _dirty.Add("hk-select-monitor");
         if (_draft.HotkeyRecordSilentSave != _initial.HotkeyRecordSilentSave) _dirty.Add("hk-record-save");
         if (_draft.HotkeyMicToggle != _initial.HotkeyMicToggle) _dirty.Add("hk-mic-toggle");
+        if (_draft.HotkeyQuickScreenshot != _initial.HotkeyQuickScreenshot) _dirty.Add("hk-quick-screenshot");
         if (_draft.MicrophoneEnabled != _initial.MicrophoneEnabled) _dirty.Add("mic-enabled");
         if (_draft.MicrophoneDevice  != _initial.MicrophoneDevice)  _dirty.Add("mic-device");
     }
