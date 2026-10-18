@@ -236,7 +236,7 @@ public sealed partial class CaptureOverlayWindow
     }
 
     // Alternate rows so long lists of similar titles don't run together.
-    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush s_stripe = new(Windows.UI.Color.FromArgb(0x18, 0x80, 0x80, 0x80));
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush s_stripe = new(Windows.UI.Color.FromArgb(0x38, 0x80, 0x80, 0x80));
 
     private static void AddListItem(MenuFlyoutSubItem list, MenuFlyoutItem item)
     {
