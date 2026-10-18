@@ -4,6 +4,7 @@ using System.Linq;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
@@ -18,6 +19,8 @@ internal static class ModernScreenCaptureService
     private static readonly Guid GraphicsCaptureItemGuid = new("79C3F95B-31F7-4EC2-A464-632EF5D30760");
     private static readonly Guid CaptureInteropGuid = new("3628E81B-3CAC-4C60-B7F4-23CE0E0C3356");
     private static readonly Guid CaptureSession3Guid = new("F2CDD966-22AE-5EA1-9596-3A289344C3BE");
+    private static readonly Guid CaptureAccessStaticsGuid = new("743ED370-06EC-5040-A58A-901F0F757095");
+    private static readonly Guid AsyncInfoGuid = new("00000036-0000-0000-C000-000000000046");
     private static readonly Guid IdxgiDeviceGuid = new("54EC77FA-1377-44E6-8C32-88FD5F44C84C");
 
     private sealed record MonitorTarget(IntPtr Handle, ScreenFreezeService.MonitorInfo Info);
@@ -127,9 +130,54 @@ internal static class ModernScreenCaptureService
         finally { pool.FrameArrived -= handler; }
     }
 
-    // IGraphicsCaptureSession3 isn't in the 19041 projection; unpackaged apps may set it without an access request.
+    private static int _borderlessRequested;
+    private static int _borderFailureLogged;
+
+    // Newer Windows builds ignore IsBorderRequired = false until borderless capture was requested once.
+    private static unsafe void RequestBorderlessAccess()
+    {
+        if (Interlocked.Exchange(ref _borderlessRequested, 1) != 0) return;
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348)) return;
+        const string cls = "Windows.Graphics.Capture.GraphicsCaptureAccess";
+        if (WindowsCreateString(cls, cls.Length, out var hstr) < 0) return;
+        IntPtr statics = IntPtr.Zero, op = IntPtr.Zero;
+        try
+        {
+            var iid = CaptureAccessStaticsGuid;
+            int hr = RoGetActivationFactory(hstr, ref iid, out statics);
+            if (hr < 0) { Diagnostics.Log($"GraphicsCaptureAccess unavailable hr=0x{hr:X8}"); return; }
+            var request = (delegate* unmanaged[Stdcall]<IntPtr, int, IntPtr*, int>)(*(IntPtr**)statics)[6];
+            hr = request(statics, 0 /* Borderless */, &op);
+            if (hr < 0 || op == IntPtr.Zero) { Diagnostics.Log($"Borderless capture request failed hr=0x{hr:X8}"); return; }
+            // IAsyncOperation<AppCapabilityAccessStatus>: GetResults is slot 8; poll IAsyncInfo.Status (slot 7) first.
+            var infoIid = AsyncInfoGuid;
+            if (Marshal.QueryInterface(op, ref infoIid, out var info) < 0) return;
+            try
+            {
+                var getStatus = (delegate* unmanaged[Stdcall]<IntPtr, int*, int>)(*(IntPtr**)info)[7];
+                int status = 0;
+                for (int i = 0; i < 200 && getStatus(info, &status) >= 0 && status == 0; i++) Thread.Sleep(10);
+                if (status != 1) { Diagnostics.Log($"Borderless capture request ended with async status {status}"); return; }
+            }
+            finally { Marshal.Release(info); }
+            var getResults = (delegate* unmanaged[Stdcall]<IntPtr, int*, int>)(*(IntPtr**)op)[8];
+            int access = -1;
+            getResults(op, &access);
+            if (access != 4) Diagnostics.Log($"Borderless capture not allowed (AppCapabilityAccessStatus {access})");
+        }
+        catch (Exception ex) { Diagnostics.Log("Borderless capture request failed", ex); }
+        finally
+        {
+            if (op != IntPtr.Zero) Marshal.Release(op);
+            if (statics != IntPtr.Zero) Marshal.Release(statics);
+            WindowsDeleteString(hstr);
+        }
+    }
+
+    // IGraphicsCaptureSession3 isn't in the 19041 projection.
     private static unsafe void DisableBorder(GraphicsCaptureSession session)
     {
+        RequestBorderlessAccess();
         var iid = CaptureSession3Guid;
         IntPtr unk = MarshalInspectable<GraphicsCaptureSession>.FromManaged(session);
         try
@@ -138,7 +186,9 @@ internal static class ModernScreenCaptureService
             try
             {
                 var put = (delegate* unmanaged[Stdcall]<IntPtr, byte, int>)(*(IntPtr**)session3)[7];
-                put(session3, 0);
+                int hr = put(session3, 0);
+                if (hr < 0 && Interlocked.Exchange(ref _borderFailureLogged, 1) == 0)
+                    Diagnostics.Log($"Hiding the capture border failed hr=0x{hr:X8}");
             }
             finally { Marshal.Release(session3); }
         }

@@ -8,40 +8,17 @@ using Rect = Windows.Foundation.Rect;
 
 namespace Clipsy.Views;
 
-/// <summary>Window picking: before anything is selected the window under the cursor is highlighted,
-/// and a click selects it. Recording that selection records the window itself, with its own sound.</summary>
+/// <summary>Window picking: a click (no drag) on a window selects it, as does the "Select app" menu.
+/// Recording that selection records the window itself, with its own sound.</summary>
 public sealed partial class CaptureOverlayWindow
 {
-    private WindowTargets.Target? _hoverWindow;
     private WindowTargets.Target? _selectedWindow;
-
-    private bool CanPickWindow =>
-        !_hasSelection && _mode == InteractionMode.Idle && !_inOcrMode && !_eyedropperActive
-        && _drawing.Settings.Tool == ToolKind.None;
-
-    private void UpdateWindowHover(Point pos)
-    {
-        var hit = CanPickWindow ? WindowAt(pos) : null;
-        if (ReferenceEquals(hit, _hoverWindow)) return;
-        _hoverWindow = hit;
-        if (hit == null)
-        {
-            HideWindowPick();
-            UpdateDimGeometry(null);
-            return;
-        }
-        var r = ToRoot(hit.Bounds);
-        ShowWindowPick(r, hit.Title, outline: true);
-        UpdateDimGeometry(r);
-    }
 
     /// <summary>A click without a drag: select the window under it. False when there is none.</summary>
     private bool TrySelectWindowAt(Point pos)
     {
         var hit = WindowAt(pos);
         if (hit == null) return false;
-        HideWindowPick();
-        _hoverWindow = null;
         _selectionRect = ClampToRoot(ToRoot(hit.Bounds));
         _selectedWindow = hit;
         return true;
@@ -65,37 +42,14 @@ public sealed partial class CaptureOverlayWindow
 
     private void ShowSelectedWindowBadge()
     {
-        if (_selectedWindow is { } w) ShowWindowPick(_selectionRect, w.Title, outline: false);
-    }
-
-    private void ResetWindowPick()
-    {
-        _hoverWindow = null;
-        _selectedWindow = null;
-        HideWindowPick();
-    }
-
-    private void ShowWindowPick(Rect r, string title, bool outline)
-    {
-        WindowPickRect.Visibility = outline ? Visibility.Visible : Visibility.Collapsed;
-        if (outline)
-        {
-            Canvas.SetLeft(WindowPickRect, r.X);
-            Canvas.SetTop(WindowPickRect, r.Y);
-            WindowPickRect.Width = Math.Max(0, r.Width);
-            WindowPickRect.Height = Math.Max(0, r.Height);
-        }
-        WindowPickTitle.Text = title;
+        if (_selectedWindow is not { } w) return;
+        WindowPickTitle.Text = w.Title;
         WindowPickBadge.Visibility = Visibility.Visible;
-        Canvas.SetLeft(WindowPickBadge, Math.Max(4, r.X + 8));
-        Canvas.SetTop(WindowPickBadge, Math.Max(4, r.Y + 8));
+        Canvas.SetLeft(WindowPickBadge, Math.Max(4, _selectionRect.X + 8));
+        Canvas.SetTop(WindowPickBadge, Math.Max(4, _selectionRect.Y + 8));
     }
 
-    private void HideWindowPick()
-    {
-        WindowPickRect.Visibility = Visibility.Collapsed;
-        WindowPickBadge.Visibility = Visibility.Collapsed;
-    }
+    private void ResetWindowPick() => ClearSelectedWindow();
 
     private WindowTargets.Target? WindowAt(Point pos)
     {

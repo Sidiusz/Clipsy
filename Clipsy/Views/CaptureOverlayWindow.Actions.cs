@@ -229,10 +229,30 @@ public sealed partial class CaptureOverlayWindow
                 Tag = m,
             };
             item.Click += OnMenuSelectScreen;
-            SelectScreenMenu.Items.Add(item);
+            AddListItem(SelectScreenMenu, item);
             i++;
         }
         BuildWindowMenu();
+    }
+
+    // Alternate rows so long lists of similar titles don't run together.
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush s_stripe = new(Windows.UI.Color.FromArgb(0x18, 0x80, 0x80, 0x80));
+
+    private static void AddListItem(MenuFlyoutSubItem list, MenuFlyoutItem item)
+    {
+        if (list.Items.Count % 2 == 1) item.Background = s_stripe;
+        ResetHoverOnExit(item);
+        list.Items.Add(item);
+    }
+
+    // A hovered menu item takes keyboard focus and keeps looking hovered after the pointer leaves.
+    private static void ResetHoverOnExit(MenuFlyoutItemBase item)
+        => item.PointerExited += (s, _) => VisualStateManager.GoToState((Control)s, "Normal", true);
+
+    private void HookMenuHoverReset()
+    {
+        foreach (var item in OverlayMenu.Items)
+            if (item is MenuFlyoutItem or MenuFlyoutSubItem) ResetHoverOnExit(item);
     }
 
     private void BuildWindowMenu()
@@ -244,7 +264,7 @@ public sealed partial class CaptureOverlayWindow
             var item = new MenuFlyoutItem { Text = string.Format(Strings.Get("MenuWindowItem"), title, w.Pid), Tag = w };
             ToolTipService.SetToolTip(item, w.Title);
             item.Click += OnMenuSelectWindow;
-            SelectWindowMenu.Items.Add(item);
+            AddListItem(SelectWindowMenu, item);
         }
         SelectWindowMenu.Visibility = _frame.Windows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }

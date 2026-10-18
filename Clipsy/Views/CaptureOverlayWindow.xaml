@@ -62,12 +62,8 @@
                 IsHitTestVisible="False"
                 Visibility="Collapsed" />
 
-        <!-- Window under the cursor while nothing is selected; a click selects it. -->
+        <!-- Name of the window the selection was picked from. -->
         <Canvas x:Name="WindowPickLayer" IsHitTestVisible="False">
-            <Rectangle x:Name="WindowPickRect"
-                       Stroke="{ThemeResource ClipsyAccentBrush}"
-                       StrokeThickness="2"
-                       Visibility="Collapsed" />
             <Border x:Name="WindowPickBadge"
                     Background="{ThemeResource ClipsyBg1Brush}"
                     BorderBrush="{ThemeResource ClipsyBorderBrush}"

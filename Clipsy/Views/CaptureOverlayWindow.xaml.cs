@@ -145,6 +145,7 @@ public sealed partial class CaptureOverlayWindow : Window
         CursorPreviewLayer.Children.Add(_textPreview);
 
         BuildScreenMenu();
+        HookMenuHoverReset();
         Activated += OnActivated;
         Closed += OnOverlayClosed;
         _appWindow.Closing += OnOverlayAppWindowClosing;

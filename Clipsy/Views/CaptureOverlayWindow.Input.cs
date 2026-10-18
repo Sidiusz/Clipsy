@@ -186,7 +186,6 @@ public sealed partial class CaptureOverlayWindow
             QueueMagnifierUpdate(pos);
             return;
         }
-        if (_mode == InteractionMode.Idle) UpdateWindowHover(pos);
         var local = new Point(pos.X - _selectionRect.X, pos.Y - _selectionRect.Y);
         if (_drawing.Settings.Tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow)
         {
