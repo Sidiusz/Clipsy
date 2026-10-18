@@ -47,6 +47,15 @@ public sealed partial class CaptureOverlayWindow
         return true;
     }
 
+    /// <summary>Selects a window from the context menu, even one hidden behind others.</summary>
+    private void SelectWindow(WindowTargets.Target w)
+    {
+        SetSelection(ClampToRoot(ToRoot(w.Bounds)));
+        _selectedWindow = w;
+        _selectionFromFallback = false;
+        ShowSelectedWindowBadge();
+    }
+
     // Moving, resizing or replacing the selection turns it back into a plain region.
     private void ClearSelectedWindow()
     {

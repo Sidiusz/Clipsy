@@ -71,6 +71,8 @@ public static class Strings
         ["MenuSaveAs"]          = New("Save As…",      "Сохранить как…"),
         ["MenuClear"]           = New("Clear drawings","Очистить рисунки"),
         ["MenuCancel"]          = New("Cancel",        "Отмена"),
+        ["MenuSelectWindow"]    = New("Select app", "Выбрать приложение"),
+        ["MenuWindowItem"]      = New("{0} (PID {1})", "{0} (PID {1})"),
         ["MenuScreenN"]         = New("Screen {0}",    "Экран {0}"),
         ["MenuScreenPrimary"]   = New("Screen {0} (primary)", "Экран {0} (основной)"),
 

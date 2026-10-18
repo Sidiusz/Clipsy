@@ -391,6 +391,7 @@ public sealed partial class CaptureOverlayWindow : Window
         TranslatePanelTitle.Text = Strings.Get("TrTranslation").ToUpperInvariant();
 
         SelectScreenMenu.Text = Strings.Get("MenuSelectScreen");
+        SelectWindowMenu.Text = Strings.Get("MenuSelectWindow");
         MenuSelectAll.Text    = Strings.Get("MenuSelectAll");
         MenuCopy.Text         = Strings.Get("MenuCopy");
         MenuSave.Text         = Strings.Get("MenuSave");

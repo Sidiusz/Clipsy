@@ -618,6 +618,11 @@
                         <FontIcon Glyph="&#xE91B;" />
                     </MenuFlyoutSubItem.Icon>
                 </MenuFlyoutSubItem>
+                <MenuFlyoutSubItem x:Name="SelectWindowMenu" Text="Select app">
+                    <MenuFlyoutSubItem.Icon>
+                        <FontIcon Glyph="&#xE737;" />
+                    </MenuFlyoutSubItem.Icon>
+                </MenuFlyoutSubItem>
                 <MenuFlyoutItem x:Name="MenuSelectAll" Text="Select all"
                                 KeyboardAcceleratorTextOverride="Ctrl+A"
                                 Click="OnMenuSelectAll">

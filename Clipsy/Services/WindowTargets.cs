@@ -10,7 +10,7 @@ namespace Clipsy.Services;
 /// <summary>Top-level windows that can be recorded: lookup, bounds, title and the process whose audio they play.</summary>
 public static class WindowTargets
 {
-    public sealed record Target(IntPtr Hwnd, Rectangle Bounds, string Title);
+    public sealed record Target(IntPtr Hwnd, Rectangle Bounds, string Title, int Pid);
 
     /// <summary>The window the user is in, or null when that is the desktop, the taskbar or Clipsy itself.</summary>
     public static Target? Foreground()
@@ -59,12 +59,13 @@ public static class WindowTargets
         var sb = new StringBuilder(256);
         GetWindowTextW(hwnd, sb, sb.Capacity);
         var title = sb.ToString().Trim();
+        int pid = AudioProcessId(hwnd);
         if (title.Length == 0)
         {
-            try { using var p = Process.GetProcessById(AudioProcessId(hwnd)); title = p.ProcessName; }
+            try { using var p = Process.GetProcessById(pid); title = p.ProcessName; }
             catch { title = "?"; }
         }
-        return new Target(hwnd, Bounds(hwnd), title);
+        return new Target(hwnd, Bounds(hwnd), title, pid);
     }
 
     private static bool IsRecordable(IntPtr hwnd)

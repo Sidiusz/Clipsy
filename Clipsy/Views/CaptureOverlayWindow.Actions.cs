@@ -232,6 +232,26 @@ public sealed partial class CaptureOverlayWindow
             SelectScreenMenu.Items.Add(item);
             i++;
         }
+        BuildWindowMenu();
+    }
+
+    private void BuildWindowMenu()
+    {
+        SelectWindowMenu.Items.Clear();
+        foreach (var w in _frame.Windows)
+        {
+            var title = w.Title.Length > 60 ? w.Title[..57] + "…" : w.Title;
+            var item = new MenuFlyoutItem { Text = string.Format(Strings.Get("MenuWindowItem"), title, w.Pid), Tag = w };
+            ToolTipService.SetToolTip(item, w.Title);
+            item.Click += OnMenuSelectWindow;
+            SelectWindowMenu.Items.Add(item);
+        }
+        SelectWindowMenu.Visibility = _frame.Windows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnMenuSelectWindow(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem { Tag: WindowTargets.Target w }) SelectWindow(w);
     }
 
     private void UpdateContextMenuVisibility()
