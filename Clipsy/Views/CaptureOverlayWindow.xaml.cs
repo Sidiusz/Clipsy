@@ -317,6 +317,7 @@ public sealed partial class CaptureOverlayWindow : Window
         _selectionVisualDirty = false;
 
         _hasSelection = false;
+        ResetWindowPick();
         _selectionFromFallback = false;
         _selectionRect = default;
         _selectionAtDragStart = default;

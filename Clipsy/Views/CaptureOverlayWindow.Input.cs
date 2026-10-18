@@ -154,6 +154,7 @@ public sealed partial class CaptureOverlayWindow
         // text stay in root coordinates, so reselecting only changes the crop.
         _mode = InteractionMode.SelectingNew;
         _hasSelection = false;
+        ResetWindowPick();
         _dragStart = pos;
         _selectionRect = new Rect(pos.X, pos.Y, 0, 0);
         // Old islands must not linger frozen in place while a new region is dragged.
@@ -185,6 +186,7 @@ public sealed partial class CaptureOverlayWindow
             QueueMagnifierUpdate(pos);
             return;
         }
+        if (_mode == InteractionMode.Idle) UpdateWindowHover(pos);
         var local = new Point(pos.X - _selectionRect.X, pos.Y - _selectionRect.Y);
         if (_drawing.Settings.Tool is ToolKind.Pencil or ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow)
         {
@@ -225,11 +227,13 @@ public sealed partial class CaptureOverlayWindow
                     System.Math.Clamp(_selectionAtDragStart.Y + pos.Y - _dragStart.Y, 0, maxY),
                     _selectionAtDragStart.Width,
                     _selectionAtDragStart.Height);
+                if (_selectionRect != _selectionAtDragStart) ClearSelectedWindow();
                 RequestSelectionVisualUpdate();
                 break;
             }
             case InteractionMode.ResizingSelection:
                 _selectionRect = ResizeFromHandle(_selectionAtDragStart, _activeHandle, pos);
+                if (_selectionRect != _selectionAtDragStart) ClearSelectedWindow();
                 RequestSelectionVisualUpdate();
                 break;
             case InteractionMode.DrawingStroke:
@@ -367,7 +371,12 @@ public sealed partial class CaptureOverlayWindow
             case InteractionMode.SelectingNew:
             {
                 var rect = MakeRect(_dragStart, pos);
-                if (rect.Width < MinSelectionSize && rect.Height < MinSelectionSize)
+                if (rect.Width < MinSelectionSize && rect.Height < MinSelectionSize && TrySelectWindowAt(_dragStart))
+                {
+                    rect = _selectionRect;
+                    _selectionFromFallback = true; // a double-click may still replace it with a full monitor
+                }
+                else if (rect.Width < MinSelectionSize && rect.Height < MinSelectionSize)
                 {
                     // Shifted to stay on the frame near a screen edge.
                     double x = System.Math.Clamp(_dragStart.X - SingleClickFallbackSize / 2,
@@ -385,6 +394,7 @@ public sealed partial class CaptureOverlayWindow
                 _anchorBottom = pos.Y >= _dragStart.Y;
                 UpdateSelectionVisual();
                 ShowToolbars();
+                ShowSelectedWindowBadge();
                 break;
             }
             case InteractionMode.MovingSelection:

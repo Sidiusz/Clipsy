@@ -21,6 +21,14 @@ public sealed partial class CaptureOverlayWindow
     private async void OnRecordClick(object sender, RoutedEventArgs e)
     {
         if (!_hasSelection) return;
+        if (_selectedWindow is { Hwnd: var hwnd } && WindowTargets.Exists(hwnd))
+        {
+            var ui = App.Current.HostWindow!.DispatcherQueue;
+            CaptureOverlayHost.Dismiss(this);
+            await Task.Delay(150);
+            ui.TryEnqueue(() => RecordingController.TryStartWindow(hwnd));
+            return;
+        }
         // Clamped to the frame: the recorder can't capture outside the virtual screen.
         var px = ScreenshotRenderer.ToPixelRect(_selectionRect, DpiScale, _frame.PixelWidth, _frame.PixelHeight);
         var b = _frame.VirtualBounds;

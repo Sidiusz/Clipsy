@@ -24,7 +24,7 @@ public static class Strings
         ["TrayUpdateFailed"]     = New("Update check failed — click to retry", "Ошибка обновления — нажмите для повтора"),
 
         // Capture overlay
-        ["HintSelectArea"]      = New("Select area", "Выделите область"),
+        ["HintSelectArea"]      = New("Select an area or click a window", "Выделите область или кликните по окну"),
         ["HintFullScreen"]      = New("full screen", "весь экран"),
         ["HintCancel"]          = New("cancel", "отмена"),
         ["FilterPlaceholder"]   = New("Filter…", "Фильтр…"),

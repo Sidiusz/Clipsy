@@ -20,6 +20,8 @@ public sealed class ScreenFreezeService
         public required int PixelHeight { get; init; }
         public required Rectangle VirtualBounds { get; init; }
         public required IReadOnlyList<MonitorInfo> Monitors { get; init; }
+        // Recordable windows front to back when the frame was taken (for picking a window).
+        public IReadOnlyList<WindowTargets.Target> Windows { get; set; } = Array.Empty<WindowTargets.Target>();
     }
 
     public FrozenFrame Capture(bool? includeCursor = null)

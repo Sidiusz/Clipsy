@@ -453,6 +453,7 @@ public sealed partial class CaptureOverlayWindow
 
     private void SetSelection(Rect rect)
     {
+        ResetWindowPick();
         _selectionRect = rect;
         _hasSelection = true;
         Hint.Visibility = Visibility.Collapsed;
