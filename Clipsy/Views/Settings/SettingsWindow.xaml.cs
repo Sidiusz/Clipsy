@@ -126,6 +126,7 @@ public sealed partial class SettingsWindow : Window
         ["bitrate"] = "video",
         ["vid-format"] = "video",
         ["mic-enabled"] = "video",
+        ["window-audio"] = "video",
         ["mic-device"] = "video",
         ["gif-color"] = "gif",
         ["gif-fps"] = "gif",
@@ -446,6 +447,7 @@ public sealed partial class SettingsWindow : Window
         EyedropperCopyHexSwitch.IsChecked = _draft.CopyEyedropperHexToClipboard;
         VideoCursorSwitch.IsChecked      = _draft.CaptureVideoCursor;
         MicEnabledSwitch.IsChecked       = _draft.MicrophoneEnabled;
+        WindowAudioSwitch.IsChecked      = _draft.WindowAudio == "app";
         GifDitherSwitch.IsChecked        = _draft.GifDither;
         NotifyMasterSwitch.IsChecked     = _draft.NotificationsEnabled;
         NotifyScreenshotSwitch.IsChecked = _draft.NotifyScreenshotSaved;
@@ -530,6 +532,7 @@ public sealed partial class SettingsWindow : Window
         UpdateBitrateLabel();
 
         MicEnabledSwitch.IsChecked = _draft.MicrophoneEnabled;
+        WindowAudioSwitch.IsChecked = _draft.WindowAudio == "app";
         PopulateMicDevices(_draft.MicrophoneDevice);
         UpdateMicDevicePanelVisibility();
 
@@ -628,6 +631,7 @@ public sealed partial class SettingsWindow : Window
         if (_bitrateTouched) _draft.VideoBitrateMbps = (int)BitrateSlider.Value;
 
         _draft.MicrophoneEnabled = MicEnabledSwitch.IsChecked == true;
+        _draft.WindowAudio = WindowAudioSwitch.IsChecked == true ? "app" : "system";
         if (!_draft.MicrophoneEnabled) _draft.MicrophoneMuted = true;
         _draft.MicrophoneDevice  = (MicDeviceBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
 
@@ -881,6 +885,7 @@ public sealed partial class SettingsWindow : Window
         if (_draft.HotkeyQuickRecordWindow != _initial.HotkeyQuickRecordWindow) _dirty.Add("hk-record-window");
         if (_draft.HotkeyQuickRecordScreen != _initial.HotkeyQuickRecordScreen) _dirty.Add("hk-record-screen");
         if (_draft.MicrophoneEnabled != _initial.MicrophoneEnabled) _dirty.Add("mic-enabled");
+        if (_draft.WindowAudio != _initial.WindowAudio) _dirty.Add("window-audio");
         if (_draft.MicrophoneDevice  != _initial.MicrophoneDevice)  _dirty.Add("mic-device");
     }
 
@@ -907,6 +912,7 @@ public sealed partial class SettingsWindow : Window
         SetLabel(LblEyedropperCopyHex, "LblEyedropperCopyHex", _dirty.Contains("eyedropper-copy"));
         SetLabel(LblVideoFormat, "LblVideoFormat", _dirty.Contains("vid-format"));
         SetLabel(LblVideoCursor, "LblVideoCursor", _dirty.Contains("vid-cursor"));
+        SetLabel(LblWindowAudio, "LblWindowAudio", _dirty.Contains("window-audio"));
         SetLabel(LblJpgQuality, "LblJpgQuality", _dirty.Contains("jpg-q"));
         SetLabel(LblAfterSave, "LblAfterSave", _dirty.Contains("after-save"));
         SetLabel(LblUpdates, "LblUpdates", _dirty.Contains("update-int"));

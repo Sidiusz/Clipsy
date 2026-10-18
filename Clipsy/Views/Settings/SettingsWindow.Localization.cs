@@ -163,6 +163,8 @@ public sealed partial class SettingsWindow
         LblBitrate.Text    = Strings.Get("LblBitrate");
         LblRegionNote.Text = Strings.Get("LblRegionNote");
         LblMicEnabled.Text  = Strings.Get("LblMicEnabled");
+        LblWindowAudio.Text = Strings.Get("LblWindowAudio");
+        HelperWindowAudio.Text = Strings.Get("HelperWindowAudio");
         HelperMic.Text      = Strings.Get("HelperMic");
         LblMicDevice.Text   = Strings.Get("LblMicDevice");
         HelperMicDevice.Text = Strings.Get("HelperMicDevice");
