@@ -30,13 +30,66 @@ public sealed class RecordingService : IDisposable
 
     public void Start(int x, int y, int width, int height, string? overrideCodec = null)
     {
+        PrepareTempPath();
+        bool cursor = SettingsService.Instance.Settings.CaptureVideoCursor;
+        BuildSources(x, y, width, height, cursor);
+        _activeRegion = new Rectangle(x, y, width, height);
+        StartRecorder(_sources.Cast<RecordingSourceBase>().ToList(), width, height, GetCanvasCrop(_activeRegion),
+            overrideCodec, systemAudio: true, cursor);
+    }
+
+    /// <summary>Records one window wherever it moves. With <paramref name="audioProcessId"/> the system mix is
+    /// replaced by that process tree's audio, written to <see cref="AppAudioPath"/> for muxing on save.</summary>
+    public void StartWindow(IntPtr hwnd, int width, int height, int? audioProcessId, string? overrideCodec = null)
+    {
+        PrepareTempPath();
+        bool cursor = SettingsService.Instance.Settings.CaptureVideoCursor;
+        var source = new WindowRecordingSource(hwnd)
+        {
+            IsBorderRequired = false,
+            IsCursorCaptureEnabled = cursor,
+            Stretch = StretchMode.Uniform,
+        };
+        if (audioProcessId is int pid)
+        {
+            try { _appAudio = ProcessAudioCapture.Start(pid, Path.ChangeExtension(_tempPath, ".pcm")); }
+            catch (Exception ex)
+            {
+                Diagnostics.Log($"App audio capture for pid {pid} failed; recording system audio", ex);
+                AppAudioFailed = true;
+            }
+        }
+        try
+        {
+            StartRecorder(new List<RecordingSourceBase> { source }, width, height, null, overrideCodec, systemAudio: _appAudio == null, cursor);
+        }
+        catch
+        {
+            DisposeAppAudio();
+            throw;
+        }
+    }
+
+    /// <summary>Raw app audio recorded next to the video (window recordings), or null.</summary>
+    public string? AppAudioPath => _appAudio?.OutputPath;
+
+    /// <summary>App-only audio was asked for but Windows refused it; the system mix is recorded instead.</summary>
+    public bool AppAudioFailed { get; private set; }
+
+    /// <summary>The recording has its own audio track (system mix or microphone).</summary>
+    public bool HasAudioTrack { get; private set; }
+
+    private ProcessAudioCapture? _appAudio;
+
+    private void PrepareTempPath()
+    {
         Directory.CreateDirectory(TempDirectory);
         _tempPath = Path.Combine(TempDirectory, $"recording_{DateTime.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.mp4");
+    }
 
-        bool captureVideoCursor = SettingsService.Instance.Settings.CaptureVideoCursor;
-        BuildSources(x, y, width, height, captureVideoCursor);
-        _activeRegion = new Rectangle(x, y, width, height);
-
+    private void StartRecorder(List<RecordingSourceBase> sources, int width, int height, ScreenRect? sourceRect,
+        string? overrideCodec, bool systemAudio, bool cursor)
+    {
         var s = SettingsService.Instance.Settings;
         var (outW, outH) = ResolveOutputSize(s.VideoResolution, width, height);
         int bitrate = s.VideoBitrateMbps * 1_000_000;
@@ -52,18 +105,16 @@ public sealed class RecordingService : IDisposable
             },
         };
         bool mic = s.MicrophoneEnabled;
+        HasAudioTrack = mic || systemAudio;
 
         var options = new RecorderOptions
         {
-            SourceOptions = new SourceOptions
-            {
-                RecordingSources = _sources.Cast<RecordingSourceBase>().ToList(),
-            },
+            SourceOptions = new SourceOptions { RecordingSources = sources },
             OutputOptions = new OutputOptions
             {
                 RecorderMode = RecorderMode.Video,
                 OutputFrameSize = new ScreenSize(outW, outH),
-                SourceRect = GetCanvasCrop(_activeRegion),
+                SourceRect = sourceRect,
                 Stretch = StretchMode.Uniform,
             },
             VideoEncoderOptions = new VideoEncoderOptions
@@ -81,17 +132,17 @@ public sealed class RecordingService : IDisposable
             // unmuting mid-recording works even if the recording started muted.
             AudioOptions = new AudioOptions
             {
-                IsAudioEnabled = true,
+                IsAudioEnabled = HasAudioTrack,
                 IsInputDeviceEnabled = mic,
                 InputVolume = mic && !s.MicrophoneMuted ? 1f : 0f,
                 AudioInputDevice = mic ? ResolveInputDevice(s.MicrophoneDevice) : null,
-                IsOutputDeviceEnabled = true,
+                IsOutputDeviceEnabled = systemAudio,
                 Bitrate = AudioBitrate.bitrate_128kbps,
                 Channels = AudioChannels.Stereo,
             },
             MouseOptions = new MouseOptions
             {
-                IsMousePointerEnabled = captureVideoCursor,
+                IsMousePointerEnabled = cursor,
                 IsMouseClicksDetected = false,
             },
         };
@@ -99,7 +150,21 @@ public sealed class RecordingService : IDisposable
         _recorder = Recorder.CreateRecorder(options);
         _recorder.OnRecordingComplete += OnComplete;
         _recorder.OnRecordingFailed += OnFailed;
+        _recorder.OnStatusChanged += OnStatusChanged;
         _recorder.Record(_tempPath);
+    }
+
+    // The app audio follows the encoder's own timeline, so pauses and a slow start stay in sync.
+    private void OnStatusChanged(object? sender, RecordingStatusEventArgs e)
+    {
+        if (e.Status == RecorderStatus.Recording) _appAudio?.Resume();
+        else _appAudio?.Pause();
+    }
+
+    private void DisposeAppAudio()
+    {
+        try { _appAudio?.Dispose(); }
+        catch (Exception ex) { Diagnostics.Log("App audio dispose failed", ex); }
     }
 
     // A saved device that's gone (unplugged headset) would fail the whole recording; use the default.
@@ -279,11 +344,13 @@ public sealed class RecordingService : IDisposable
 
     private void OnComplete(object? sender, RecordingCompleteEventArgs e)
     {
+        DisposeAppAudio(); // closes the raw audio file before it is muxed
         RecordingComplete?.Invoke(e.FilePath);
     }
 
     private void OnFailed(object? sender, RecordingFailedEventArgs e)
     {
+        DisposeAppAudio();
         RecordingFailed?.Invoke(e.Error);
     }
 
@@ -293,11 +360,13 @@ public sealed class RecordingService : IDisposable
         {
             _recorder.OnRecordingComplete -= OnComplete;
             _recorder.OnRecordingFailed -= OnFailed;
+            _recorder.OnStatusChanged -= OnStatusChanged;
             _recorder.Dispose();
             _recorder = null;
             _sources.Clear();
             _sourceMonitors.Clear();
         }
+        DisposeAppAudio();
     }
 
     private delegate bool MonitorEnumProc(IntPtr hMon, IntPtr hdc, IntPtr rect, IntPtr data);

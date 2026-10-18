@@ -58,7 +58,7 @@
                     <FontIcon Glyph="&#xE711;" FontSize="16" />
                 </Button>
 
-                <Border Style="{StaticResource ClipsyToolbarSeparator}" />
+                <Border x:Name="DrawSep" Style="{StaticResource ClipsyToolbarSeparator}" />
 
                 <ToggleButton x:Name="DrawBtn"
                               Style="{StaticResource ClipsyIconToggle}"

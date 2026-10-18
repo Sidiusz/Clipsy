@@ -294,7 +294,10 @@ public partial class App : Application
     }
 
     private void SetQuickHotkeys(AppSettings s)
-        => Hotkey?.SetQuickHotkeys((s.HotkeyQuickScreenshot, QuickCaptureService.ScreenshotUnderCursor));
+        => Hotkey?.SetQuickHotkeys(
+            (s.HotkeyQuickScreenshot, QuickCaptureService.ScreenshotUnderCursor),
+            (s.HotkeyQuickRecordWindow, QuickCaptureService.ToggleRecordActiveWindow),
+            (s.HotkeyQuickRecordScreen, QuickCaptureService.ToggleRecordScreenUnderCursor));
 
     private void OnRecordStopRequested()
     {

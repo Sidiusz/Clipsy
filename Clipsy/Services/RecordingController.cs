@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Clipsy.Localization;
 using Clipsy.Views.Recording;
 using Microsoft.UI.Dispatching;
 using ScreenRecorderLib;
@@ -53,10 +54,22 @@ public sealed class RecordingController
     private bool _drawOn;
     private IntPtr _hudHwnd;
     private (byte R, byte G, byte B) _drawColor = (0xFF, 0x00, 0x00);
+    private IntPtr _window;              // window recordings: the recorded window
+    private int? _audioPid;              // window recordings: the process whose audio replaces the system mix
+    private string? _appAudioPath;
+    private bool _quick;                 // started by a hotkey: no HUD, no border
+    private DispatcherQueueTimer? _windowWatch;
 
     private RecordingController(DispatcherQueue ui) { _ui = ui; }
 
-    public static bool TryStart(int x, int y, int w, int h)
+    public static bool TryStart(int x, int y, int w, int h, bool quick = false)
+        => TryStartCore(c => c.Start(x, y, w, h, quick));
+
+    /// <summary>Records <paramref name="hwnd"/> wherever it goes; with the app-audio setting, only its sound.</summary>
+    public static bool TryStartWindow(IntPtr hwnd, bool quick = false)
+        => TryStartCore(c => c.StartWindow(hwnd, quick));
+
+    private static bool TryStartCore(Action<RecordingController> start)
     {
         if (_current != null)
         {
@@ -71,7 +84,7 @@ public sealed class RecordingController
         (Microsoft.UI.Xaml.Application.Current as App)?.Hotkey?.SetRecordingHotkeysActive(true);
         try
         {
-            c.Start(x, y, w, h);
+            start(c);
             return ReferenceEquals(_current, c);
         }
         catch (Exception ex)
@@ -97,10 +110,72 @@ public sealed class RecordingController
         await Task.WhenAny(_finished.Task, Task.Delay(timeout));
     }
 
-    private void Start(int x, int y, int w, int h)
+    private void Start(int x, int y, int w, int h, bool quick)
     {
         _x = x; _y = y; _w = w; _h = h;
+        _quick = quick;
+        PrepareSession();
+        if (!quick)
+        {
+            _border = new Win32BorderOverlay();
+            _border.Create(x, y, w, h);
+            ShowHud(x, y, w, h, windowMode: false);
+        }
+        StartService(overrideCodec: null);
+        if (quick) NotifyQuickStarted(Strings.Get("RecordingScreen"));
+    }
 
+    private void StartWindow(IntPtr hwnd, bool quick)
+    {
+        if (!WindowTargets.Exists(hwnd)) throw new InvalidOperationException("The window to record is gone.");
+        var b = WindowTargets.Bounds(hwnd);
+        _x = b.X; _y = b.Y; _w = Math.Max(2, b.Width); _h = Math.Max(2, b.Height);
+        _window = hwnd;
+        _quick = quick;
+        PrepareSession();
+        _audioPid = ResolveAppAudio(hwnd);
+        if (!quick) ShowHud(_x, _y, _w, _h, windowMode: true);
+        StartService(overrideCodec: null);
+        if (_audioPid != null && _service?.AppAudioFailed == true) NotificationService.Warning("WarnAppAudioUnavailable");
+        if (quick) NotifyQuickStarted(WindowTargets.Describe(hwnd).Title);
+
+        // Closing the recorded window ends the recording, saving what was captured.
+        _windowWatch = _ui.CreateTimer();
+        _windowWatch.Interval = TimeSpan.FromSeconds(1);
+        _windowWatch.Tick += (_, _) =>
+        {
+            if (!_stopping && !WindowTargets.Exists(_window)) Stop(StopMode.Save);
+        };
+        _windowWatch.Start();
+    }
+
+    // App-only audio needs Windows' process loopback to record it and FFmpeg to join it to the video.
+    private static int? ResolveAppAudio(IntPtr hwnd)
+    {
+        if (SettingsService.Instance.Settings.WindowAudio != "app") return null;
+        if (!ProcessAudioCapture.IsSupported)
+        {
+            NotificationService.Warning("WarnAppAudioUnavailable");
+            return null;
+        }
+        if (!FFmpegService.Instance.IsAvailable)
+        {
+            NotificationService.Warning("WarnAppAudioNeedsFfmpeg");
+            return null;
+        }
+        return WindowTargets.AudioProcessId(hwnd);
+    }
+
+    private void NotifyQuickStarted(string what)
+    {
+        var s = SettingsService.Instance.Settings;
+        var stopKey = _window != IntPtr.Zero ? s.HotkeyQuickRecordWindow : s.HotkeyQuickRecordScreen;
+        NotificationService.Post(NotificationLevel.Info, Strings.Get("ToastRecordingStarted"),
+            string.Format(Strings.Get("ToastRecordingStartedBody"), what, stopKey), ToastCategory.Video);
+    }
+
+    private void PrepareSession()
+    {
         var settingsService = SettingsService.Instance;
         var settings = settingsService.Settings;
         if (!settings.MicrophoneStateInitialized)
@@ -119,10 +194,12 @@ public sealed class RecordingController
         }
         _transcodeCodec = wantsTranscode ? settings.VideoCodec : null;
         _outputFmt = wantsTranscode ? "mkv" : settings.VideoFormat ?? "mp4";
+        _micMuted = settings.MicrophoneEnabled && settings.MicrophoneMuted;
+    }
 
-        _border = new Win32BorderOverlay();
-        _border.Create(x, y, w, h);
-
+    private void ShowHud(int x, int y, int w, int h, bool windowMode)
+    {
+        var settings = SettingsService.Instance.Settings;
         _hud = new RecordingHudWindow();
         _hud.PauseRequested += () => _service?.Pause();
         _hud.ResumeRequested += () => _service?.Resume();
@@ -134,8 +211,8 @@ public sealed class RecordingController
         _hud.DrawColorChanged += OnDrawColorChanged;
         _hud.MicMuteToggled += OnMicMuteToggled;
 
-        _micMuted = settings.MicrophoneEnabled && settings.MicrophoneMuted;
         _hud.InitMic(settings.MicrophoneEnabled, _micMuted);
+        if (windowMode) _hud.HideRegionTools();
         _hud.PositionBelowRegion(x, y, w, h);
         _hud.Activate();
         _hud.Start();
@@ -144,15 +221,13 @@ public sealed class RecordingController
         try
         {
             Recorder.SetExcludeFromCapture(_hud.Hwnd, true);
-            if (_border.Hwnd != IntPtr.Zero)
-                Recorder.SetExcludeFromCapture(_border.Hwnd, true);
+            if (_border is { Hwnd: var border } && border != IntPtr.Zero)
+                Recorder.SetExcludeFromCapture(border, true);
         }
         catch (Exception ex)
         {
             Diagnostics.Log("SetExcludeFromCapture failed", ex);
         }
-
-        StartService(overrideCodec: null);
     }
 
     private void StartService(string? overrideCodec)
@@ -161,7 +236,9 @@ public sealed class RecordingController
         _service.RecordingComplete += OnRecordingComplete;
         _service.RecordingFailed += OnRecordingFailed;
         _startedTick = Environment.TickCount64;
-        _service.Start(_x, _y, _w, _h, overrideCodec);
+        if (_window != IntPtr.Zero) _service.StartWindow(_window, _w, _h, _audioPid, overrideCodec);
+        else _service.Start(_x, _y, _w, _h, overrideCodec);
+        _appAudioPath = _service.AppAudioPath;
     }
 
     private void Stop(StopMode mode)
@@ -171,6 +248,7 @@ public sealed class RecordingController
         _stopping = true;
         _stopMode = mode;
         _hudHwnd = _hud?.Hwnd ?? IntPtr.Zero;
+        _windowWatch?.Stop();
         try { _hud?.Shutdown(); } catch (Exception ex) { Diagnostics.Log("Recording stop: HUD shutdown", ex); }
         DestroyVisualOverlays();
         try
@@ -422,7 +500,9 @@ public sealed class RecordingController
             {
                 if (!_stopping)
                     Diagnostics.Log("Recorder finished on its own; saving what was recorded.");
-                switch (_stopping ? _stopMode : StopMode.Save)
+                var mode = _stopping ? _stopMode : StopMode.Save;
+                if (mode != StopMode.Discard) filePath = await AddAppAudioAsync(filePath);
+                switch (mode)
                 {
                     case StopMode.SaveAs: await OfferSaveAsync(filePath); break;
                     case StopMode.Save: await SilentSaveAsync(filePath); break;
@@ -458,6 +538,7 @@ public sealed class RecordingController
                 var failedTemp = _service.TempPath;
                 try { _service.Dispose(); } catch { }
                 TryDiscard(failedTemp);
+                if (_appAudioPath != null) TryDelete(_appAudioPath);
                 try
                 {
                     StartService(overrideCodec: "H.264");
@@ -484,6 +565,23 @@ public sealed class RecordingController
             _service = null;
             await SalvageAsync(temp, discard, unplayableKey: null);
         });
+    }
+
+    // Joins the app's own audio to the video; on failure the recording is kept with its own audio only.
+    private async Task<string> AddAppAudioAsync(string video)
+    {
+        var pcm = _appAudioPath;
+        if (pcm == null || !File.Exists(pcm) || !File.Exists(video)) return video;
+        var mixed = Path.Combine(Path.GetDirectoryName(video)!, Path.GetFileNameWithoutExtension(video) + "_app.mp4");
+        bool hasAudio = _service?.HasAudioTrack ?? false;
+        if (await FFmpegService.Instance.AddAppAudioAsync(video, pcm, hasAudio, mixed) && NonEmpty(mixed))
+        {
+            TryDiscard(video);
+            return mixed;
+        }
+        Diagnostics.Log("Adding the app audio failed; keeping the recording without it");
+        NotificationService.Warning("WarnAppAudioMuxFailed");
+        return video;
     }
 
     private async Task SilentSaveAsync(string tempPath)
@@ -680,9 +778,12 @@ public sealed class RecordingController
             var tempPath = _service?.TempPath;
             try { _service?.Dispose(); } catch (Exception ex) { Diagnostics.Log("Cleanup service.Dispose", ex); }
             if (discardTemp && !string.IsNullOrEmpty(tempPath)) TryDiscard(tempPath);
+            if (_appAudioPath != null) TryDelete(_appAudioPath);
         }
         finally
         {
+            _windowWatch?.Stop();
+            _windowWatch = null;
             _hud = null;
             _service = null;
             _stopping = true;
@@ -752,6 +853,7 @@ public sealed class RecordingController
                     }
                 }
                 foreach (var file in Directory.GetFiles(dir, "palette_*.png")) TryDelete(file);
+                foreach (var file in Directory.GetFiles(dir, "recording_*.pcm")) TryDelete(file);
                 foreach (var file in Directory.GetFiles(dir, "discard_*")) TryDelete(file);
                 foreach (var file in Directory.GetFiles(dir, "*" + DiscardMarker))
                     if (!File.Exists(file[..^DiscardMarker.Length])) TryDelete(file);

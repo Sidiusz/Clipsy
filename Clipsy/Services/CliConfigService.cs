@@ -52,6 +52,8 @@ internal static class CliConfigService
         ["hotkey.record-save"] = new(nameof(AppSettings.HotkeyRecordSilentSave), Kind: Kind.OptionalGlobalHotkey),
         ["hotkey.mic"] = new(nameof(AppSettings.HotkeyMicToggle), Kind: Kind.OptionalGlobalHotkey),
         ["hotkey.quick-screenshot"] = new(nameof(AppSettings.HotkeyQuickScreenshot), Kind: Kind.OptionalGlobalHotkey),
+        ["hotkey.record-window"] = new(nameof(AppSettings.HotkeyQuickRecordWindow), Kind: Kind.OptionalGlobalHotkey),
+        ["hotkey.record-screen"] = new(nameof(AppSettings.HotkeyQuickRecordScreen), Kind: Kind.OptionalGlobalHotkey),
         ["translation.service"] = new(nameof(AppSettings.TranslateService), ["Bing", "Google", "MyMemory"]),
         ["translation.from"] = new(nameof(AppSettings.TranslateFrom), Kind: Kind.TranslateFrom),
         ["translation.to"] = new(nameof(AppSettings.TranslateTo), Kind: Kind.TranslateTo),

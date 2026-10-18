@@ -12,6 +12,36 @@ public static class QuickCaptureService
 {
     private static int _screenshotBusy;
 
+    /// <summary>Starts recording the window the user is in, or stops and saves the running recording.</summary>
+    public static void ToggleRecordActiveWindow()
+    {
+        if (StopRunningRecording()) return;
+        var target = WindowTargets.Foreground();
+        if (target == null)
+        {
+            NotificationService.Info("InfoNoWindowToRecord");
+            return;
+        }
+        RecordingController.TryStartWindow(target.Hwnd, quick: true);
+    }
+
+    /// <summary>Starts recording the monitor under the cursor, or stops and saves the running recording.</summary>
+    public static void ToggleRecordScreenUnderCursor()
+    {
+        if (StopRunningRecording()) return;
+        var monitor = ScreenFreezeService.MonitorUnderCursor(ScreenFreezeService.EnumerateMonitors());
+        if (monitor == null) return;
+        var b = monitor.Bounds;
+        RecordingController.TryStart(b.X, b.Y, b.Width, b.Height, quick: true);
+    }
+
+    private static bool StopRunningRecording()
+    {
+        if (!RecordingController.IsRecording) return false;
+        RecordingController.Current?.StopFromHotkey();
+        return true;
+    }
+
     /// <summary>Saves the monitor under the cursor to the screenshot folder and shows the saved toast.</summary>
     public static void ScreenshotUnderCursor()
     {

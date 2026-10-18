@@ -78,6 +78,8 @@ public sealed partial class SettingsWindow
             case "record-save": _draft.HotkeyRecordSilentSave = binding; break;
             case "mic-toggle":  _draft.HotkeyMicToggle = binding; break;
             case "quick-screenshot": _draft.HotkeyQuickScreenshot = binding; break;
+            case "record-window": _draft.HotkeyQuickRecordWindow = binding; break;
+            case "record-screen": _draft.HotkeyQuickRecordScreen = binding; break;
         }
     }
 
@@ -93,11 +95,14 @@ public sealed partial class SettingsWindow
         "record-save" => s.HotkeyRecordSilentSave,
         "mic-toggle" => s.HotkeyMicToggle,
         "quick-screenshot" => s.HotkeyQuickScreenshot,
+        "record-window" => s.HotkeyQuickRecordWindow,
+        "record-screen" => s.HotkeyQuickRecordScreen,
         _ => string.Empty,
     };
 
     // Registered system-wide (the rest only work inside the capture overlay).
-    private static bool IsGlobalHotkey(string key) => key is "capture" or "record-save" or "mic-toggle" or "quick-screenshot";
+    private static bool IsGlobalHotkey(string key) => key is "capture" or "record-save" or "mic-toggle" or "quick-screenshot"
+        or "record-window" or "record-screen";
 
     private void BuildHotkeyRows()
     {
@@ -114,7 +119,9 @@ public sealed partial class SettingsWindow
             ("copy", "HkCopy", _draft.HotkeyCopy, null),
             ("select-all", "HkSelectAll", _draft.HotkeySelectAll, null),
             ("select-monitor", "HkSelectMonitor", _draft.HotkeySelectMonitor, null),
-            ("record-save", "HkRecordSave", _draft.HotkeyRecordSilentSave, "HkGroupVideo"),
+            ("record-window", "HkRecordWindow", _draft.HotkeyQuickRecordWindow, "HkGroupVideo"),
+            ("record-screen", "HkRecordScreen", _draft.HotkeyQuickRecordScreen, null),
+            ("record-save", "HkRecordSave", _draft.HotkeyRecordSilentSave, null),
             ("mic-toggle", "HkMicToggle", _draft.HotkeyMicToggle, null),
         };
         for (int i = 0; i < specs.Length; i++)
@@ -133,7 +140,7 @@ public sealed partial class SettingsWindow
                 GroupBorder = i == 0 ? new Thickness(0, 0, 0, 1) : new Thickness(0, 1, 0, 1),
                 SeparatorVisibility = lastInGroup ? Visibility.Collapsed : Visibility.Visible,
                 IsGlobal = IsGlobalHotkey(s.Key),
-                CanClear = s.Key is "record-save" or "mic-toggle" or "quick-screenshot",
+                CanClear = s.Key is not "capture" && IsGlobalHotkey(s.Key),
                 ClearTip = Strings.Get("HkClear"),
                 DefaultTip = Strings.Get("HkDefault"),
             };

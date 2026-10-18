@@ -145,6 +145,15 @@ public sealed partial class RecordingHudWindow : Window
 
     public IntPtr Hwnd => _hwnd;
 
+    /// <summary>Window recordings follow the window: no region lock, and drawings wouldn't be captured.</summary>
+    public void HideRegionTools()
+    {
+        DrawSep.Visibility = Visibility.Collapsed;
+        DrawBtn.Visibility = Visibility.Collapsed;
+        DrawColorBtn.Visibility = Visibility.Collapsed;
+        LockBtn.Visibility = Visibility.Collapsed;
+    }
+
     public void Start()
     {
         _startedAt = DateTime.UtcNow;

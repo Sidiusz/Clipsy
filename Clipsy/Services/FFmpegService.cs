@@ -147,6 +147,23 @@ public sealed class FFmpegService
     public Task<bool> RemuxAsync(string input, string output, CancellationToken ct = default)
         => RunToFileAsync(new List<string> { "-i", input, "-map", "0", "-c", "copy" }, output, ct);
 
+    /// <summary>Adds a recorded app's raw audio to a recording, mixed with the recording's own (mic) track
+    /// when it has one. The video stream is copied; the audio is padded to the video's length.</summary>
+    public Task<bool> AddAppAudioAsync(string video, string rawPcm, bool videoHasAudio, string output, CancellationToken ct = default)
+    {
+        if (!IsAvailable) return Task.FromResult(false);
+        var filter = videoHasAudio
+            ? "[1:a]apad[app];[0:a][app]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]"
+            : "[1:a]apad[a]";
+        return RunToFileAsync(new List<string>
+        {
+            "-i", video,
+            "-f", "s16le", "-ar", ProcessAudioCapture.SampleRate.ToString(), "-ac", ProcessAudioCapture.Channels.ToString(), "-i", rawPcm,
+            "-filter_complex", filter, "-map", "0:v", "-map", "[a]",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart",
+        }, output, ct);
+    }
+
     /// <summary>Re-encodes a finished H.264 recording to VP9 or AV1 (Opus audio) in MKV.</summary>
     public async Task<bool> TranscodeAsync(string input, string output, string codec, int bitrateMbps, CancellationToken ct = default)
     {

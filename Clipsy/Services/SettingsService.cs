@@ -38,6 +38,7 @@ public sealed class AppSettings
     public string VideoResolution { get; set; } = "1080p";  // 480p / 720p / 1080p / 1440p / Original
     public int VideoFramerate { get; set; } = 60;           // 15 / 30 / 60 / 0 = native (display refresh rate)
     public int VideoBitrateMbps { get; set; } = 8;
+    public string WindowAudio { get; set; } = "app";        // window recordings: app (only that app) / system
 
     // Microphone
     public bool MicrophoneEnabled { get; set; } = true;
@@ -76,6 +77,8 @@ public sealed class AppSettings
     public string HotkeySelectMonitor { get; set; } = "Ctrl+B";
     public string HotkeyRecordSilentSave { get; set; } = ""; // disabled by default
     public string HotkeyQuickScreenshot { get; set; } = "";  // screen under cursor, no overlay
+    public string HotkeyQuickRecordWindow { get; set; } = ""; // start/stop recording the active window
+    public string HotkeyQuickRecordScreen { get; set; } = ""; // start/stop recording the screen under cursor
 
     // Updates
     public DateTime LastUpdateCheckUtc { get; set; } = DateTime.MinValue;
@@ -289,6 +292,7 @@ public sealed class SettingsService
         s.VideoCodec = OneOf(s.VideoCodec, "H.264", "H.264", "H.265", "VP9", "AV1");
         s.VideoResolution = OneOf(s.VideoResolution, "1080p", "480p", "720p", "1080p", "1440p", "Original");
         s.UpdateInterval = OneOf(s.UpdateInterval, "daily", "hourly", "daily", "weekly", "monthly", "never");
+        s.WindowAudio = OneOf(s.WindowAudio, "app", "app", "system");
         s.AfterSaveAction = OneOf(s.AfterSaveAction, "nothing", "open-file", "open-folder", "nothing");
         s.JpgQuality = Math.Clamp(s.JpgQuality, 50, 100);
         s.VideoFramerate = s.VideoFramerate == 0 ? 0 : Math.Clamp(s.VideoFramerate, 10, 240);
@@ -303,6 +307,8 @@ public sealed class SettingsService
         s.HotkeyRecordSilentSave = ValidHotkey(s.HotkeyRecordSilentSave, d.HotkeyRecordSilentSave, global: true,  optional: true);
         s.HotkeyMicToggle        = ValidHotkey(s.HotkeyMicToggle,        d.HotkeyMicToggle,        global: true,  optional: true);
         s.HotkeyQuickScreenshot  = ValidHotkey(s.HotkeyQuickScreenshot,  d.HotkeyQuickScreenshot,  global: true,  optional: true);
+        s.HotkeyQuickRecordWindow = ValidHotkey(s.HotkeyQuickRecordWindow, d.HotkeyQuickRecordWindow, global: true, optional: true);
+        s.HotkeyQuickRecordScreen = ValidHotkey(s.HotkeyQuickRecordScreen, d.HotkeyQuickRecordScreen, global: true, optional: true);
         s.HotkeyScreenshotSilent = ValidHotkey(s.HotkeyScreenshotSilent, d.HotkeyScreenshotSilent, global: false, optional: true);
         s.HotkeyCopy             = ValidHotkey(s.HotkeyCopy,             d.HotkeyCopy,             global: false, optional: true);
         s.HotkeyUndo             = ValidHotkey(s.HotkeyUndo,             d.HotkeyUndo,             global: false, optional: true);
