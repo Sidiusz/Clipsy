@@ -253,6 +253,21 @@ public sealed partial class CaptureOverlayWindow
     {
         foreach (var item in OverlayMenu.Items)
             if (item is MenuFlyoutItem or MenuFlyoutSubItem) ResetHoverOnExit(item);
+        // Which items show depends on the selection, so the stripes are laid out on every open.
+        OverlayMenu.Opening += (_, _) => StripeVisibleItems();
+    }
+
+    private void StripeVisibleItems()
+    {
+        int row = 0;
+        foreach (var item in OverlayMenu.Items)
+        {
+            if (item.Visibility != Visibility.Visible) continue;
+            if (item is MenuFlyoutSeparator) { row = 0; continue; }
+            if (item is not Control c) continue;
+            if (row++ % 2 == 1) c.Background = s_stripe;
+            else c.ClearValue(Control.BackgroundProperty);
+        }
     }
 
     private void BuildWindowMenu()
@@ -283,6 +298,7 @@ public sealed partial class CaptureOverlayWindow
         MenuSave.Visibility = vis;
         MenuSaveAs.Visibility = vis;
         MenuClear.Visibility = vis;
+        StripeVisibleItems();
     }
 
     private void OnMenuSelectScreen(object sender, RoutedEventArgs e)
