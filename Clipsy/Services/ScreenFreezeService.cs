@@ -95,6 +95,34 @@ public sealed class ScreenFreezeService
         };
     }
 
+    /// <summary>A copy of <paramref name="frame"/> with <paramref name="image"/> drawn over <paramref name="bounds"/>
+    /// (physical screen pixels). A larger image is centered: window captures can include invisible borders.</summary>
+    public static FrozenFrame WithImageAt(FrozenFrame frame, ScreenshotRenderer.RenderedImage image, Rectangle bounds)
+    {
+        var pixels = (byte[])frame.PixelBytes.Clone();
+        int stride = frame.PixelWidth * 4;
+        int offX = Math.Max(0, (image.Width - bounds.Width) / 2);
+        int offY = Math.Max(0, (image.Height - bounds.Height) / 2);
+        var target = Rectangle.Intersect(
+            new Rectangle(bounds.X - frame.VirtualBounds.X, bounds.Y - frame.VirtualBounds.Y,
+                Math.Min(bounds.Width, image.Width - offX), Math.Min(bounds.Height, image.Height - offY)),
+            new Rectangle(0, 0, frame.PixelWidth, frame.PixelHeight));
+        int srcX0 = offX + target.X - (bounds.X - frame.VirtualBounds.X);
+        int srcY0 = offY + target.Y - (bounds.Y - frame.VirtualBounds.Y);
+        for (int y = 0; y < target.Height; y++)
+            Buffer.BlockCopy(image.Bgra, ((srcY0 + y) * image.Width + srcX0) * 4,
+                pixels, (target.Y + y) * stride + target.X * 4, target.Width * 4);
+        return new FrozenFrame
+        {
+            PixelBytes = pixels,
+            PixelWidth = frame.PixelWidth,
+            PixelHeight = frame.PixelHeight,
+            VirtualBounds = frame.VirtualBounds,
+            Monitors = frame.Monitors,
+            Windows = frame.Windows,
+        };
+    }
+
     internal static void ForceOpaque(byte[] bgra)
     {
         var px = MemoryMarshal.Cast<byte, uint>(bgra.AsSpan());

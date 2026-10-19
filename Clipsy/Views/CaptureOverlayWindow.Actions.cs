@@ -104,6 +104,7 @@ public sealed partial class CaptureOverlayWindow
 
     private async Task SaveSilentAsync()
     {
+        await WaitForWindowPaintAsync();
         if (!TryBeginBusy()) return;
         var job = SnapshotRenderJob();
         try
@@ -131,6 +132,7 @@ public sealed partial class CaptureOverlayWindow
 
     private async Task SaveAsAsync()
     {
+        await WaitForWindowPaintAsync();
         if (!TryBeginBusy()) return;
         var job = SnapshotRenderJob();
         try
@@ -198,6 +200,7 @@ public sealed partial class CaptureOverlayWindow
 
     private async Task CopyAsync()
     {
+        await WaitForWindowPaintAsync();
         if (!TryBeginBusy()) return;
         var job = SnapshotRenderJob();
         try

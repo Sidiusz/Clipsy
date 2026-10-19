@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using Clipsy.Drawing;
 using Clipsy.Services;
 using Microsoft.UI.Xaml;
@@ -21,8 +22,37 @@ public sealed partial class CaptureOverlayWindow
         if (hit == null) return false;
         _selectionRect = ClampToRoot(ToRoot(hit.Bounds));
         _selectedWindow = hit;
+        _ = ShowPickedWindowAsync(hit);
         return true;
     }
+
+    private Task _windowPaint = Task.CompletedTask;
+
+    // The frozen screen shows whatever covered the window; swap in the window's own pixels so the
+    // overlay, Copy and Save all show the picked app.
+    private Task ShowPickedWindowAsync(WindowTargets.Target w)
+    {
+        int session = _session;
+        var frame = _frame;
+        return _windowPaint = Task.Run(() =>
+        {
+            try { return ScreenFreezeService.WithImageAt(frame, ModernScreenCaptureService.CaptureWindow(w.Hwnd), w.Bounds); }
+            catch (Exception ex)
+            {
+                Diagnostics.Log("Picked window capture failed; keeping the frozen screen", ex);
+                return null;
+            }
+        }).ContinueWith(t =>
+        {
+            if (t.Result is not { } patched || session != _session || !ReferenceEquals(frame, _frame)) return;
+            _frame = patched;
+            _eyedropperPixels = null;
+            TryLoadFrozenImage();
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    // Copy/Save right after picking must not render the frame from before the window was swapped in.
+    private Task WaitForWindowPaintAsync() => _windowPaint.IsCompleted ? Task.CompletedTask : _windowPaint;
 
     /// <summary>Selects a window from the context menu, even one hidden behind others.</summary>
     private void SelectWindow(WindowTargets.Target w)
@@ -31,6 +61,7 @@ public sealed partial class CaptureOverlayWindow
         _selectedWindow = w;
         _selectionFromFallback = false;
         ShowSelectedWindowBadge();
+        _ = ShowPickedWindowAsync(w);
     }
 
     // Moving, resizing or replacing the selection turns it back into a plain region.

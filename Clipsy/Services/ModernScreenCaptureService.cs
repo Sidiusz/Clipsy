@@ -93,10 +93,30 @@ internal static class ModernScreenCaptureService
         };
     }
 
-    private static async Task<CapturedMonitor> CaptureMonitorAsync(
-        IDirect3DDevice device, IntPtr hMonitor, bool includeCursor)
+    /// <summary>The window's own pixels, even where other windows cover it (minimized windows have none).</summary>
+    public static ScreenshotRenderer.RenderedImage CaptureWindow(IntPtr hwnd)
     {
-        var item = CreateItemForMonitor(hMonitor);
+        if (!IsSupported) throw new NotSupportedException("Windows Graphics Capture is not supported.");
+        int hr = RoInitialize(RO_INIT_MULTITHREADED);
+        bool uninitialize = hr >= 0;
+        if (hr < 0 && hr != RPC_E_CHANGED_MODE) Marshal.ThrowExceptionForHR(hr);
+        try
+        {
+            IDirect3DDevice device;
+            lock (_deviceLock) device = _device ??= CreateDirect3DDevice();
+            var captured = CaptureItemAsync(device, CreateItem(hwnd, window: true), includeCursor: false).GetAwaiter().GetResult();
+            ScreenFreezeService.ForceOpaque(captured.Bytes);
+            return new ScreenshotRenderer.RenderedImage(captured.Bytes, captured.Width, captured.Height);
+        }
+        finally { if (uninitialize) RoUninitialize(); }
+    }
+
+    private static Task<CapturedMonitor> CaptureMonitorAsync(IDirect3DDevice device, IntPtr hMonitor, bool includeCursor)
+        => CaptureItemAsync(device, CreateItem(hMonitor, window: false), includeCursor);
+
+    private static async Task<CapturedMonitor> CaptureItemAsync(
+        IDirect3DDevice device, GraphicsCaptureItem item, bool includeCursor)
+    {
         var size = item.Size;
         using var pool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             device, DirectXPixelFormat.B8G8R8A8UIntNormalized, 1, size);
@@ -258,7 +278,7 @@ internal static class ModernScreenCaptureService
         return list;
     }
 
-    private static GraphicsCaptureItem CreateItemForMonitor(IntPtr hMonitor)
+    private static GraphicsCaptureItem CreateItem(IntPtr handle, bool window)
     {
         const string className = "Windows.Graphics.Capture.GraphicsCaptureItem";
         int hr = WindowsCreateString(className, className.Length, out var hstring);
@@ -272,9 +292,11 @@ internal static class ModernScreenCaptureService
             if (hr < 0) Marshal.ThrowExceptionForHR(hr);
             var interop = (IGraphicsCaptureItemInterop)Marshal.GetObjectForIUnknown(factoryPtr);
             var itemIid = GraphicsCaptureItemGuid;
-            hr = interop.CreateForMonitor(hMonitor, ref itemIid, out itemPtr);
+            hr = window
+                ? interop.CreateForWindow(handle, ref itemIid, out itemPtr)
+                : interop.CreateForMonitor(handle, ref itemIid, out itemPtr);
             if (hr < 0) Marshal.ThrowExceptionForHR(hr);
-            if (itemPtr == IntPtr.Zero) throw new InvalidOperationException("CreateForMonitor returned null.");
+            if (itemPtr == IntPtr.Zero) throw new InvalidOperationException("Capture item creation returned null.");
             return MarshalInspectable<GraphicsCaptureItem>.FromAbi(itemPtr);
         }
         finally
