@@ -481,19 +481,31 @@ public sealed class DrawingController
         {
             case StrokeElement s: DrawStroke(ds, s); break;
             case RectangleElement r:
-                ds.DrawRectangle((float)r.Bounds.X, (float)r.Bounds.Y,
-                    (float)r.Bounds.Width, (float)r.Bounds.Height, r.Color, (float)r.Thickness);
+            {
+                var b = StrokeInside(r.Bounds, r.Thickness);
+                ds.DrawRectangle((float)b.X, (float)b.Y, (float)b.Width, (float)b.Height, r.Color, (float)r.Thickness);
                 break;
+            }
             case EllipseElement e:
+            {
+                var b = StrokeInside(e.Bounds, e.Thickness);
                 ds.DrawEllipse(
-                    (float)(e.Bounds.X + e.Bounds.Width * 0.5),
-                    (float)(e.Bounds.Y + e.Bounds.Height * 0.5),
-                    (float)(e.Bounds.Width * 0.5), (float)(e.Bounds.Height * 0.5),
+                    (float)(b.X + b.Width * 0.5), (float)(b.Y + b.Height * 0.5),
+                    (float)(b.Width * 0.5), (float)(b.Height * 0.5),
                     e.Color, (float)e.Thickness);
                 break;
+            }
             case LineElement line: DrawLine(ds, line); break;
             case TextElement t: DrawText(ds, t); break;
         }
+    }
+
+    // Win2D centers the stroke on the edge; the XAML preview keeps it inside the dragged bounds.
+    internal static Rect StrokeInside(Rect bounds, double thickness)
+    {
+        double half = thickness * 0.5;
+        return new Rect(bounds.X + half, bounds.Y + half,
+            System.Math.Max(0, bounds.Width - thickness), System.Math.Max(0, bounds.Height - thickness));
     }
 
     private static void DrawStroke(CanvasDrawingSession ds, StrokeElement s)
