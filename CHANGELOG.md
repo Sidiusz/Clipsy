@@ -4,6 +4,13 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.0.10
+
+Recording a single window with only that app's sound, window picking in the capture overlay, hotkeys
+for an instant screenshot and for starting or stopping recordings without the overlay, a Copy button
+on the screenshot notification, and shapes that no longer grow on release.
+See [1.0.10.md](.github/release-notes/1.0.10.md).
+
 ## 1.0.9
 
 Screenshots through Windows Graphics Capture by default, which removes blocks in dark areas of video,
