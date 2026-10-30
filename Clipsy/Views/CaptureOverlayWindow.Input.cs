@@ -17,7 +17,7 @@ public sealed partial class CaptureOverlayWindow
 
     private long _lastClickTick;
     private Point _lastClickPos;
-    private bool _selectionFromFallback;
+    private Rect[] _moveMonitorBounds = Array.Empty<Rect>();
     private string? _textPreviewMeasureFont;
     private double _textPreviewMeasureSize = -1;
     private double _textPreviewMeasureWidth;
@@ -107,10 +107,9 @@ public sealed partial class CaptureOverlayWindow
 
         if (!lmb) return;
 
-        // Double-click snaps to the monitor under the cursor; detected manually
-        // and checked first (the first click drops a fallback selection).
+        // Only a double-click snaps to the monitor under the cursor.
         long nowTick = Environment.TickCount64;
-        bool isDouble = nowTick - _lastClickTick <= GetDoubleClickTime()
+        bool isDouble = _lastClickTick != 0 && nowTick - _lastClickTick <= GetDoubleClickTime()
             && System.Math.Abs(pos.X - _lastClickPos.X) < 8
             && System.Math.Abs(pos.Y - _lastClickPos.Y) < 8;
         _lastClickTick = nowTick;
@@ -144,24 +143,30 @@ public sealed partial class CaptureOverlayWindow
         if (_hasSelection && IsInsideSelection(pos))
         {
             _mode = InteractionMode.MovingSelection;
+            _moveMonitorBounds = _frame.Monitors.Select(m => ToRoot(m.Bounds)).ToArray();
             _selectionAtDragStart = _selectionRect;
             _dragStart = pos;
             RootGrid.CapturePointer(e.Pointer);
             return;
         }
 
-        // Outside or no selection: start new selection. Existing drawings and
-        // text stay in root coordinates, so reselecting only changes the crop.
+        _dragStart = pos;
+        // A single click never selects a window or creates a region. Wait for
+        // a drag regardless of whether a selection already exists.
+        _mode = InteractionMode.PendingSelection;
+        RootGrid.CapturePointer(e.Pointer);
+    }
+
+    private void BeginNewSelection()
+    {
         _mode = InteractionMode.SelectingNew;
         _hasSelection = false;
         ResetWindowPick();
-        _dragStart = pos;
-        _selectionRect = new Rect(pos.X, pos.Y, 0, 0);
+        _selectionRect = new Rect(_dragStart.X, _dragStart.Y, 0, 0);
         // Old islands must not linger frozen in place while a new region is dragged.
         HideToolbars();
         UpdateSelectionVisual();
         Hint.Visibility = Visibility.Collapsed;
-        RootGrid.CapturePointer(e.Pointer);
     }
 
     private void OnRootPointerMoved(object sender, PointerRoutedEventArgs e)
@@ -210,6 +215,10 @@ public sealed partial class CaptureOverlayWindow
 
         switch (_mode)
         {
+            case InteractionMode.PendingSelection:
+                if (!SelectionGesture.IsDrag(_dragStart, pos)) break;
+                BeginNewSelection();
+                goto case InteractionMode.SelectingNew;
             case InteractionMode.SelectingNew:
                 _selectionRect = MakeRect(_dragStart, pos);
                 // Coalesce to one visual update per composition frame, else
@@ -218,14 +227,11 @@ public sealed partial class CaptureOverlayWindow
                 break;
             case InteractionMode.MovingSelection:
             {
-                // Keep the whole selection on the captured frame; pixels outside it don't exist.
-                double maxX = System.Math.Max(0, RootGrid.ActualWidth - _selectionAtDragStart.Width);
-                double maxY = System.Math.Max(0, RootGrid.ActualHeight - _selectionAtDragStart.Height);
-                _selectionRect = new Rect(
-                    System.Math.Clamp(_selectionAtDragStart.X + pos.X - _dragStart.X, 0, maxX),
-                    System.Math.Clamp(_selectionAtDragStart.Y + pos.Y - _dragStart.Y, 0, maxY),
-                    _selectionAtDragStart.Width,
-                    _selectionAtDragStart.Height);
+                _selectionRect = MonitorSelectionBounds.Move(_selectionAtDragStart,
+                    _selectionAtDragStart.X + pos.X - _dragStart.X,
+                    _selectionAtDragStart.Y + pos.Y - _dragStart.Y,
+                    new Rect(0, 0, RootGrid.ActualWidth, RootGrid.ActualHeight),
+                    _moveMonitorBounds);
                 if (_selectionRect != _selectionAtDragStart) ClearSelectedWindow();
                 RequestSelectionVisualUpdate();
                 break;
@@ -365,27 +371,37 @@ public sealed partial class CaptureOverlayWindow
 
     private void FinishPointerInteraction(Point pos)
     {
+        if (_mode == InteractionMode.PendingSelection)
+        {
+            // No visual or selection state changes for an outside click,
+            // including small pointer jitter and capture cancellation.
+            if (!SelectionGesture.IsDrag(_dragStart, pos))
+            {
+                _mode = InteractionMode.Idle;
+                return;
+            }
+            // The release can carry movement for which no move event arrived.
+            BeginNewSelection();
+        }
+        // A drag is not the first click of a double-click, even if the next
+        // press lands near where that drag started.
+        if (_mode is InteractionMode.SelectingNew or InteractionMode.MovingSelection or InteractionMode.ResizingSelection
+            && SelectionGesture.IsDrag(_dragStart, pos))
+            _lastClickTick = 0;
         switch (_mode)
         {
             case InteractionMode.SelectingNew:
             {
-                var rect = MakeRect(_dragStart, pos);
-                if (rect.Width < MinSelectionSize && rect.Height < MinSelectionSize && TrySelectWindowAt(_dragStart))
+                var rect = ClampToRoot(MakeRect(_dragStart, pos));
+                ResetWindowPick();
+                // Dragged back to the start or into a sliver: nothing to crop.
+                if (!SelectionGesture.IsUsable(rect))
                 {
-                    rect = _selectionRect;
-                    _selectionFromFallback = true; // a double-click may still replace it with a full monitor
+                    _selectionRect = default;
+                    UpdateSelectionVisual();
+                    Hint.Visibility = Visibility.Visible;
+                    break;
                 }
-                else if (rect.Width < MinSelectionSize && rect.Height < MinSelectionSize)
-                {
-                    // Shifted to stay on the frame near a screen edge.
-                    double x = System.Math.Clamp(_dragStart.X - SingleClickFallbackSize / 2,
-                        0, System.Math.Max(0, RootGrid.ActualWidth - SingleClickFallbackSize));
-                    double y = System.Math.Clamp(_dragStart.Y - SingleClickFallbackSize / 2,
-                        0, System.Math.Max(0, RootGrid.ActualHeight - SingleClickFallbackSize));
-                    rect = ClampToRoot(new Rect(x, y, SingleClickFallbackSize, SingleClickFallbackSize));
-                    _selectionFromFallback = true; // a double-click may replace it with a full monitor
-                }
-                else _selectionFromFallback = false;
                 _selectionRect = rect;
                 _hasSelection = true;
                 // Dynamic islands anchor to the corner where the drag ended.
@@ -400,6 +416,7 @@ public sealed partial class CaptureOverlayWindow
                 UpdateSelectionVisual();
                 break;
             case InteractionMode.ResizingSelection:
+                if (!SelectionGesture.IsUsable(_selectionRect)) _selectionRect = _selectionAtDragStart;
                 // Re-anchor to the dragged handle's corner/edge.
                 switch (_activeHandle)
                 {

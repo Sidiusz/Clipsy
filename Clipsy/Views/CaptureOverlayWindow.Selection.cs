@@ -418,7 +418,6 @@ public sealed partial class CaptureOverlayWindow
         SetSelection(new Rect(
             (monitor.Bounds.X - b.X) * sx, (monitor.Bounds.Y - b.Y) * sy,
             monitor.Bounds.Width * sx, monitor.Bounds.Height * sy));
-        _selectionFromFallback = false;
         return true;
     }
 
@@ -428,9 +427,7 @@ public sealed partial class CaptureOverlayWindow
     {
         if (_inOcrMode || _eyedropperActive) return false;
         if (_drawing.Settings.Tool != ToolKind.None) return false;
-        // The first click dropped a 100x100 fallback under the cursor, so only a
-        // deliberate (dragged) selection blocks monitor-snap.
-        if (_hasSelection && !_selectionFromFallback && IsInsideSelection(pos)) return false;
+        if (_hasSelection && IsInsideSelection(pos)) return false;
 
         var b = _frame.VirtualBounds;
         // Map physical px → RootGrid coords via the grid's own ratio, not

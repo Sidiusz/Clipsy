@@ -4,27 +4,15 @@ using Clipsy.Drawing;
 using Clipsy.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Point = Windows.Foundation.Point;
 using Rect = Windows.Foundation.Rect;
 
 namespace Clipsy.Views;
 
-/// <summary>Window picking: a click (no drag) on a window selects it, as does the "Select app" menu.
+/// <summary>Window picking through the "Select app" menu.
 /// Recording that selection records the window itself, with its own sound.</summary>
 public sealed partial class CaptureOverlayWindow
 {
     private WindowTargets.Target? _selectedWindow;
-
-    /// <summary>A click without a drag: select the window under it. False when there is none.</summary>
-    private bool TrySelectWindowAt(Point pos)
-    {
-        var hit = WindowAt(pos);
-        if (hit == null) return false;
-        _selectionRect = ClampToRoot(ToRoot(hit.Bounds));
-        _selectedWindow = hit;
-        _ = ShowPickedWindowAsync(hit);
-        return true;
-    }
 
     private Task _windowPaint = Task.CompletedTask;
 
@@ -59,7 +47,6 @@ public sealed partial class CaptureOverlayWindow
     {
         SetSelection(ClampToRoot(ToRoot(w.Bounds)));
         _selectedWindow = w;
-        _selectionFromFallback = false;
         ShowSelectedWindowBadge();
         _ = ShowPickedWindowAsync(w);
     }
@@ -81,18 +68,6 @@ public sealed partial class CaptureOverlayWindow
     }
 
     private void ResetWindowPick() => ClearSelectedWindow();
-
-    private WindowTargets.Target? WindowAt(Point pos)
-    {
-        var b = _frame.VirtualBounds;
-        double gw = RootGrid.ActualWidth, gh = RootGrid.ActualHeight;
-        if (gw <= 0 || gh <= 0 || b.Width <= 0 || b.Height <= 0) return null;
-        int x = b.X + (int)(pos.X * b.Width / gw);
-        int y = b.Y + (int)(pos.Y * b.Height / gh);
-        foreach (var w in _frame.Windows)
-            if (w.Bounds.Contains(x, y)) return w;
-        return null;
-    }
 
     // Physical virtual-screen pixels → overlay coordinates, by the grid's own ratio like monitor snapping.
     private Rect ToRoot(System.Drawing.Rectangle r)

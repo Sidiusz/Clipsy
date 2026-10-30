@@ -35,11 +35,9 @@ namespace Clipsy.Views;
 // .ColorPicker/.Actions/.Ocr (+ this file: ctor, window setup, win32 interop).
 public sealed partial class CaptureOverlayWindow : Window
 {
-    private enum InteractionMode { Idle, SelectingNew, MovingSelection, ResizingSelection, DrawingStroke, DrawingRect, Erasing, PlacingText, MovingText, MovingElement }
+    private enum InteractionMode { Idle, PendingSelection, SelectingNew, MovingSelection, ResizingSelection, DrawingStroke, DrawingRect, Erasing, PlacingText, MovingText, MovingElement }
     private enum HandlePos { TL, T, TR, R, BR, B, BL, L }
 
-    private const double MinSelectionSize = 4.0;
-    private const double SingleClickFallbackSize = 100.0;
     private const double HandleSize = 10.0;
     private const double HandleHitInflate = 6.0;
 
@@ -319,7 +317,6 @@ public sealed partial class CaptureOverlayWindow : Window
 
         _hasSelection = false;
         ResetWindowPick();
-        _selectionFromFallback = false;
         _selectionRect = default;
         _selectionAtDragStart = default;
         _lastClickTick = 0;
