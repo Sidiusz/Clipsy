@@ -196,10 +196,11 @@ public sealed partial class CaptureOverlayWindow
         _activeStroke = null;
     }
 
-    private void UpdateActiveShape(Point pos)
+    private void UpdateActiveShape(Point pos, bool constrain)
     {
         if (_activeArrowVisual != null)
         {
+            pos = ShapeGeometry.LineEnd(_activeRectAnchor, pos, constrain);
             _activeArrowEnd = pos;
             _activeArrowVisual.Data = BuildArrowGeometry(_activeRectAnchor, pos, _activeArrowVisual.StrokeThickness);
             return;
@@ -207,16 +208,15 @@ public sealed partial class CaptureOverlayWindow
 
         if (_activeLineVisual != null)
         {
+            pos = ShapeGeometry.LineEnd(new Point(_activeLineVisual.X1, _activeLineVisual.Y1), pos, constrain);
             _activeLineVisual.X2 = pos.X;
             _activeLineVisual.Y2 = pos.Y;
             return;
         }
 
         if (_activeRectVisual == null) return;
-        double x = System.Math.Min(_activeRectAnchor.X, pos.X);
-        double y = System.Math.Min(_activeRectAnchor.Y, pos.Y);
-        double w = System.Math.Abs(pos.X - _activeRectAnchor.X);
-        double h = System.Math.Abs(pos.Y - _activeRectAnchor.Y);
+        var bounds = ShapeGeometry.Bounds(_activeRectAnchor, pos, constrain);
+        double x = bounds.X, y = bounds.Y, w = bounds.Width, h = bounds.Height;
         Canvas.SetLeft(_activeRectVisual, x);
         Canvas.SetTop(_activeRectVisual, y);
         // Below the stroke thickness an ellipse degenerates into a strip; hide

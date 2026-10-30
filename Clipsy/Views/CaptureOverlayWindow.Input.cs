@@ -179,7 +179,9 @@ public sealed partial class CaptureOverlayWindow
         // releasing it (or clicking) picks the colour and returns to drawing.
         if (!_inOcrMode && _drawing.Settings.Tool != ToolKind.None && _activeTextBox == null)
         {
-            bool mod = IsEyedropperModifierDown();
+            bool mod = IsEyedropperModifierDown()
+                && !(IsShapeTool && (IsEyedropperModifierKey(VirtualKey.Shift)
+                    || IsEyedropperModifierKey(VirtualKey.LeftShift) || IsEyedropperModifierKey(VirtualKey.RightShift)));
             if (!mod) _eyedropperSuppressed = false;
             if (mod && !_eyedropperSuppressed && _mode == InteractionMode.Idle && !_tempEyedropper && !_eyedropperActive)
                 EnterTempEyedropper();
@@ -245,7 +247,7 @@ public sealed partial class CaptureOverlayWindow
                 AppendStrokeHistory(e, pos);
                 break;
             case InteractionMode.DrawingRect:
-                UpdateActiveShape(pos);
+                UpdateActiveShape(pos, (e.KeyModifiers & VirtualKeyModifiers.Shift) != 0);
                 break;
             case InteractionMode.Erasing:
                 TryEraseAt(pos);
@@ -355,8 +357,11 @@ public sealed partial class CaptureOverlayWindow
     {
         if (_mode != InteractionMode.Idle && e.Pointer.PointerId != _gesturePointerId) return;
         var pos = e.GetCurrentPoint(RootGrid).Position;
+        _lastPointerPos = pos;
         // Under lag the release event carries the stroke's last samples.
         if (_mode == InteractionMode.DrawingStroke) AppendStrokeHistory(e, pos);
+        // Commit the displayed shape. Resampling Shift here could change its
+        // proportions/angle after the final preview, especially with queued input.
         FinishPointerInteraction(pos);
         // After the mode reset: releasing capture raises PointerCaptureLost synchronously.
         RootGrid.ReleasePointerCapture(e.Pointer);
@@ -535,6 +540,13 @@ public sealed partial class CaptureOverlayWindow
     {
         if (_activeTextBox != null) return; // typing in textbox; handled by it
 
+        if (IsShiftKey(e.Key) && IsShapeTool)
+        {
+            if (_mode == InteractionMode.DrawingRect) UpdateActiveShape(_lastPointerPos, constrain: true);
+            e.Handled = true;
+            return;
+        }
+
         // Pressing the modifier alone over a draw tool enters the temp eyedropper;
         // any other key held with it is a shortcut (Ctrl+Z), so shortcuts win.
         if (!_inOcrMode && _drawing.Settings.Tool != ToolKind.None && IsEyedropperModifierDown())
@@ -664,6 +676,10 @@ public sealed partial class CaptureOverlayWindow
         return (state & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
     }
 
+    private bool IsShapeTool => _drawing.Settings.Tool is ToolKind.Rectangle or ToolKind.Ellipse or ToolKind.Line or ToolKind.Arrow;
+
+    private static bool IsShiftKey(VirtualKey key) => key is VirtualKey.Shift or VirtualKey.LeftShift or VirtualKey.RightShift;
+
     // ---------- Hold-to-eyedrop ----------
 
     private bool _tempEyedropper;
@@ -700,6 +716,8 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnKeyUp(object sender, KeyRoutedEventArgs e)
     {
+        if (IsShiftKey(e.Key) && _mode == InteractionMode.DrawingRect)
+            UpdateActiveShape(_lastPointerPos, constrain: false);
         if (!IsEyedropperModifierDown()) _eyedropperSuppressed = false;
         if (_tempEyedropper && !IsEyedropperModifierDown())
         {
