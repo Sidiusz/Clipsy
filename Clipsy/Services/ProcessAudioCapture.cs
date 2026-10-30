@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Clipsy.Services;
 
@@ -16,8 +17,8 @@ public sealed class ProcessAudioCapture : IDisposable
     // Gaps shorter than this are packet jitter, not silence.
     private const long GapToleranceFrames = SampleRate / 50;
 
-    private readonly IAudioClient _client;
-    private readonly IAudioCaptureClient _capture;
+    private readonly int _processId;
+    private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly FileStream _out;
     private readonly AutoResetEvent _packetReady = new(false);
     private readonly Thread _thread;
@@ -31,24 +32,38 @@ public sealed class ProcessAudioCapture : IDisposable
 
     public string OutputPath { get; }
 
-    /// <summary>Process loopback exists from Windows 10 2004 (build 19041).</summary>
-    public static bool IsSupported => Environment.OSVersion.Version.Build >= 19041;
+    /// <summary>Process loopback requires Windows build 20348 or newer.</summary>
+    public static bool IsSupported => Environment.OSVersion.Version.Build >= 20348;
 
-    private ProcessAudioCapture(IAudioClient client, IAudioCaptureClient capture, string outputPath)
+    private ProcessAudioCapture(int processId, string outputPath)
     {
-        _client = client;
-        _capture = capture;
+        _processId = processId;
         OutputPath = outputPath;
         _out = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read, 1 << 16);
-        Check(_client.SetEventHandle(_packetReady.SafeWaitHandle.DangerousGetHandle()));
         _thread = new Thread(CaptureLoop) { IsBackground = true, Name = "Clipsy.AppAudio", Priority = ThreadPriority.AboveNormal };
+        _thread.SetApartmentState(ApartmentState.MTA);
     }
 
     /// <summary>Opens the loopback stream for <paramref name="processId"/> and its children; throws when Windows refuses.</summary>
     public static ProcessAudioCapture Start(int processId, string outputPath)
     {
-        if (!IsSupported) throw new PlatformNotSupportedException("Process audio capture needs Windows 10 2004 or newer.");
-        var client = Activate(processId);
+        if (!IsSupported) throw new PlatformNotSupportedException("Process audio capture needs Windows build 20348 or newer.");
+        var capture = new ProcessAudioCapture(processId, outputPath);
+        try
+        {
+            capture._thread.Start();
+            capture._started.Task.GetAwaiter().GetResult();
+            return capture;
+        }
+        catch
+        {
+            capture.Dispose();
+            throw;
+        }
+    }
+
+    private static void Initialize(IAudioClient client)
+    {
         var wfx = new WAVEFORMATEX
         {
             wFormatTag = 1, nChannels = Channels, nSamplesPerSec = SampleRate,
@@ -64,12 +79,6 @@ public sealed class ProcessAudioCapture : IDisposable
         }
         finally { Marshal.FreeHGlobal(pwfx); }
 
-        var iid = typeof(IAudioCaptureClient).GUID;
-        Check(client.GetService(ref iid, out var service));
-        var capture = new ProcessAudioCapture(client, (IAudioCaptureClient)service, outputPath);
-        Check(client.Start());
-        capture._thread.Start();
-        return capture;
     }
 
     /// <summary>The video is (again) recording: audio from now on belongs to the timeline.</summary>
@@ -94,14 +103,28 @@ public sealed class ProcessAudioCapture : IDisposable
 
     private void CaptureLoop()
     {
+        // WASAPI service interfaces cannot be moved from the UI STA to this MTA.
+        // Activate, obtain, use and release both interfaces on their owning thread.
+        IAudioClient? client = null;
+        IAudioCaptureClient? capture = null;
         try
         {
+            client = Activate(_processId);
+            Initialize(client);
+            var iid = typeof(IAudioCaptureClient).GUID;
+            Check(client.GetService(ref iid, out var service));
+            capture = (IAudioCaptureClient)service;
+            Check(client.SetEventHandle(_packetReady.SafeWaitHandle.DangerousGetHandle()));
+            Check(client.Start());
+            _started.SetResult();
             while (_running)
             {
                 _packetReady.WaitOne(100);
-                while (_running && _capture.GetNextPacketSize(out uint frames) >= 0 && frames > 0)
+                while (_running)
                 {
-                    Check(_capture.GetBuffer(out IntPtr data, out uint count, out uint flags, out _, out ulong qpc100ns));
+                    Check(capture.GetNextPacketSize(out uint frames));
+                    if (frames == 0) break;
+                    Check(capture.GetBuffer(out IntPtr data, out uint count, out uint flags, out _, out ulong qpc100ns));
                     try
                     {
                         long at = qpc100ns != 0
@@ -109,13 +132,20 @@ public sealed class ProcessAudioCapture : IDisposable
                             : Stopwatch.GetTimestamp();
                         Write(data, (int)count, (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0, at);
                     }
-                    finally { _capture.ReleaseBuffer(count); }
+                    finally { Check(capture.ReleaseBuffer(count)); }
                 }
             }
         }
-        catch (Exception ex) when (_running)
+        catch (Exception ex)
         {
-            Diagnostics.Log("App audio capture stopped", ex);
+            if (!_started.TrySetException(ex) && _running)
+                Diagnostics.Log("App audio capture stopped", ex);
+        }
+        finally
+        {
+            try { client?.Stop(); } catch { }
+            if (capture != null) Marshal.ReleaseComObject(capture);
+            if (client != null) Marshal.ReleaseComObject(client);
         }
     }
 
@@ -158,11 +188,8 @@ public sealed class ProcessAudioCapture : IDisposable
         if (!_running) return;
         _running = false;
         _packetReady.Set();
-        try { _thread.Join(1000); } catch { }
-        try { _client.Stop(); } catch { }
+        _thread.Join();
         try { _out.Dispose(); } catch (Exception ex) { Diagnostics.Log("App audio file close failed", ex); }
-        try { Marshal.ReleaseComObject(_capture); } catch { }
-        try { Marshal.ReleaseComObject(_client); } catch { }
         _packetReady.Dispose();
     }
 

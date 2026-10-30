@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using Clipsy.Services;
 using Xunit;
@@ -9,15 +10,26 @@ namespace Clipsy.Tests;
 
 public class ProcessAudioCaptureTests
 {
-    [Fact]
-    public void Captures_only_after_resume_and_gets_this_process_audio()
+    [Theory]
+    [InlineData(ApartmentState.STA)]
+    [InlineData(ApartmentState.MTA)]
+    public void Captures_only_after_resume_and_gets_this_process_audio(ApartmentState apartment)
     {
         // Plays an audible tone, so it only runs when asked for.
         if (Environment.GetEnvironmentVariable("CLIPSY_AUDIO_TEST") != "1" || !ProcessAudioCapture.IsSupported) return;
         var path = Path.Combine(Path.GetTempPath(), $"clipsy_test_{Guid.NewGuid():N}.pcm");
-        ProcessAudioCapture capture;
-        try { capture = ProcessAudioCapture.Start(Environment.ProcessId, path); }
-        catch (COMException) { return; } // no audio endpoint (CI runners)
+        ProcessAudioCapture? started = null;
+        Exception? error = null;
+        var caller = new Thread(() =>
+        {
+            try { started = ProcessAudioCapture.Start(Environment.ProcessId, path); }
+            catch (Exception ex) { error = ex; }
+        });
+        caller.SetApartmentState(apartment);
+        caller.Start();
+        Assert.True(caller.Join(TimeSpan.FromSeconds(15)), "audio startup did not finish");
+        if (error != null) ExceptionDispatchInfo.Capture(error).Throw();
+        var capture = started!;
         try
         {
             var tone = GCHandle.Alloc(Tone(seconds: 1.5), GCHandleType.Pinned);
