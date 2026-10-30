@@ -21,14 +21,6 @@ public sealed partial class CaptureOverlayWindow
     private async void OnRecordClick(object sender, RoutedEventArgs e)
     {
         if (!_hasSelection) return;
-        if (_selectedWindow is { Hwnd: var hwnd } && WindowTargets.Exists(hwnd))
-        {
-            var ui = App.Current.HostWindow!.DispatcherQueue;
-            CaptureOverlayHost.Dismiss(this);
-            await Task.Delay(150);
-            ui.TryEnqueue(() => RecordingController.TryStartWindow(hwnd));
-            return;
-        }
         // Clamped to the frame: the recorder can't capture outside the virtual screen.
         var px = ScreenshotRenderer.ToPixelRect(_selectionRect, DpiScale, _frame.PixelWidth, _frame.PixelHeight);
         var b = _frame.VirtualBounds;
@@ -104,7 +96,6 @@ public sealed partial class CaptureOverlayWindow
 
     private async Task SaveSilentAsync()
     {
-        await WaitForWindowPaintAsync();
         if (!TryBeginBusy()) return;
         var job = SnapshotRenderJob();
         try
@@ -132,7 +123,6 @@ public sealed partial class CaptureOverlayWindow
 
     private async Task SaveAsAsync()
     {
-        await WaitForWindowPaintAsync();
         if (!TryBeginBusy()) return;
         var job = SnapshotRenderJob();
         try
@@ -200,7 +190,6 @@ public sealed partial class CaptureOverlayWindow
 
     private async Task CopyAsync()
     {
-        await WaitForWindowPaintAsync();
         if (!TryBeginBusy()) return;
         var job = SnapshotRenderJob();
         try
@@ -235,7 +224,6 @@ public sealed partial class CaptureOverlayWindow
             AddListItem(SelectScreenMenu, item);
             i++;
         }
-        BuildWindowMenu();
     }
 
     private static void AddListItem(MenuFlyoutSubItem list, MenuFlyoutItem item)
@@ -252,25 +240,6 @@ public sealed partial class CaptureOverlayWindow
     {
         foreach (var item in OverlayMenu.Items)
             if (item is MenuFlyoutItem or MenuFlyoutSubItem) ResetHoverOnExit(item);
-    }
-
-    private void BuildWindowMenu()
-    {
-        SelectWindowMenu.Items.Clear();
-        foreach (var w in _frame.Windows)
-        {
-            var title = w.Title.Length > 60 ? w.Title[..57] + "…" : w.Title;
-            var item = new MenuFlyoutItem { Text = string.Format(Strings.Get("MenuWindowItem"), title, w.Pid), Tag = w };
-            ToolTipService.SetToolTip(item, w.Title);
-            item.Click += OnMenuSelectWindow;
-            AddListItem(SelectWindowMenu, item);
-        }
-        SelectWindowMenu.Visibility = _frame.Windows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void OnMenuSelectWindow(object sender, RoutedEventArgs e)
-    {
-        if (sender is MenuFlyoutItem { Tag: WindowTargets.Target w }) SelectWindow(w);
     }
 
     private void UpdateContextMenuVisibility()

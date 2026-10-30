@@ -448,9 +448,16 @@ public sealed partial class CaptureOverlayWindow
         return false;
     }
 
+    // Physical virtual-screen pixels → overlay coordinates, by the grid's own ratio like monitor snapping.
+    private Rect ToRoot(System.Drawing.Rectangle r)
+    {
+        var b = _frame.VirtualBounds;
+        double sx = RootGrid.ActualWidth / b.Width, sy = RootGrid.ActualHeight / b.Height;
+        return new Rect((r.X - b.X) * sx, (r.Y - b.Y) * sy, r.Width * sx, r.Height * sy);
+    }
+
     private void SetSelection(Rect rect)
     {
-        ResetWindowPick();
         _selectionRect = rect;
         _hasSelection = true;
         Hint.Visibility = Visibility.Collapsed;
