@@ -4,6 +4,12 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.0.11
+
+Deselect in the overlay's right-click menu, Shift-constrained shapes, a single click that no longer
+selects anything, removal of Select app, and more reliable capture of an app's sound.
+See [1.0.11.md](.github/release-notes/1.0.11.md).
+
 ## 1.0.10
 
 Recording a single window with only that app's sound, window picking in the capture overlay, hotkeys
