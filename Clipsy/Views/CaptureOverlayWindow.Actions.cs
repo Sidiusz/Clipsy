@@ -246,6 +246,7 @@ public sealed partial class CaptureOverlayWindow
     {
         bool s = _hasSelection;
         var vis = s ? Visibility.Visible : Visibility.Collapsed;
+        MenuDeselect.Visibility = vis;
         SelectionMenuSeparator.Visibility = vis;
         MenuCopy.Visibility = vis;
         MenuSave.Visibility = vis;
@@ -260,6 +261,7 @@ public sealed partial class CaptureOverlayWindow
     }
 
     private void OnMenuSelectAll(object sender, RoutedEventArgs e) => SelectAll();
+    private void OnMenuDeselect(object sender, RoutedEventArgs e) => ClearSelection();
     private void OnMenuCopy(object sender, RoutedEventArgs e) => _ = CopyAsync();
     private void OnMenuSave(object sender, RoutedEventArgs e) => _ = SaveSilentAsync();
     private void OnMenuSaveAs(object sender, RoutedEventArgs e) => _ = SaveAsAsync();

@@ -389,6 +389,7 @@ public sealed partial class CaptureOverlayWindow : Window
 
         SelectScreenMenu.Text = Strings.Get("MenuSelectScreen");
         MenuSelectAll.Text    = Strings.Get("MenuSelectAll");
+        MenuDeselect.Text     = Strings.Get("MenuDeselect");
         MenuCopy.Text         = Strings.Get("MenuCopy");
         MenuSave.Text         = Strings.Get("MenuSave");
         MenuSaveAs.Text       = Strings.Get("MenuSaveAs");

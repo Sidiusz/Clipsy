@@ -456,6 +456,15 @@ public sealed partial class CaptureOverlayWindow
         return new Rect((r.X - b.X) * sx, (r.Y - b.Y) * sy, r.Width * sx, r.Height * sy);
     }
 
+    private void ClearSelection()
+    {
+        _hasSelection = false;
+        _selectionRect = default;
+        HideToolbars();
+        UpdateSelectionVisual();
+        Hint.Visibility = Visibility.Visible;
+    }
+
     private void SetSelection(Rect rect)
     {
         _selectionRect = rect;

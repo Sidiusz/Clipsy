@@ -604,6 +604,12 @@
                         <FontIcon Glyph="&#xE739;" />
                     </MenuFlyoutItem.Icon>
                 </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="MenuDeselect" Text="Deselect" Visibility="Collapsed"
+                                Click="OnMenuDeselect">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE8E6;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
 
                 <!-- Actions group (visible only with a selection) -->
                 <MenuFlyoutSeparator x:Name="SelectionMenuSeparator" Visibility="Collapsed" />

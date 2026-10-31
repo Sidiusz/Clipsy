@@ -66,6 +66,7 @@ public static class Strings
         // Overlay context menu
         ["MenuSelectScreen"]    = New("Select screen", "Выбрать экран"),
         ["MenuSelectAll"]       = New("Select all",    "Выбрать все"),
+        ["MenuDeselect"]        = New("Deselect",      "Снять выделение"),
         ["MenuCopy"]            = New("Copy",          "Копировать"),
         ["MenuSave"]            = New("Save",          "Сохранить"),
         ["MenuSaveAs"]          = New("Save As…",      "Сохранить как…"),

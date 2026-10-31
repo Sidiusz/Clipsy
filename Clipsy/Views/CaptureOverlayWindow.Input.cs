@@ -398,9 +398,7 @@ public sealed partial class CaptureOverlayWindow
                 // Dragged back to the start or into a sliver: nothing to crop.
                 if (!SelectionGesture.IsUsable(rect))
                 {
-                    _selectionRect = default;
-                    UpdateSelectionVisual();
-                    Hint.Visibility = Visibility.Visible;
+                    ClearSelection();
                     break;
                 }
                 _selectionRect = rect;
