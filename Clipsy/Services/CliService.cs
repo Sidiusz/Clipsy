@@ -178,21 +178,30 @@ public static class CliService
         return true;
     }
 
+    private const int StartingExitCode = 3;
+
     private static CliResult ExecuteUiCommand(string command)
     {
         string request = SerializeRequest(command, Array.Empty<string>());
         if (SingleInstanceService.TrySendRequest(request, out var response))
-            return DeserializeResponse(response);
+        {
+            var result = DeserializeResponse(response);
+            if (result.Code != StartingExitCode) return result;
+        }
+        else
+        {
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(exe)) return new CliResult(4, "Cannot resolve Clipsy executable path.");
+            Process.Start(new ProcessStartInfo { FileName = exe, UseShellExecute = true });
+        }
 
-        var exe = Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(exe)) return new CliResult(4, "Cannot resolve Clipsy executable path.");
-        Process.Start(new ProcessStartInfo { FileName = exe, UseShellExecute = true });
-
-        for (int i = 0; i < 50; i++)
+        // The pipe is up before the UI: "starting" means ask again, not that the command ran.
+        for (int i = 0; i < 150; i++)
         {
             Thread.Sleep(100);
-            if (SingleInstanceService.TrySendRequest(request, out response, 250))
-                return DeserializeResponse(response);
+            if (!SingleInstanceService.TrySendRequest(request, out response, 250)) continue;
+            var result = DeserializeResponse(response);
+            if (result.Code != StartingExitCode) return result;
         }
         return new CliResult(3, "Clipsy started but did not become ready for commands.");
     }
