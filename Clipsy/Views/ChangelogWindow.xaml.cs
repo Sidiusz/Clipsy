@@ -181,11 +181,15 @@ public sealed partial class ChangelogWindow : Window
         }
 
         var newest = releases[0].Version;
-        HeaderLabel.Text = string.Format(Strings.Get("ChangelogHeader"), current, newest);
+        // The newest published release isn't "new" when this build is already past it.
+        bool hasNewer = UpdateService.IsNewer(newest, current);
+        HeaderLabel.Text = hasNewer
+            ? string.Format(Strings.Get("ChangelogHeader"), current, newest)
+            : string.Format(Strings.Get("ChangelogHeaderCurrent"), current);
 
         ThemeService.ApplyTo(Content as FrameworkElement);
         for (int i = 0; i < releases.Count; i++)
-            ReleaseList.Children.Add(BuildCard(releases[i], releases[i].Version == current, i == 0));
+            ReleaseList.Children.Add(BuildCard(releases[i], releases[i].Version == current, hasNewer && i == 0));
     }
 
     private Border BuildCard(ReleaseNote r, bool isCurrent, bool isNewest)

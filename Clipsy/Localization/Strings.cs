@@ -312,6 +312,7 @@ public static class Strings
         ["UpdLatestInstalled"]    = New("Latest version installed ({0}).",   "Установлена последняя версия ({0})."),
         ["UpdAvailableRow"]       = New("Version {0} is available; you have {1}.", "Доступна версия {0}, установлена {1}."),
         ["UpdBtnWhatsNew"]        = New("What's new",                        "Что нового"),
+        ["ChangelogHeaderCurrent"] = New("Current: {0}", "Текущая: {0}"),
         ["ChangelogHeader"]       = New("Current: {0}    New: {1}", "Текущая: {0}    Новая: {1}"),
         ["ChangelogLoading"]      = New("Loading releases…",   "Загрузка релизов…"),
         ["ChangelogEmptyOrFail"]  = New("Could not load the changelog. Check your connection.", "Не удалось загрузить список изменений. Проверьте подключение."),
