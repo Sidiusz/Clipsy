@@ -68,10 +68,15 @@ public sealed partial class CaptureOverlayWindow
             return;
         }
         var anchors = GetClampedAnchors();
+        // On the same physical pixels as the snapped border, else handles jitter against it while resizing.
+        double scale = DpiScale > 0 ? DpiScale : 1.0;
+        var visual = SnapRectToPhysicalPixels(_selectionRect);
         for (int i = 0; i < 8; i++)
         {
-            Canvas.SetLeft(_handleVisuals[i], anchors[i].X - HandleSize / 2);
-            Canvas.SetTop(_handleVisuals[i], anchors[i].Y - HandleSize / 2);
+            double left = _selectionRect.X + anchors[i].X - HandleSize / 2;
+            double top = _selectionRect.Y + anchors[i].Y - HandleSize / 2;
+            Canvas.SetLeft(_handleVisuals[i], System.Math.Round(left * scale) / scale - visual.X);
+            Canvas.SetTop(_handleVisuals[i], System.Math.Round(top * scale) / scale - visual.Y);
             _handleVisuals[i].Visibility = Visibility.Visible;
         }
     }
@@ -253,6 +258,8 @@ public sealed partial class CaptureOverlayWindow
             UpdateSelectionVisual();
             return; // stay hooked while updates keep coming
         }
+        // Rehooking costs a frame, which shows as stutter when the pointer pauses for one mid-drag.
+        if (_mode is InteractionMode.SelectingNew or InteractionMode.MovingSelection or InteractionMode.ResizingSelection) return;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSelectionRenderTick;
         _selectionRenderHooked = false;
     }

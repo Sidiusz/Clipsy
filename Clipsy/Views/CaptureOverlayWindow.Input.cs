@@ -134,6 +134,8 @@ public sealed partial class CaptureOverlayWindow
         {
             _mode = InteractionMode.ResizingSelection;
             _activeHandle = hp;
+            // Like a new selection: moving the toolbars every frame is what makes resizing heavy.
+            HideToolbars();
             _selectionAtDragStart = _selectionRect;
             _dragStart = pos;
             RootGrid.CapturePointer(e.Pointer);
@@ -420,6 +422,7 @@ public sealed partial class CaptureOverlayWindow
                 break;
             case InteractionMode.ResizingSelection:
                 if (!SelectionGesture.IsUsable(_selectionRect)) _selectionRect = _selectionAtDragStart;
+                ShowToolbars();
                 // Re-anchor to the dragged handle's corner/edge.
                 switch (_activeHandle)
                 {
