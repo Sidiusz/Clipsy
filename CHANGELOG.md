@@ -4,6 +4,12 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.0.12
+
+Select app is back, the overlay works at display scales other than 100%, and a picked window is
+captured without what covered it.
+See [1.0.12.md](.github/release-notes/1.0.12.md).
+
 ## 1.0.11
 
 Deselect in the overlay's right-click menu, Shift-constrained shapes, a single click that no longer
