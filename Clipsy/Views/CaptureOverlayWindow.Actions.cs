@@ -33,6 +33,7 @@ public sealed partial class CaptureOverlayWindow
         var px = ScreenshotRenderer.ToPixelRect(_selectionRect, DpiScale, _frame.PixelWidth, _frame.PixelHeight);
         var b = _frame.VirtualBounds;
         int x = b.X + px.X, y = b.Y + px.Y, w = px.Width, h = px.Height;
+        Diagnostics.Log($"Record click: selection={_selectionRect} root={RootGrid.ActualWidth}x{RootGrid.ActualHeight} scale={DpiScale} raster={Content?.XamlRoot?.RasterizationScale} frame={_frame.PixelWidth}x{_frame.PixelHeight}");
         if (w < 8 || h < 8) return;
         var dq = App.Current.HostWindow!.DispatcherQueue;
         CaptureOverlayHost.Dismiss(this);

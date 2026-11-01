@@ -34,6 +34,7 @@ public sealed class RecordingService : IDisposable
         bool cursor = SettingsService.Instance.Settings.CaptureVideoCursor;
         BuildSources(x, y, width, height, cursor);
         _activeRegion = new Rectangle(x, y, width, height);
+        Diagnostics.Log($"Recording region={_activeRegion} canvas={_sourceCanvasBounds} crop={GetCanvasCrop(_activeRegion).Left},{GetCanvasCrop(_activeRegion).Top},{GetCanvasCrop(_activeRegion).Width},{GetCanvasCrop(_activeRegion).Height} monitors={string.Join(";", _sourceMonitors)}");
         StartRecorder(_sources.Cast<RecordingSourceBase>().ToList(), width, height, GetCanvasCrop(_activeRegion),
             overrideCodec, systemAudio: true, cursor);
     }

@@ -34,6 +34,7 @@ public sealed class Win32ResizeOverlay
     private static readonly Dictionary<IntPtr, Win32ResizeOverlay> _byHwnd = new();
 
     public event Action<int, int, int, int>? RegionChanged;
+    public event Action? DragFinished;
     public IntPtr Hwnd => _hwnd;
 
     private enum DragMode { None, Move, ResizeTL, ResizeT, ResizeTR, ResizeR, ResizeBR, ResizeB, ResizeBL, ResizeL }
@@ -230,6 +231,7 @@ public sealed class Win32ResizeOverlay
                 if (_drag == DragMode.None) break;
                 _drag = DragMode.None;
                 ReleaseCapture();
+                DragFinished?.Invoke();
                 return IntPtr.Zero;
             }
             case WM_DESTROY:

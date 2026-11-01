@@ -401,6 +401,8 @@ public sealed class RecordingController
                 {
                     _resizeWin = new Win32ResizeOverlay();
                     _resizeWin.RegionChanged += ApplyRegionChange;
+                    // Applying to the recorder blocks the UI thread, so it waits for the release.
+                    _resizeWin.DragFinished += () => _service?.UpdateRegion(_x, _y, _w, _h);
                     _resizeWin.Create(_x, _y, _w, _h);
                     try { Recorder.SetExcludeFromCapture(_resizeWin.Hwnd, true); } catch { }
                 }
@@ -433,7 +435,6 @@ public sealed class RecordingController
             _resizeWin?.MoveTo(_x, _y, _w, _h);
             UpdateDrawCutout();
             RaiseHud();
-            _service?.UpdateRegion(_x, _y, _w, _h);
         }
         catch (Exception ex)
         {
