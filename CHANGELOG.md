@@ -6,8 +6,9 @@ Detailed notes for every release (English and Russian) are in
 
 ## 1.0.12
 
-Select app is back, the overlay works at display scales other than 100%, and a picked window is
-captured without what covered it.
+Select app is back, the capture overlay works at display scaling other than 100%, a picked window is
+captured without what covered it, smoother region resizing, new tips in Settings, and a Download button
+in the changelog.
 See [1.0.12.md](.github/release-notes/1.0.12.md).
 
 ## 1.0.11
