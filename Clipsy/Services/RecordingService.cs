@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using ScreenRecorderLib;
 
 namespace Clipsy.Services;
@@ -253,9 +254,17 @@ public sealed class RecordingService : IDisposable
     private bool _pendingRegionWhilePaused;
     private bool? _micMuted; // last requested mute state; null = never toggled
 
-    public void Pause() { _paused = true; _recorder?.Pause(); }
+    // Serializes recorder calls: region updates run on a worker while the UI thread pauses, mutes and stops.
+    private readonly object _recorderLock = new();
+    private readonly object _regionLock = new();
+    private bool _regionDirty;
+    private bool _regionWorkerRunning;
+
+    public void Pause() { lock (_recorderLock) { _paused = true; _recorder?.Pause(); } }
     public void Resume()
     {
+        lock (_recorderLock)
+        {
         _paused = false;
         // Paused ScreenRecorderLib ignores Apply(), so a mute toggled while paused would never
         // reach the encoder and the mic would go live on resume. Sent before too, in case it's honored.
@@ -266,10 +275,11 @@ public sealed class RecordingService : IDisposable
         if (_pendingRegionWhilePaused)
         {
             _pendingRegionWhilePaused = false;
-            ApplyCurrentRegion();
+            ApplyCurrentRegion(CurrentRegion());
+        }
         }
     }
-    public void Stop() => _recorder?.Stop();
+    public void Stop() { lock (_recorderLock) _recorder?.Stop(); }
 
     public void SetMicMuted(bool muted)
     {
@@ -279,6 +289,8 @@ public sealed class RecordingService : IDisposable
 
     private void ApplyMicMuted(bool muted)
     {
+        lock (_recorderLock)
+        {
         if (_recorder == null) return;
         try
         {
@@ -290,22 +302,52 @@ public sealed class RecordingService : IDisposable
         {
             Diagnostics.Log("SetMicMuted failed", ex);
         }
+        }
     }
 
 
     public void UpdateRegion(int x, int y, int width, int height)
     {
-        if (_recorder == null || _sources.Count == 0) return;
-        _activeRegion = new Rectangle(x, y, width, height);
-        if (_paused)
+        lock (_regionLock)
         {
-            _pendingRegionWhilePaused = true;
-            return;
+            _activeRegion = new Rectangle(x, y, width, height);
+            _regionDirty = true;
+            if (_regionWorkerRunning) return;
+            _regionWorkerRunning = true;
         }
-        ApplyCurrentRegion();
+        Task.Run(ApplyQueuedRegions);
     }
 
-    private void ApplyCurrentRegion()
+    private Rectangle CurrentRegion()
+    {
+        lock (_regionLock) return _activeRegion;
+    }
+
+    // Apply() blocks for a while, so drags go through here: only the newest region is applied.
+    private void ApplyQueuedRegions()
+    {
+        while (true)
+        {
+            Rectangle region;
+            lock (_regionLock)
+            {
+                if (!_regionDirty)
+                {
+                    _regionWorkerRunning = false;
+                    return;
+                }
+                _regionDirty = false;
+                region = _activeRegion;
+            }
+            lock (_recorderLock)
+            {
+                if (_paused) _pendingRegionWhilePaused = true;
+                else ApplyCurrentRegion(region);
+            }
+        }
+    }
+
+    private void ApplyCurrentRegion(Rectangle region)
     {
         if (_recorder == null || _sources.Count == 0) return;
         try
@@ -313,11 +355,11 @@ public sealed class RecordingService : IDisposable
             var builder = _recorder.GetDynamicOptionsBuilder();
             builder.SetDynamicOutputOptions(new DynamicOutputOptions
             {
-                SourceRect = GetCanvasCrop(_activeRegion),
+                SourceRect = GetCanvasCrop(region),
             });
             for (int i = 0; i < _sources.Count; i++)
             {
-                _sources[i].IsVideoCaptureEnabled = Intersects(_activeRegion, _sourceMonitors[i]);
+                _sources[i].IsVideoCaptureEnabled = Intersects(region, _sourceMonitors[i]);
                 builder.SetUpdatedRecordingSource(_sources[i]);
             }
             builder.Apply();
@@ -357,15 +399,18 @@ public sealed class RecordingService : IDisposable
 
     public void Dispose()
     {
-        if (_recorder != null)
+        lock (_recorderLock)
         {
-            _recorder.OnRecordingComplete -= OnComplete;
-            _recorder.OnRecordingFailed -= OnFailed;
-            _recorder.OnStatusChanged -= OnStatusChanged;
-            _recorder.Dispose();
-            _recorder = null;
-            _sources.Clear();
-            _sourceMonitors.Clear();
+            if (_recorder != null)
+            {
+                _recorder.OnRecordingComplete -= OnComplete;
+                _recorder.OnRecordingFailed -= OnFailed;
+                _recorder.OnStatusChanged -= OnStatusChanged;
+                _recorder.Dispose();
+                _recorder = null;
+                _sources.Clear();
+                _sourceMonitors.Clear();
+            }
         }
         DisposeAppAudio();
     }

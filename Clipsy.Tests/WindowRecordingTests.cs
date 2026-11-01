@@ -74,6 +74,43 @@ public class WindowRecordingTests
         }
     }
 
+    // A drag sends a region per mouse move from the UI thread; none of them may wait for the recorder.
+    [Fact]
+    public void Region_updates_during_a_recording_do_not_block_the_caller()
+    {
+        if (Environment.GetEnvironmentVariable("CLIPSY_RECORD_TEST") != "1") return;
+        using var service = new RecordingService();
+        string? done = null, failed = null;
+        var finished = new ManualResetEventSlim();
+        service.RecordingComplete += p => { done = p; finished.Set(); };
+        service.RecordingFailed += e => { failed = e; finished.Set(); };
+        var b = ScreenFreezeService.GetVirtualScreenBounds();
+        service.Start(b.X, b.Y, 640, 480);
+        try
+        {
+            Thread.Sleep(1000);
+            long worst = 0;
+            for (int i = 0; i < 300; i++)
+            {
+                var sw = Stopwatch.StartNew();
+                service.UpdateRegion(b.X + i, b.Y + i, 640 - i, 480 - i / 2);
+                worst = Math.Max(worst, sw.ElapsedMilliseconds);
+                Thread.Sleep(3);
+            }
+            Assert.True(worst < 10, $"UpdateRegion blocked for {worst} ms");
+            Thread.Sleep(500);
+            service.Stop();
+            Assert.True(finished.Wait(TimeSpan.FromSeconds(30)), "recorder never finished");
+            Assert.Null(failed);
+            Assert.True(File.Exists(done) && RecordingController.Mp4HasIndex(done!), "no playable recording");
+        }
+        finally
+        {
+            foreach (var f in new[] { done, service.TempPath })
+                if (f != null && File.Exists(f)) File.Delete(f);
+        }
+    }
+
     private static string Probe(string file)
     {
         var psi = new ProcessStartInfo(FFmpegService.Instance.ExePath) { RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
