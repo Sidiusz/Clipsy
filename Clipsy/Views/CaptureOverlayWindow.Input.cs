@@ -161,6 +161,7 @@ public sealed partial class CaptureOverlayWindow
     {
         _mode = InteractionMode.SelectingNew;
         _hasSelection = false;
+        ResetWindowPick();
         _selectionRect = new Rect(_dragStart.X, _dragStart.Y, 0, 0);
         // Old islands must not linger frozen in place while a new region is dragged.
         HideToolbars();
@@ -233,11 +234,13 @@ public sealed partial class CaptureOverlayWindow
                     _selectionAtDragStart.Y + pos.Y - _dragStart.Y,
                     new Rect(0, 0, RootGrid.ActualWidth, RootGrid.ActualHeight),
                     _moveMonitorBounds);
+                if (_selectionRect != _selectionAtDragStart) ClearSelectedWindow();
                 RequestSelectionVisualUpdate();
                 break;
             }
             case InteractionMode.ResizingSelection:
                 _selectionRect = ResizeFromHandle(_selectionAtDragStart, _activeHandle, pos);
+                if (_selectionRect != _selectionAtDragStart) ClearSelectedWindow();
                 RequestSelectionVisualUpdate();
                 break;
             case InteractionMode.DrawingStroke:
@@ -395,6 +398,7 @@ public sealed partial class CaptureOverlayWindow
             case InteractionMode.SelectingNew:
             {
                 var rect = ClampToRoot(MakeRect(_dragStart, pos));
+                ResetWindowPick();
                 // Dragged back to the start or into a sliver: nothing to crop.
                 if (!SelectionGesture.IsUsable(rect))
                 {
@@ -408,6 +412,7 @@ public sealed partial class CaptureOverlayWindow
                 _anchorBottom = pos.Y >= _dragStart.Y;
                 UpdateSelectionVisual();
                 ShowToolbars();
+                ShowSelectedWindowBadge();
                 break;
             }
             case InteractionMode.MovingSelection:

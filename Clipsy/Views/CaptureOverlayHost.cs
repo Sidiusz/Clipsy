@@ -91,7 +91,9 @@ public static class CaptureOverlayHost
                 // the first frames and the first input all wait on CPU/GPU time otherwise.
                 CapturePriority.Boost();
                 var sw = Stopwatch.StartNew();
+                var windows = WindowTargets.VisibleInZOrder();
                 var frame = _freeze.Capture();
+                frame.Windows = windows;
                 long captureMs = sw.ElapsedMilliseconds;
                 var dq = _dispatcher;
                 long enqueuedTick = Environment.TickCount64;

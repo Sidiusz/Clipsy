@@ -65,6 +65,23 @@
                 IsHitTestVisible="False"
                 Visibility="Collapsed" />
 
+        <!-- Name of the window the selection was picked from. -->
+        <Canvas x:Name="WindowPickLayer" IsHitTestVisible="False">
+            <Border x:Name="WindowPickBadge"
+                    Background="{ThemeResource ClipsyBg1Brush}"
+                    BorderBrush="{ThemeResource ClipsyBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="8,3"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="WindowPickTitle"
+                           Foreground="{ThemeResource ClipsyTextBrush}"
+                           FontSize="12"
+                           MaxWidth="360"
+                           TextTrimming="CharacterEllipsis" />
+            </Border>
+        </Canvas>
+
         <!-- Selection rectangle + 8 handles + size badge -->
         <Canvas x:Name="SelectionLayer"
                 HorizontalAlignment="Left"
@@ -598,6 +615,11 @@
                 <MenuFlyoutSubItem x:Name="SelectScreenMenu" Text="Select screen">
                     <MenuFlyoutSubItem.Icon>
                         <FontIcon Glyph="&#xE91B;" />
+                    </MenuFlyoutSubItem.Icon>
+                </MenuFlyoutSubItem>
+                <MenuFlyoutSubItem x:Name="SelectWindowMenu" Text="Select app">
+                    <MenuFlyoutSubItem.Icon>
+                        <FontIcon Glyph="&#xE737;" />
                     </MenuFlyoutSubItem.Icon>
                 </MenuFlyoutSubItem>
                 <MenuFlyoutItem x:Name="MenuSelectAll" Text="Select all"
