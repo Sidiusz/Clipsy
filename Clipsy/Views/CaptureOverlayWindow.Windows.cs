@@ -38,14 +38,21 @@ public sealed partial class CaptureOverlayWindow
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
+    // Both start at once and the first image wins, so a window that gives no frame costs no wait.
     private static ScreenshotRenderer.RenderedImage? CaptureWindowPixels(WindowTargets.Target w)
     {
-        try { return ModernScreenCaptureService.CaptureWindow(w.Hwnd); }
-        catch (Exception ex) { Diagnostics.Log("Picked window: no Graphics Capture frame, printing the window", ex); }
-        try { return WindowPrintCapture.Capture(w.Hwnd, w.Bounds); }
+        var graphics = Task.Run(() => TryCapture("Graphics Capture", () => ModernScreenCaptureService.CaptureWindow(w.Hwnd)));
+        var print = Task.Run(() => TryCapture("print", () => WindowPrintCapture.Capture(w.Hwnd, w.Bounds)));
+        var first = Task.WhenAny(graphics, print).GetAwaiter().GetResult();
+        return first.Result ?? (first == graphics ? print : graphics).GetAwaiter().GetResult();
+    }
+
+    private static ScreenshotRenderer.RenderedImage? TryCapture(string method, Func<ScreenshotRenderer.RenderedImage?> capture)
+    {
+        try { return capture(); }
         catch (Exception ex)
         {
-            Diagnostics.Log("Picked window: printing failed", ex);
+            Diagnostics.Log($"Picked window: {method} failed", ex);
             return null;
         }
     }

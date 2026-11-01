@@ -32,7 +32,7 @@ internal static class ModernScreenCaptureService
     private static IDirect3DDevice? _device;
     private static readonly object _deviceLock = new();
     private static readonly TimeSpan MonitorFrameTimeout = TimeSpan.FromSeconds(2);
-    // Short: some windows never deliver a frame, and Copy/Save wait for this capture.
+    // Some windows never deliver a frame; printing the window covers them meanwhile.
     private static readonly TimeSpan WindowFrameTimeout = TimeSpan.FromMilliseconds(700);
 
     /// <summary>Pays device creation and JIT at startup so the first PrintScreen isn't slow.</summary>
