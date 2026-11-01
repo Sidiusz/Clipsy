@@ -149,6 +149,7 @@ public sealed partial class CaptureOverlayWindow : Window
         _appWindow.Closing += OnOverlayAppWindowClosing;
         _appWindow.Changed += OnOverlayAppWindowChanged;
         RootGrid.SizeChanged += OnRootGridSizeChanged;
+        RootGrid.Loaded += (_, _) => RootGrid.XamlRoot.Changed += (_, _) => SyncXamlSizeToWindowDpi();
         ArmReveal();
 
         SetTool(ToolKind.None);
@@ -479,10 +480,12 @@ public sealed partial class CaptureOverlayWindow : Window
     // mostly covers, which changes when it moves from the off-screen spot onto the desktop.
     private void SyncXamlSizeToWindowDpi()
     {
+        if (_frame == null) return;
         var b = _frame.VirtualBounds;
         if (b.Width <= 0 || b.Height <= 0) return;
-        var rawDpi = GetDpiForWindow(_hwnd);
-        var dpiScale = rawDpi > 0 ? rawDpi / 96.0 : (Content?.XamlRoot?.RasterizationScale ?? 1.0);
+        // XAML lays out in its own scale, which can lag the window's DPI until XamlRoot.Changed.
+        var dpiScale = Content?.XamlRoot?.RasterizationScale ?? GetDpiForWindow(_hwnd) / 96.0;
+        if (dpiScale <= 0) dpiScale = 1.0;
         double w = b.Width / dpiScale, h = b.Height / dpiScale;
         SetIfChanged(RootGrid, FrameworkElement.WidthProperty, w);
         SetIfChanged(RootGrid, FrameworkElement.HeightProperty, h);

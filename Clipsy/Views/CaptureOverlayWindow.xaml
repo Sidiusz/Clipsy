@@ -28,8 +28,11 @@
           RightTapped="OnRootRightTapped">
 
         <!-- Frozen desktop -->
+        <!-- Fill: with None a bitmap pixel takes one DIP, so scaled displays show only its top-left part. -->
         <Image x:Name="FrozenImage"
-               Stretch="None"
+               Stretch="Fill"
+               HorizontalAlignment="Left"
+               VerticalAlignment="Top"
                Opacity="1.0"
                IsHitTestVisible="False" />
 
