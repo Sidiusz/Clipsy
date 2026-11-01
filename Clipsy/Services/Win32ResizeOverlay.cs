@@ -34,10 +34,12 @@ public sealed class Win32ResizeOverlay
     private static readonly Dictionary<IntPtr, Win32ResizeOverlay> _byHwnd = new();
 
     public event Action<int, int, int, int>? RegionChanged;
+    public event Action? DragFinished;
     public IntPtr Hwnd => _hwnd;
 
     private enum DragMode { None, Move, ResizeTL, ResizeT, ResizeTR, ResizeR, ResizeBR, ResizeB, ResizeBL, ResizeL }
 
+    private int _dibW, _dibH;
     private int WinX => _x - HandleMargin;
     private int WinY => _y - HandleMargin;
     private int WinW => _w + HandleMargin * 2;
@@ -80,11 +82,15 @@ public sealed class Win32ResizeOverlay
         // SetWindowPos instead of reallocating + repainting; resize needs redraw.
         bool sizeChanged = (w != _w || h != _h);
         _x = x; _y = y; _w = w; _h = h;
-        SetWindowPos(_hwnd, HWND_TOPMOST, WinX, WinY, WinW, WinH, SWP_SHOWWINDOW | SWP_NOACTIVATE);
         if (sizeChanged)
         {
-            AllocDib();
+            // UpdateLayeredWindow moves, resizes and repaints in one step, so nothing lags behind.
+            EnsureDib();
             Render();
+        }
+        else
+        {
+            SetWindowPos(_hwnd, IntPtr.Zero, WinX, WinY, WinW, WinH, SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_NOZORDER);
         }
     }
 
@@ -98,19 +104,30 @@ public sealed class Win32ResizeOverlay
         _hwnd = IntPtr.Zero;
     }
 
+    // Reallocated only to grow: a new bitmap per mouse move is what made dragging lag.
+    private void EnsureDib()
+    {
+        if (_g != null && WinW <= _dibW && WinH <= _dibH) return;
+        _dibW = Math.Max(WinW, _dibW + _dibW / 4);
+        _dibH = Math.Max(WinH, _dibH + _dibH / 4);
+        AllocDib();
+    }
+
     private void AllocDib()
     {
         FreeDib();
         if (WinW <= 0 || WinH <= 0) return;
+        _dibW = Math.Max(_dibW, WinW);
+        _dibH = Math.Max(_dibH, WinH);
         _screenDc = GetDC(IntPtr.Zero);
         _memDc = CreateCompatibleDC(_screenDc);
         var bi = new BITMAPINFO
         {
-            biSize = 40, biWidth = WinW, biHeight = -WinH, biPlanes = 1, biBitCount = 32, biCompression = 0,
+            biSize = 40, biWidth = _dibW, biHeight = -_dibH, biPlanes = 1, biBitCount = 32, biCompression = 0,
         };
         _dibBitmap = CreateDIBSection(_memDc, ref bi, 0, out IntPtr ppvBits, IntPtr.Zero, 0);
         _oldBitmap = SelectObject(_memDc, _dibBitmap);
-        _bitmap = new Bitmap(WinW, WinH, WinW * 4, System.Drawing.Imaging.PixelFormat.Format32bppPArgb, ppvBits);
+        _bitmap = new Bitmap(_dibW, _dibH, _dibW * 4, System.Drawing.Imaging.PixelFormat.Format32bppPArgb, ppvBits);
         _g = System.Drawing.Graphics.FromImage(_bitmap);
         _g.SmoothingMode = SmoothingMode.AntiAlias;
     }
@@ -133,13 +150,19 @@ public sealed class Win32ResizeOverlay
     {
         if (_g == null) return;
 
-        // DIB is fully transparent outside the click-active interior.
-        _g.Clear(System.Drawing.Color.Transparent);
-
-        // Interior alpha=1 black absorbs clicks invisibly; drawn at margin offset
-        // since the window is larger than the region by HandleMargin per side.
-        using (var interior = new SolidBrush(System.Drawing.Color.FromArgb(1, 0, 0, 0)))
-            _g.FillRectangle(interior, HandleMargin, HandleMargin, _w, _h);
+        // Only the window's part of the DIB, which can be larger.
+        _g.SetClip(new Rectangle(0, 0, WinW, WinH));
+        // Interior alpha=1 black absorbs clicks invisibly; the margin around it stays transparent.
+        _g.Clear(System.Drawing.Color.FromArgb(1, 0, 0, 0));
+        _g.CompositingMode = CompositingMode.SourceCopy;
+        using (var clear = new SolidBrush(System.Drawing.Color.Transparent))
+        {
+            _g.FillRectangle(clear, 0, 0, WinW, HandleMargin);
+            _g.FillRectangle(clear, 0, WinH - HandleMargin, WinW, HandleMargin);
+            _g.FillRectangle(clear, 0, HandleMargin, HandleMargin, _h);
+            _g.FillRectangle(clear, WinW - HandleMargin, HandleMargin, HandleMargin, _h);
+        }
+        _g.CompositingMode = CompositingMode.SourceOver;
 
         // Selection rectangle border.
         using (var pen = new Pen(AccentBlue, BorderThickness))
@@ -230,6 +253,7 @@ public sealed class Win32ResizeOverlay
                 if (_drag == DragMode.None) break;
                 _drag = DragMode.None;
                 ReleaseCapture();
+                DragFinished?.Invoke();
                 return IntPtr.Zero;
             }
             case WM_DESTROY:
@@ -348,6 +372,7 @@ public sealed class Win32ResizeOverlay
     private const int SW_SHOWNOACTIVATE = 4;
     private const uint SWP_SHOWWINDOW = 0x0040;
     private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOZORDER = 0x0004;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOSIZE = 0x0001;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);

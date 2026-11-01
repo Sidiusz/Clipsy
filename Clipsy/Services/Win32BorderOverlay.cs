@@ -62,14 +62,23 @@ public class Win32BorderOverlay
 
     private static IntPtr _magentaBrush;
 
+    /// <summary>Hidden while the resize overlay shows the region, which draws its own border.</summary>
+    public void SetVisible(bool visible)
+    {
+        _visible = visible;
+        if (_created) ShowWindow(_hwnd, visible ? SW_SHOWNA : SW_HIDE);
+    }
+
     public void MoveTo(int x, int y, int w, int h)
     {
         if (!_created) return;
         _x = x; _y = y; _w = w; _h = h;
-        SetWindowPos(_hwnd, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+        SetWindowPos(_hwnd, HWND_TOPMOST, x, y, w, h, (_visible ? SWP_SHOWWINDOW : 0) | SWP_NOACTIVATE);
         // bErase=false: WM_PAINT clears the bg itself, so skipping the erase
         // pass kills the blue→magenta→blue flash during interactive resize.
         InvalidateRect(_hwnd, IntPtr.Zero, false);
+        // WM_PAINT waits behind queued mouse moves, which left stale lines on screen.
+        UpdateWindow(_hwnd);
     }
 
     public void Destroy()
@@ -176,6 +185,9 @@ public class Win32BorderOverlay
     [DllImport("gdi32.dll")] private static extern IntPtr CreateSolidBrush(uint crColor);
     [DllImport("user32.dll")] private static extern int FillRect(IntPtr hDC, ref RECT lprc, IntPtr hbr);
     private const int SW_SHOW = 5;
+    private const int SW_SHOWNA = 8;
+    private const int SW_HIDE = 0;
+    private bool _visible = true;
     private const uint SWP_SHOWWINDOW = 0x0040;
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     private const uint IDC_ARROW = 32512;

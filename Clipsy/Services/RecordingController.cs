@@ -401,9 +401,11 @@ public sealed class RecordingController
                 {
                     _resizeWin = new Win32ResizeOverlay();
                     _resizeWin.RegionChanged += ApplyRegionChange;
+                    _resizeWin.DragFinished += MoveRegionFollowers;
                     _resizeWin.Create(_x, _y, _w, _h);
                     try { Recorder.SetExcludeFromCapture(_resizeWin.Hwnd, true); } catch { }
                 }
+                _border?.SetVisible(false);
                 _resizeWin.MoveTo(_x, _y, _w, _h);
                 RaiseHud();
             }
@@ -411,6 +413,8 @@ public sealed class RecordingController
             {
                 _resizeWin?.Destroy();
                 _resizeWin = null;
+                _border?.MoveTo(_x, _y, _w, _h);
+                _border?.SetVisible(true);
             }
         }
         catch (Exception ex)
@@ -428,16 +432,37 @@ public sealed class RecordingController
         try
         {
             _border?.MoveTo(_x, _y, _w, _h);
-            _hud?.PositionBelowRegion(_x, _y, _w, _h);
-            _drawWin?.MoveTo(_x, _y, _w, _h);
             _resizeWin?.MoveTo(_x, _y, _w, _h);
-            UpdateDrawCutout();
-            RaiseHud();
             _service?.UpdateRegion(_x, _y, _w, _h);
+            // The HUD and drawing layer are slow to move, so they must not run on every mouse move.
+            long now = Environment.TickCount64;
+            if (now - _followersMovedTick >= FollowerIntervalMs)
+            {
+                _followersMovedTick = now;
+                MoveRegionFollowers();
+            }
         }
         catch (Exception ex)
         {
             Diagnostics.Log("Region update failed", ex);
+        }
+    }
+
+    private const int FollowerIntervalMs = 50;
+    private long _followersMovedTick;
+
+    private void MoveRegionFollowers()
+    {
+        try
+        {
+            _hud?.PositionBelowRegion(_x, _y, _w, _h);
+            _drawWin?.MoveTo(_x, _y, _w, _h);
+            UpdateDrawCutout();
+            RaiseHud();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("Region followers update failed", ex);
         }
     }
 
