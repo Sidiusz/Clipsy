@@ -76,7 +76,8 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDum
 [Run]
 Filename: "{app}\{#ClipsyExeName}"; Parameters: "{code:AutostartInitParameters}"; Flags: runhidden runasoriginaluser
 ; Silent installs (updates, CLI) relaunch too unless /NOLAUNCH; never elevated.
-Filename: "{app}\{#ClipsyExeName}"; Description: "{cm:LaunchProgram,{#ClipsyName}}"; \
+; open-settings starts Clipsy when it isn't running.
+Filename: "{app}\{#ClipsyExeName}"; Parameters: "open-settings"; Description: "{cm:LaunchProgram,{#ClipsyName}}"; \
     Flags: nowait postinstall runasoriginaluser; Check: ShouldLaunchAfterInstall
 
 [UninstallRun]
