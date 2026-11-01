@@ -67,27 +67,21 @@ public sealed partial class SettingsWindow : Window
     // a fade swap. Not tied to the active tab — purely ambient.
     private static readonly string[] _tipKeys =
     {
-        "TipSelectScreenDouble",
+        "TipDoubleClick",
+        "TipShiftAngle",
+        "TipModifierEyedropper",
+        "TipRightClick",
+        "TipRightErase",
         "TipSelectAll",
         "TipSelectMonitor",
         "TipOcrEngine",
-        "TipOcrLang",
         "TipTranslate",
-        "TipEyedropperSettings",
-        "TipResizeHandles",
         "TipCopySaveKeys",
         "TipClearDrawings",
-        "TipEscCancel",
-        "TipHotkeyRebind",
-        "TipRecordRegion",
         "TipMicToggle",
         "TipSilentSave",
-        "TipGifExport",
         "TipGifSize",
         "TipFfmpeg",
-        "TipJpgQuality",
-        "TipAutostart",
-        "TipAfterSave",
     };
     private static readonly Random _tipRng = new();
     private readonly List<int> _tipOrder = new();
@@ -1066,6 +1060,14 @@ public sealed partial class SettingsWindow : Window
         _tipPos = -1;
     }
 
+    private string CurrentTipText()
+    {
+        var key = _tipKeys[_currentTipKeyIndex];
+        return key == "TipModifierEyedropper"
+            ? string.Format(Strings.Get(key), SettingsService.Instance.Settings.EyedropperModifier)
+            : Strings.Get(key);
+    }
+
     private void AdvanceTip(bool animate)
     {
         if (LblTip == null) return;
@@ -1076,7 +1078,7 @@ public sealed partial class SettingsWindow : Window
             _tipPos = 0;
         }
         _currentTipKeyIndex = _tipOrder[_tipPos];
-        var text = Strings.Get(_tipKeys[_currentTipKeyIndex]);
+        var text = CurrentTipText();
 
         if (!animate)
         {

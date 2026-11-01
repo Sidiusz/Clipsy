@@ -20,7 +20,7 @@ public sealed partial class SettingsWindow
 
         if (TitleBarSubtitle != null) TitleBarSubtitle.Text = Strings.Get("TitleBarSubtitle");
         if (LblTipHeader != null)     LblTipHeader.Text    = Strings.Get("TipLabel");
-        if (LblTip != null)           LblTip.Text          = Strings.Get(_tipKeys[_currentTipKeyIndex]);
+        if (LblTip != null)           LblTip.Text          = CurrentTipText();
 
         HdrGeneral.Text  = Strings.Get("TabGeneral");
         HdrCapture.Text  = Strings.Get("TabCapture");
