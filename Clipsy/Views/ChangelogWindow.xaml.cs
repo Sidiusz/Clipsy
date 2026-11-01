@@ -54,7 +54,16 @@ public sealed partial class ChangelogWindow : Window
         if (Content is FrameworkElement fe) fe.Loaded += (_, _) => _ = LoadAsync();
     }
 
-    private void OnUpdateActionClick(object sender, RoutedEventArgs e) => UpdateManager.PrimaryAction();
+    private void OnUpdateActionClick(object sender, RoutedEventArgs e)
+    {
+        if (UpdateManager.Phase != UpdatePhase.Available)
+        {
+            UpdateManager.PrimaryAction();
+            return;
+        }
+        Close();
+        Settings.SettingsWindow.OpenUpdatesAndDownload();
+    }
 
     private void RenderUpdateAction()
     {
@@ -182,11 +191,13 @@ public sealed partial class ChangelogWindow : Window
     private Border BuildCard(ReleaseNote r, bool isCurrent, bool isNewest)
     {
         var accent = ThemeService.GetBrush("ClipsyAccentBrush", RootGrid);
+        var green = new SolidColorBrush(Color.FromArgb(0xFF, 0x3F, 0xB9, 0x50));
+        bool isNew = isNewest && !isCurrent;
         var card = new Border
         {
             Style = (Style)Application.Current.Resources["ClipsyGroupCard"],
-            BorderBrush = isCurrent ? accent : ThemeService.GetBrush("ClipsyBorderBrush", RootGrid),
-            BorderThickness = new Thickness(isCurrent ? 1.5 : 1),
+            BorderBrush = isCurrent ? accent : isNew ? green : ThemeService.GetBrush("ClipsyBorderBrush", RootGrid),
+            BorderThickness = new Thickness(isCurrent || isNew ? 1.5 : 1),
         };
 
         var stack = new StackPanel { Spacing = 8 };
@@ -199,8 +210,7 @@ public sealed partial class ChangelogWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
         });
         if (isCurrent) head.Children.Add(Chip(Strings.Get("ChangelogCurrent"), accent, Colors.Black));
-        else if (isNewest) head.Children.Add(Chip(Strings.Get("ChangelogNew"),
-            new SolidColorBrush(Color.FromArgb(0xFF, 0x3F, 0xB9, 0x50)), Colors.White));
+        else if (isNewest) head.Children.Add(Chip(Strings.Get("ChangelogNew"), green, Colors.White));
         if (r.Published != DateTime.MinValue)
             head.Children.Add(new TextBlock
             {

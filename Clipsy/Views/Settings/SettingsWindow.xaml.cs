@@ -423,6 +423,20 @@ public sealed partial class SettingsWindow : Window
 
     private void BringToFront() => SetForegroundWindow(_hwnd);
 
+    /// <summary>Shows the Updates row in Settings and starts the download as if its button was pressed.</summary>
+    public static void OpenUpdatesAndDownload()
+    {
+        ShowOrActivate();
+        if (_open is not { } w) return;
+        w.NavGeneral.IsChecked = true;
+        // Low priority: the pane has to be laid out before it can scroll to the row.
+        w.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            w.LblUpdates.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = true, VerticalAlignmentRatio = 0.3 });
+            UpdateManager.PrimaryAction();
+        });
+    }
+
     private static string GetVersion()
     {
         return UpdateService.CurrentVersion();
