@@ -425,6 +425,7 @@ public static class Strings
         ["ToastRecordingStarted"]   = New("Recording started",                             "Запись началась"),
         ["ToastRecordingStartedBody"] = New("{0} · press {1} again to stop and save",      "{0} · нажмите {1} ещё раз, чтобы остановить и сохранить"),
         ["RecordingScreen"]         = New("Screen",                                        "Экран"),
+        ["InfoWindowCaptureFailed"] = New("Couldn't capture this window: what covers it stays in the screenshot.", "Не удалось снять это окно: на скриншоте останется то, что его перекрывает."),
         ["InfoNoWindowToRecord"]    = New("No window to record: switch to the app first.",  "Нет окна для записи: сначала переключитесь в нужное приложение."),
         ["WarnAppAudioNeedsFfmpeg"] = New("Recording only the app's sound needs FFmpeg (Settings → Video). Recording all system sound instead.",
                                           "Для записи звука только из приложения нужен FFmpeg (Настройки → Видео). Пишется весь звук системы."),

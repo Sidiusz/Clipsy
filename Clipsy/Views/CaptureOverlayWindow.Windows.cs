@@ -22,21 +22,32 @@ public sealed partial class CaptureOverlayWindow
     {
         int session = _session;
         var frame = _frame;
-        return _windowPaint = Task.Run(() =>
+        return _windowPaint = Task.Run(() => CaptureWindowPixels(w) is { } image
+            ? ScreenFreezeService.WithImageAt(frame, image, w.Bounds)
+            : null).ContinueWith(t =>
         {
-            try { return ScreenFreezeService.WithImageAt(frame, ModernScreenCaptureService.CaptureWindow(w.Hwnd), w.Bounds); }
-            catch (Exception ex)
+            if (session != _session || !ReferenceEquals(frame, _frame)) return;
+            if (t.Result is not { } patched)
             {
-                Diagnostics.Log("Picked window capture failed; keeping the frozen screen", ex);
-                return null;
+                NotificationService.Info("InfoWindowCaptureFailed");
+                return;
             }
-        }).ContinueWith(t =>
-        {
-            if (t.Result is not { } patched || session != _session || !ReferenceEquals(frame, _frame)) return;
             _frame = patched;
             _eyedropperPixels = null;
             TryLoadFrozenImage();
         }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    private static ScreenshotRenderer.RenderedImage? CaptureWindowPixels(WindowTargets.Target w)
+    {
+        try { return ModernScreenCaptureService.CaptureWindow(w.Hwnd); }
+        catch (Exception ex) { Diagnostics.Log("Picked window: no Graphics Capture frame, printing the window", ex); }
+        try { return WindowPrintCapture.Capture(w.Hwnd, w.Bounds); }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("Picked window: printing failed", ex);
+            return null;
+        }
     }
 
     // Copy/Save right after picking must not render the frame from before the window was swapped in.

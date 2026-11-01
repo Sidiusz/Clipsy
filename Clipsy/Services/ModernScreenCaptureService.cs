@@ -31,6 +31,9 @@ internal static class ModernScreenCaptureService
     // Device creation costs tens of ms; captures run on one worker thread, so keep it.
     private static IDirect3DDevice? _device;
     private static readonly object _deviceLock = new();
+    private static readonly TimeSpan MonitorFrameTimeout = TimeSpan.FromSeconds(2);
+    // Short: some windows never deliver a frame, and Copy/Save wait for this capture.
+    private static readonly TimeSpan WindowFrameTimeout = TimeSpan.FromMilliseconds(700);
 
     /// <summary>Pays device creation and JIT at startup so the first PrintScreen isn't slow.</summary>
     public static void Warmup()
@@ -104,7 +107,7 @@ internal static class ModernScreenCaptureService
         {
             IDirect3DDevice device;
             lock (_deviceLock) device = _device ??= CreateDirect3DDevice();
-            var captured = CaptureItemAsync(device, CreateItem(hwnd, window: true), includeCursor: false).GetAwaiter().GetResult();
+            var captured = CaptureItemAsync(device, CreateItem(hwnd, window: true), includeCursor: false, WindowFrameTimeout).GetAwaiter().GetResult();
             ScreenFreezeService.ForceOpaque(captured.Bytes);
             return new ScreenshotRenderer.RenderedImage(captured.Bytes, captured.Width, captured.Height);
         }
@@ -112,10 +115,10 @@ internal static class ModernScreenCaptureService
     }
 
     private static Task<CapturedMonitor> CaptureMonitorAsync(IDirect3DDevice device, IntPtr hMonitor, bool includeCursor)
-        => CaptureItemAsync(device, CreateItem(hMonitor, window: false), includeCursor);
+        => CaptureItemAsync(device, CreateItem(hMonitor, window: false), includeCursor, MonitorFrameTimeout);
 
     private static async Task<CapturedMonitor> CaptureItemAsync(
-        IDirect3DDevice device, GraphicsCaptureItem item, bool includeCursor)
+        IDirect3DDevice device, GraphicsCaptureItem item, bool includeCursor, TimeSpan timeout)
     {
         var size = item.Size;
         using var pool = Direct3D11CaptureFramePool.CreateFreeThreaded(
@@ -142,7 +145,7 @@ internal static class ModernScreenCaptureService
         try
         {
             session.StartCapture();
-            using var frame = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            using var frame = await tcs.Task.WaitAsync(timeout);
             using var bitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(
                 frame.Surface, BitmapAlphaMode.Ignore);
             return CopySoftwareBitmap(bitmap);
