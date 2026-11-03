@@ -37,7 +37,10 @@ public sealed class Win32ResizeOverlay
     public event Action? DragFinished;
     public IntPtr Hwnd => _hwnd;
 
-    private enum DragMode { None, Move, ResizeTL, ResizeT, ResizeTR, ResizeR, ResizeBR, ResizeB, ResizeBL, ResizeL }
+    internal enum DragMode { None, Move, ResizeTL, ResizeT, ResizeTR, ResizeR, ResizeBR, ResizeB, ResizeBL, ResizeL }
+
+    /// <summary>Width/height ratio resizes keep, or 0 for free resizing.</summary>
+    public double AspectRatio { get; set; }
 
     private int _dibW, _dibH;
     private int WinX => _x - HandleMargin;
@@ -317,7 +320,39 @@ public sealed class Win32ResizeOverlay
             if (_drag is DragMode.ResizeTL or DragMode.ResizeTR or DragMode.ResizeT) ny -= MinSize - nh;
             nh = MinSize;
         }
+        if (AspectRatio > 0 && _drag != DragMode.Move)
+            (nx, ny, nw, nh) = KeepAspect(_drag, nw, nh, _startX, _startY, _startW, _startH, AspectRatio);
         RegionChanged?.Invoke(nx, ny, nw, nh);
+    }
+
+    // Corners keep the opposite corner in place; edges keep the region centred across the drag.
+    internal static (int X, int Y, int W, int H) KeepAspect(DragMode drag, int w, int h,
+        int startX, int startY, int startW, int startH, double aspect)
+    {
+        bool widthDrives = drag switch
+        {
+            DragMode.ResizeL or DragMode.ResizeR => true,
+            DragMode.ResizeT or DragMode.ResizeB => false,
+            _ => Math.Abs(w - startW) / (double)startW >= Math.Abs(h - startH) / (double)startH,
+        };
+        if (widthDrives) h = (int)Math.Round(w / aspect);
+        else w = (int)Math.Round(h * aspect);
+        if (h < MinSize) { h = MinSize; w = (int)Math.Round(h * aspect); }
+        if (w < MinSize) { w = MinSize; h = (int)Math.Round(w / aspect); }
+
+        int x = drag switch
+        {
+            DragMode.ResizeTL or DragMode.ResizeBL or DragMode.ResizeL => startX + startW - w,
+            DragMode.ResizeT or DragMode.ResizeB => startX + (startW - w) / 2,
+            _ => startX,
+        };
+        int y = drag switch
+        {
+            DragMode.ResizeTL or DragMode.ResizeTR or DragMode.ResizeT => startY + startH - h,
+            DragMode.ResizeL or DragMode.ResizeR => startY + (startH - h) / 2,
+            _ => startY,
+        };
+        return (x, y, w, h);
     }
 
     private static int LoWord(IntPtr p) => unchecked((short)(p.ToInt64() & 0xFFFF));

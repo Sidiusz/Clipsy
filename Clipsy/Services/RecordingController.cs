@@ -48,6 +48,7 @@ public sealed class RecordingController
     private string _outputFmt = "mp4";   // user-chosen container for the final file
     private string? _transcodeCodec;     // VP9/AV1: recorded as H.264, re-encoded on save
     private int _x, _y, _w, _h;
+    private double _aspect;
     private StopMode _stopMode;
     private bool _stopping;
     private bool _micMuted;
@@ -114,6 +115,7 @@ public sealed class RecordingController
     private void Start(int x, int y, int w, int h, bool quick)
     {
         _x = x; _y = y; _w = w; _h = h;
+        _aspect = (double)w / h;
         _quick = quick;
         PrepareSession();
         if (!quick)
@@ -402,7 +404,8 @@ public sealed class RecordingController
             {
                 if (_resizeWin == null)
                 {
-                    _resizeWin = new Win32ResizeOverlay();
+                    // The video's frame size is fixed, so resizing keeps its shape.
+                    _resizeWin = new Win32ResizeOverlay { AspectRatio = _aspect };
                     _resizeWin.RegionChanged += ApplyRegionChange;
                     _resizeWin.DragFinished += MoveRegionFollowers;
                     _resizeWin.Create(_x, _y, _w, _h);

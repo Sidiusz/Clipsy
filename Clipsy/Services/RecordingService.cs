@@ -20,6 +20,7 @@ public sealed class RecordingService : IDisposable
     private readonly List<Rectangle> _sourceMonitors = new(); // parallel to _sources
     private Rectangle _sourceCanvasBounds;
     private Rectangle _activeRegion;
+    private double _outputAspect;
     private string _tempPath = string.Empty;
 
     public event Action<string>? RecordingComplete;
@@ -35,8 +36,11 @@ public sealed class RecordingService : IDisposable
         bool cursor = SettingsService.Instance.Settings.CaptureVideoCursor;
         BuildSources(x, y, width, height, cursor);
         _activeRegion = new Rectangle(x, y, width, height);
-        Diagnostics.Log($"Recording region={_activeRegion} canvas={_sourceCanvasBounds} crop={GetCanvasCrop(_activeRegion).Left},{GetCanvasCrop(_activeRegion).Top},{GetCanvasCrop(_activeRegion).Width},{GetCanvasCrop(_activeRegion).Height} monitors={string.Join(";", _sourceMonitors)}");
-        StartRecorder(_sources.Cast<RecordingSourceBase>().ToList(), width, height, GetCanvasCrop(_activeRegion),
+        var (outW, outH) = ResolveOutputSize(SettingsService.Instance.Settings.VideoResolution, width, height);
+        _outputAspect = (double)outW / outH;
+        var crop = GetCanvasCrop(_activeRegion);
+        Diagnostics.Log($"Recording region={_activeRegion} canvas={_sourceCanvasBounds} crop={crop.Left},{crop.Top},{crop.Width},{crop.Height} out={outW}x{outH} fps={ResolveFramerate(SettingsService.Instance.Settings.VideoFramerate)} monitors={string.Join(";", _sourceMonitors)}");
+        StartRecorder(_sources.Cast<RecordingSourceBase>().ToList(), width, height, crop,
             overrideCodec, systemAudio: true, cursor);
     }
 
@@ -237,7 +241,7 @@ public sealed class RecordingService : IDisposable
         return 60;
     }
 
-    private static (int w, int h) ResolveOutputSize(string resolution, int captureW, int captureH)
+    internal static (int w, int h) ResolveOutputSize(string resolution, int captureW, int captureH)
     {
         int targetH = resolution switch
         {
@@ -375,8 +379,24 @@ public sealed class RecordingService : IDisposable
         var clipped = Rectangle.Intersect(region, _sourceCanvasBounds);
         if (clipped.Width <= 0 || clipped.Height <= 0)
             return new ScreenRect(0, 0, 1, 1);
+        clipped = FitAspect(clipped, _outputAspect);
         return new ScreenRect(clipped.X - _sourceCanvasBounds.X, clipped.Y - _sourceCanvasBounds.Y,
             clipped.Width, clipped.Height);
+    }
+
+    // The video frame is fixed at start; letterboxing a differently shaped crop would fill the bars
+    // with the screen around the region, so the crop is trimmed to the frame's shape instead.
+    internal static Rectangle FitAspect(Rectangle r, double aspect)
+    {
+        if (aspect <= 0 || r.Width <= 0 || r.Height <= 0) return r;
+        double current = (double)r.Width / r.Height;
+        if (current > aspect)
+        {
+            int w = Math.Clamp((int)Math.Round(r.Height * aspect), 1, r.Width);
+            return new Rectangle(r.X + (r.Width - w) / 2, r.Y, w, r.Height);
+        }
+        int h = Math.Clamp((int)Math.Round(r.Width / aspect), 1, r.Height);
+        return new Rectangle(r.X, r.Y + (r.Height - h) / 2, r.Width, h);
     }
 
     private static bool Intersects(Rectangle a, Rectangle b)
