@@ -182,6 +182,7 @@ public sealed partial class ToastWindow : Window
         Cloak(true);
         _isInUse = false;
         _isFadingOut = false;
+        SetWindowDisplayAffinity(_hwnd, WDA_NONE);
         _action1 = null;
         _action2 = null;
         _action3 = null;
@@ -283,12 +284,13 @@ public sealed partial class ToastWindow : Window
         DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
         int borderColor = unchecked((int)DWMWA_COLOR_NONE);
         DwmSetWindowAttribute(_hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
-        // "Recording started" and mid-recording warnings must not end up in the video.
-        SetWindowDisplayAffinity(_hwnd, WDA_EXCLUDEFROMCAPTURE);
     }
 
     private void ApplyOptions(ToastService.ToastOptions opts)
     {
+        // Kept out of Clipsy's own recordings only: any excluded window, even a hidden one,
+        // makes NVIDIA's overlay refuse to record the desktop.
+        SetWindowDisplayAffinity(_hwnd, RecordingController.IsBusy ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
         CardBorder.BorderBrush = ThemeService.GetBrush("ClipsyBorderBrush", CardBorder);
         BodyText.Text = string.Empty;
         BodyText.Visibility = Visibility.Collapsed;
@@ -446,6 +448,7 @@ public sealed partial class ToastWindow : Window
 
     [DllImport("user32.dll")] private static extern int    GetWindowLong(IntPtr h, int n);
     [DllImport("user32.dll")] private static extern int    SetWindowLong(IntPtr h, int n, int v);
+    private const uint WDA_NONE = 0x00;
     private const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
     [DllImport("user32.dll")] private static extern bool   SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
     [DllImport("user32.dll")] private static extern bool   SetLayeredWindowAttributes(IntPtr h, uint key, byte alpha, uint flags);
