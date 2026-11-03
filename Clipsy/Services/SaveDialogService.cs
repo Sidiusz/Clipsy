@@ -196,11 +196,9 @@ public static class SaveDialogService
             {
                 if (!GetSaveFileNameW(ref ofn))
                 {
+                    // An error isn't the user cancelling: callers would discard what they were saving.
                     int err = CommDlgExtendedError();
-                    if (err != 0)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[Clipsy] GetSaveFileName error 0x{err:X}");
-                    }
+                    if (err != 0) throw new InvalidOperationException($"GetSaveFileName error 0x{err:X}");
                     return null;
                 }
 
