@@ -324,6 +324,7 @@ internal static class ModernScreenCaptureService
             var iid = IdxgiDeviceGuid;
             hr = Marshal.QueryInterface(d3dDevice, ref iid, out dxgiDevice);
             if (hr < 0) Marshal.ThrowExceptionForHR(hr);
+            SetGpuThreadPriority(dxgiDevice);
             hr = CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice, out graphicsDevice);
             if (hr < 0) Marshal.ThrowExceptionForHR(hr);
             return MarshalInterface<IDirect3DDevice>.FromAbi(graphicsDevice);
@@ -335,6 +336,14 @@ internal static class ModernScreenCaptureService
             if (context != IntPtr.Zero) Marshal.Release(context);
             if (d3dDevice != IntPtr.Zero) Marshal.Release(d3dDevice);
         }
+    }
+
+    // The frame readback otherwise queues behind a game's GPU work: seconds under full load.
+    private static unsafe void SetGpuThreadPriority(IntPtr dxgiDevice)
+    {
+        var setPriority = (delegate* unmanaged[Stdcall]<IntPtr, int, int>)(*(IntPtr**)dxgiDevice)[10];
+        int hr = setPriority(dxgiDevice, 7);
+        if (hr < 0) Diagnostics.Log($"IDXGIDevice.SetGPUThreadPriority failed hr=0x{hr:X8}");
     }
 
     [ComImport]

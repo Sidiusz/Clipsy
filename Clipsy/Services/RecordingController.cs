@@ -80,6 +80,7 @@ public sealed class RecordingController
             ?? throw new InvalidOperationException("Recording must be started from the UI thread.");
         var c = new RecordingController(ui);
         _current = c;
+        CapturePriority.BeginRecording();
         // The record-save and mic hotkeys only hold their keys while a recording runs.
         (Microsoft.UI.Xaml.Application.Current as App)?.Hotkey?.SetRecordingHotkeysActive(true);
         try
@@ -249,6 +250,8 @@ public sealed class RecordingController
         _stopMode = mode;
         _hudHwnd = _hud?.Hwnd ?? IntPtr.Zero;
         _windowWatch?.Stop();
+        // Saving (GIF encoding above all) must not run boosted over a game.
+        CapturePriority.EndRecording();
         try { _hud?.Shutdown(); } catch (Exception ex) { Diagnostics.Log("Recording stop: HUD shutdown", ex); }
         DestroyVisualOverlays();
         try
@@ -526,6 +529,7 @@ public sealed class RecordingController
                 if (!_stopping)
                     Diagnostics.Log("Recorder finished on its own; saving what was recorded.");
                 var mode = _stopping ? _stopMode : StopMode.Save;
+                await WaitUntilReleasedAsync(filePath, ReleaseWaitMs);
                 if (mode != StopMode.Discard) filePath = await AddAppAudioAsync(filePath);
                 switch (mode)
                 {
@@ -780,6 +784,34 @@ public sealed class RecordingController
         }
     }
 
+    // Under load the recorder reports completion before it closes the file; moving it then fails,
+    // and disposing the recorder mid-close leaks the handle until Clipsy exits.
+    private const int ReleaseWaitMs = 60_000;
+
+    internal static async Task<bool> WaitUntilReleasedAsync(string path, int timeoutMs)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
+                if (sw.ElapsedMilliseconds > 50) Diagnostics.Log($"Recording file released after {sw.ElapsedMilliseconds}ms");
+                return true;
+            }
+            catch (FileNotFoundException) { return false; }
+            catch (DirectoryNotFoundException) { return false; }
+            catch (IOException) when (sw.ElapsedMilliseconds < timeoutMs) { }
+            catch (UnauthorizedAccessException) when (sw.ElapsedMilliseconds < timeoutMs) { }
+            catch (Exception ex)
+            {
+                Diagnostics.Log($"Recording file still in use after {sw.ElapsedMilliseconds}ms: {ex.Message}");
+                return false;
+            }
+            await Task.Delay(100);
+        }
+    }
+
     private static bool NonEmpty(string path) => File.Exists(path) && new FileInfo(path).Length > 0;
 
     /// <summary>Post the "saved" toast, noting the MP4 fallback when conversion wasn't possible.</summary>
@@ -809,6 +841,7 @@ public sealed class RecordingController
         {
             _windowWatch?.Stop();
             _windowWatch = null;
+            CapturePriority.EndRecording();
             _hud = null;
             _service = null;
             _stopping = true;

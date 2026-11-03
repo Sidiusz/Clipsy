@@ -5,8 +5,8 @@ using System.Threading;
 namespace Clipsy.Services;
 
 /// <summary>Raises the process's CPU and GPU scheduling priority from the capture
-/// hotkey until shortly after the overlay is on screen, so games saturating the machine
-/// can't starve the capture, the overlay's first frames or its first input.</summary>
+/// hotkey until shortly after the overlay is on screen, and for a whole recording, so games
+/// saturating the machine can't starve the capture, the overlay or the recorder.</summary>
 internal static class CapturePriority
 {
     private static readonly object _lock = new();
@@ -18,6 +18,29 @@ internal static class CapturePriority
     // Bumped by every Boost, so a delayed restore never ends a later capture's boost.
     private static int _generation;
     private static Timer? _restoreTimer;
+    private static bool _recordingHold;
+
+    internal static bool IsBoosted { get { lock (_lock) return _boosted; } }
+
+    /// <summary>Keeps the boost until <see cref="EndRecording"/>, whatever the overlay restores meanwhile.</summary>
+    public static void BeginRecording()
+    {
+        lock (_lock)
+        {
+            _recordingHold = true;
+            Boost();
+        }
+    }
+
+    public static void EndRecording()
+    {
+        lock (_lock)
+        {
+            if (!_recordingHold) return;
+            _recordingHold = false;
+            Restore();
+        }
+    }
 
     public static void Boost()
     {
@@ -60,7 +83,7 @@ internal static class CapturePriority
     {
         lock (_lock)
         {
-            if (!_boosted) return;
+            if (!_boosted || _recordingHold) return;
             _boosted = false;
             var self = GetCurrentProcess();
             if (_cpuRaised) SetPriorityClass(self, _savedCpuClass);

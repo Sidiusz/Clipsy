@@ -228,7 +228,7 @@ public static class Strings
         ["ErrCopyFailed"]    = New("Could not copy to clipboard.",    "Не удалось скопировать."),
         ["ErrDeleteFailed"]  = New("Could not delete the file. It may be in use.", "Не удалось удалить файл. Возможно, он используется."),
         ["ErrOcrUnavailable"] = New("OCR is unavailable: no recognition language is installed.", "Распознавание недоступно: не установлен язык распознавания."),
-        ["ErrVideoKept"]     = New("Could not save the recording in the chosen format. It was kept here: {0}", "Не удалось сохранить запись в выбранном формате. Она сохранена здесь: {0}"),
+        ["ErrVideoKept"]     = New("Could not save the recording where it was meant to go. It is kept here: {0}", "Не удалось сохранить запись туда, куда нужно. Она лежит здесь: {0}"),
         ["ToastVideoRecovered"] = New("A recording from an interrupted session was recovered.", "Восстановлена запись из прерванного сеанса."),
         ["RecordBusy"]       = New("The previous recording is still being saved.", "Предыдущая запись ещё сохраняется."),
         ["ShutdownSavingRecording"] = New("Saving the screen recording…", "Сохранение записи экрана…"),
