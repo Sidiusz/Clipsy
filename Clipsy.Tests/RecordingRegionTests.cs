@@ -46,6 +46,13 @@ public class RecordingRegionTests
     }
 
     [Fact]
+    public void Thin_region_never_grows_by_itself()
+    {
+        var (_, _, w, h) = Win32ResizeOverlay.KeepAspect(Drag.ResizeB, 1920, 30, 0, 0, 1920, 40, 1920 / 40.0);
+        Assert.True(w <= 1920 && h <= 40, $"{w}x{h}");
+    }
+
+    [Fact]
     public void Resize_never_goes_below_the_minimum()
     {
         var (_, _, w, h) = Win32ResizeOverlay.KeepAspect(Drag.ResizeBR, 10, 10, 0, 0, 800, 450, 16.0 / 9);

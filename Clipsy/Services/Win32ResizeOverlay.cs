@@ -310,18 +310,30 @@ public sealed class Win32ResizeOverlay
             case DragMode.ResizeBL: nx += dx;          nw -= dx; nh += dy; break;
             case DragMode.ResizeL:  nx += dx;          nw -= dx;          break;
         }
-        if (nw < MinSize)
+        var screen = ScreenFreezeService.GetVirtualScreenBounds();
+        if (_drag == DragMode.Move)
         {
-            if (_drag is DragMode.ResizeTL or DragMode.ResizeBL or DragMode.ResizeL) nx -= MinSize - nw;
-            nw = MinSize;
+            nx = Math.Clamp(nx, screen.Left, Math.Max(screen.Left, screen.Right - nw));
+            ny = Math.Clamp(ny, screen.Top, Math.Max(screen.Top, screen.Bottom - nh));
+            RegionChanged?.Invoke(nx, ny, nw, nh);
+            return;
         }
-        if (nh < MinSize)
+        // A region selected smaller than the minimum may stay that small, but never grows by itself.
+        int minW = Math.Min(MinSize, _startW), minH = Math.Min(MinSize, _startH);
+        if (nw < minW)
         {
-            if (_drag is DragMode.ResizeTL or DragMode.ResizeTR or DragMode.ResizeT) ny -= MinSize - nh;
-            nh = MinSize;
+            if (_drag is DragMode.ResizeTL or DragMode.ResizeBL or DragMode.ResizeL) nx -= minW - nw;
+            nw = minW;
         }
-        if (AspectRatio > 0 && _drag != DragMode.Move)
+        if (nh < minH)
+        {
+            if (_drag is DragMode.ResizeTL or DragMode.ResizeTR or DragMode.ResizeT) ny -= minH - nh;
+            nh = minH;
+        }
+        if (AspectRatio > 0)
             (nx, ny, nw, nh) = KeepAspect(_drag, nw, nh, _startX, _startY, _startW, _startH, AspectRatio);
+        // Off-screen parts can't be recorded; the region stops at the screen's edge.
+        if (!screen.Contains(new Rectangle(nx, ny, nw, nh))) return;
         RegionChanged?.Invoke(nx, ny, nw, nh);
     }
 
@@ -337,8 +349,9 @@ public sealed class Win32ResizeOverlay
         };
         if (widthDrives) h = (int)Math.Round(w / aspect);
         else w = (int)Math.Round(h * aspect);
-        if (h < MinSize) { h = MinSize; w = (int)Math.Round(h * aspect); }
-        if (w < MinSize) { w = MinSize; h = (int)Math.Round(w / aspect); }
+        int minW = Math.Min(MinSize, startW), minH = Math.Min(MinSize, startH);
+        if (h < minH) { h = minH; w = (int)Math.Round(h * aspect); }
+        if (w < minW) { w = minW; h = (int)Math.Round(w / aspect); }
 
         int x = drag switch
         {
