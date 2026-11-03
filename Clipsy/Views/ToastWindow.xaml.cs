@@ -283,6 +283,8 @@ public sealed partial class ToastWindow : Window
         DwmSetWindowAttribute(_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
         int borderColor = unchecked((int)DWMWA_COLOR_NONE);
         DwmSetWindowAttribute(_hwnd, DWMWA_BORDER_COLOR, ref borderColor, sizeof(int));
+        // "Recording started" and mid-recording warnings must not end up in the video.
+        SetWindowDisplayAffinity(_hwnd, WDA_EXCLUDEFROMCAPTURE);
     }
 
     private void ApplyOptions(ToastService.ToastOptions opts)
@@ -444,6 +446,8 @@ public sealed partial class ToastWindow : Window
 
     [DllImport("user32.dll")] private static extern int    GetWindowLong(IntPtr h, int n);
     [DllImport("user32.dll")] private static extern int    SetWindowLong(IntPtr h, int n, int v);
+    private const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
+    [DllImport("user32.dll")] private static extern bool   SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
     [DllImport("user32.dll")] private static extern bool   SetLayeredWindowAttributes(IntPtr h, uint key, byte alpha, uint flags);
     [DllImport("user32.dll")] private static extern bool   SetWindowPos(IntPtr h, IntPtr z, int x, int y, int cx, int cy, int flags);
     [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr h, int flags);
