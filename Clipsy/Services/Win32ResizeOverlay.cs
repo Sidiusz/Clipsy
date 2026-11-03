@@ -10,12 +10,13 @@ namespace Clipsy.Services;
 /// blue rect + 8 handles as capture selection; 1/255 bg absorbs interior clicks.</summary>
 public sealed class Win32ResizeOverlay
 {
-    private const int HandleSize = 10;
     private const int MinSize = 64;
-    private const float BorderThickness = 1.5f;
+    // Scaled to the region's monitor DPI in Create, so handles stay grabbable at 150-200%.
+    private int HandleSize = 10;
+    private float BorderThickness = 1.5f;
     // Window is enlarged by HandleMargin on each side so that handles centered
     // on the region's corners are not clipped by the window edge.
-    private const int HandleMargin = 8;
+    private int HandleMargin = 8;
     private static readonly System.Drawing.Color AccentBlue =
         System.Drawing.Color.FromArgb(0xFF, 0xE8, 0x7D, 0x0D); // ClipsyAccent #E87D0D
 
@@ -52,6 +53,11 @@ public sealed class Win32ResizeOverlay
     {
         if (_created) return false;
         _x = x; _y = y; _w = w; _h = h;
+        var region = new RECT { left = x, top = y, right = x + w, bottom = y + h };
+        double scale = GetDpiForMonitor(MonitorFromRect(ref region, 2 /* NEAREST */), 0, out uint dpi, out _) == 0 && dpi > 0 ? dpi / 96.0 : 1.0;
+        HandleSize = (int)Math.Round(10 * scale);
+        HandleMargin = (int)Math.Round(8 * scale);
+        BorderThickness = (float)(1.5 * scale);
         var wc = new WNDCLASS
         {
             lpfnWndProc = _staticWndProc,
@@ -195,7 +201,7 @@ public sealed class Win32ResizeOverlay
         yield return (0, h / 2);
     }
 
-    private static void DrawHandle(System.Drawing.Graphics g, int cx, int cy)
+    private void DrawHandle(System.Drawing.Graphics g, int cx, int cy)
     {
         var rect = new RectangleF(cx - HandleSize / 2f, cy - HandleSize / 2f, HandleSize, HandleSize);
         using var fill = new SolidBrush(System.Drawing.Color.White);
@@ -432,6 +438,9 @@ public sealed class Win32ResizeOverlay
     private const uint IDC_SIZEWE = 32644;
     private const uint ULW_ALPHA = 0x00000002;
 
+    [StructLayout(LayoutKind.Sequential)] private struct RECT { public int left, top, right, bottom; }
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromRect(ref RECT rect, uint flags);
+    [DllImport("shcore.dll")] private static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
     [DllImport("user32.dll", SetLastError = true)] private static extern ushort RegisterClass(ref WNDCLASS lpWndClass);
     [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr CreateWindowEx(int dwExStyle, string lpClassName, string lpWindowName, uint dwStyle, int x, int y, int nWidth, int nHeight, IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
