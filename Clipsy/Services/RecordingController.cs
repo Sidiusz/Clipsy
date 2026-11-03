@@ -44,6 +44,7 @@ public sealed class RecordingController
     private Win32ResizeOverlay? _resizeWin;
     private RecordingService? _service;
     private bool _h265FallbackAttempted;
+    private bool _desktopDuplication;   // WGC failed: screen recordings use Desktop Duplication
     private long _startedTick;
     private string _outputFmt = "mp4";   // user-chosen container for the final file
     private string? _transcodeCodec;     // VP9/AV1: recorded as H.264, re-encoded on save
@@ -240,8 +241,31 @@ public sealed class RecordingController
         _service.RecordingFailed += OnRecordingFailed;
         _startedTick = Environment.TickCount64;
         if (_window != IntPtr.Zero) _service.StartWindow(_window, _w, _h, _audioPid, overrideCodec);
-        else _service.Start(_x, _y, _w, _h, overrideCodec);
+        else
+        {
+            try { _service.Start(_x, _y, _w, _h, overrideCodec, _desktopDuplication); }
+            catch (Exception ex) when (_service.UsesGraphicsCapture)
+            {
+                Diagnostics.Log("WGC recording failed to start; using Desktop Duplication", ex);
+                DisposeService();
+                _desktopDuplication = true;
+                StartService(overrideCodec);
+                return;
+            }
+        }
         _appAudioPath = _service.AppAudioPath;
+    }
+
+    private void DisposeService()
+    {
+        if (_service == null) return;
+        _service.RecordingComplete -= OnRecordingComplete;
+        _service.RecordingFailed -= OnRecordingFailed;
+        var temp = _service.TempPath;
+        try { _service.Dispose(); } catch (Exception ex) { Diagnostics.Log("Recording service dispose", ex); }
+        TryDiscard(temp);
+        if (_appAudioPath != null) TryDelete(_appAudioPath);
+        _service = null;
     }
 
     private void Stop(StopMode mode)
@@ -559,18 +583,28 @@ public sealed class RecordingController
         Diagnostics.Log($"Recording failed: {error}");
         _ui.TryEnqueue(async () =>
         {
-            // H.265 → H.264 fallback, only right after start: later it would silently drop what was
-            // recorded, and after Stop it would start a hidden, unstoppable recording.
+            // Fallbacks (WGC → Desktop Duplication, H.265 → H.264) only right after start: later they would
+            // silently drop what was recorded, and after Stop they would start a hidden, unstoppable recording.
             bool early = Environment.TickCount64 - _startedTick < FallbackWindowMs;
+            if (!_desktopDuplication && !_stopping && early && _service is { UsesGraphicsCapture: true })
+            {
+                _desktopDuplication = true;
+                Diagnostics.Log("WGC recording failed right after start; using Desktop Duplication");
+                DisposeService();
+                try
+                {
+                    StartService(overrideCodec: _h265FallbackAttempted ? "H.264" : null);
+                    _hud?.RestartTimer();
+                    return;
+                }
+                catch (Exception ex) { Diagnostics.Log("Desktop Duplication fallback start failed", ex); }
+            }
             if (!_h265FallbackAttempted && !_stopping && early &&
                 SettingsService.Instance.Settings.VideoCodec == "H.265" && _service != null)
             {
                 _h265FallbackAttempted = true;
                 NotificationService.Warning("WarnCodecFallback");
-                var failedTemp = _service.TempPath;
-                try { _service.Dispose(); } catch { }
-                TryDiscard(failedTemp);
-                if (_appAudioPath != null) TryDelete(_appAudioPath);
+                DisposeService();
                 try
                 {
                     StartService(overrideCodec: "H.264");

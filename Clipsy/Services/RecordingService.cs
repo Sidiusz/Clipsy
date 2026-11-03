@@ -30,16 +30,21 @@ public sealed class RecordingService : IDisposable
 
     public static string TempDirectory => Path.Combine(Path.GetTempPath(), "Clipsy");
 
-    public void Start(int x, int y, int width, int height, string? overrideCodec = null)
+    /// <summary>Screen recordings capture through Windows Graphics Capture; Desktop Duplication
+    /// misses updates from some apps (flip-model windows) and only re-sends a frame every 500 ms.</summary>
+    public bool UsesGraphicsCapture { get; private set; }
+
+    public void Start(int x, int y, int width, int height, string? overrideCodec = null, bool desktopDuplication = false)
     {
         PrepareTempPath();
         bool cursor = SettingsService.Instance.Settings.CaptureVideoCursor;
+        UsesGraphicsCapture = !desktopDuplication && ModernScreenCaptureService.IsSupported;
         BuildSources(x, y, width, height, cursor);
         _activeRegion = new Rectangle(x, y, width, height);
         var (outW, outH) = ResolveOutputSize(SettingsService.Instance.Settings.VideoResolution, width, height);
         _outputAspect = (double)outW / outH;
         var crop = GetCanvasCrop(_activeRegion);
-        Diagnostics.Log($"Recording region={_activeRegion} canvas={_sourceCanvasBounds} crop={crop.Left},{crop.Top},{crop.Width},{crop.Height} out={outW}x{outH} fps={ResolveFramerate(SettingsService.Instance.Settings.VideoFramerate)} monitors={string.Join(";", _sourceMonitors)}");
+        Diagnostics.Log($"Recording region={_activeRegion} canvas={_sourceCanvasBounds} crop={crop.Left},{crop.Top},{crop.Width},{crop.Height} out={outW}x{outH} fps={ResolveFramerate(SettingsService.Instance.Settings.VideoFramerate)} api={(UsesGraphicsCapture ? "WGC" : "DDA")} monitors={string.Join(";", _sourceMonitors)}");
         StartRecorder(_sources.Cast<RecordingSourceBase>().ToList(), width, height, crop,
             overrideCodec, systemAudio: true, cursor);
     }
@@ -205,6 +210,8 @@ public sealed class RecordingService : IDisposable
                 IsVideoCaptureEnabled = active,
                 IsCursorCaptureEnabled = cursor,
                 Stretch = StretchMode.None,
+                RecorderApi = UsesGraphicsCapture ? RecorderApi.WindowsGraphicsCapture : RecorderApi.DesktopDuplication,
+                IsBorderRequired = false,
             };
             _sources.Add(source);
             _sourceMonitors.Add(bounds);
