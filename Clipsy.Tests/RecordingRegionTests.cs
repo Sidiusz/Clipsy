@@ -18,6 +18,17 @@ public class RecordingRegionTests
         => Assert.Equal((ow, oh), RecordingService.ResolveOutputSize(res, w, h));
 
     [Fact]
+    public void Native_framerate_spanning_monitors_takes_the_fastest()
+    {
+        var all = ScreenFreezeService.GetVirtualScreenBounds();
+        int span = RecordingService.ResolveFramerate(0, RecordingService.DevicesTouching(all));
+        foreach (var m in ScreenFreezeService.EnumerateMonitors())
+            Assert.True(span >= RecordingService.ResolveFramerate(0, RecordingService.DevicesTouching(m.Bounds)));
+        Assert.Equal(60, RecordingService.ResolveFramerate(0, new[] { @"\.\NO_SUCH_DISPLAY" }));
+        Assert.Equal(30, RecordingService.ResolveFramerate(30, RecordingService.DevicesTouching(all)));
+    }
+
+    [Fact]
     public void Crop_with_the_frames_shape_is_untouched()
         => Assert.Equal(new Rectangle(10, 20, 1280, 720), RecordingService.FitAspect(new Rectangle(10, 20, 1280, 720), 16.0 / 9));
 

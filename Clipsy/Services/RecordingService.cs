@@ -21,7 +21,7 @@ public sealed class RecordingService : IDisposable
     private Rectangle _sourceCanvasBounds;
     private Rectangle _activeRegion;
     private double _outputAspect;
-    private string? _fpsDevice; // display whose refresh rate "native" fps follows
+    private string[]? _fpsDevices; // displays whose refresh rate "native" fps follows
     private string _tempPath = string.Empty;
 
     public event Action<string>? RecordingComplete;
@@ -41,12 +41,12 @@ public sealed class RecordingService : IDisposable
         bool cursor = SettingsService.Instance.Settings.CaptureVideoCursor;
         UsesGraphicsCapture = !desktopDuplication && ModernScreenCaptureService.IsSupported;
         BuildSources(x, y, width, height, cursor);
-        _fpsDevice = DeviceMostCovering(new Rectangle(x, y, width, height));
+        _fpsDevices = DevicesTouching(new Rectangle(x, y, width, height));
         _activeRegion = new Rectangle(x, y, width, height);
         var (outW, outH) = ResolveOutputSize(SettingsService.Instance.Settings.VideoResolution, width, height);
         _outputAspect = (double)outW / outH;
         var crop = GetCanvasCrop(_activeRegion);
-        Diagnostics.Log($"Recording region={_activeRegion} canvas={_sourceCanvasBounds} crop={crop.Left},{crop.Top},{crop.Width},{crop.Height} out={outW}x{outH} fps={ResolveFramerate(SettingsService.Instance.Settings.VideoFramerate, _fpsDevice)} api={(UsesGraphicsCapture ? "WGC" : "DDA")} monitors={string.Join(";", _sourceMonitors)}");
+        Diagnostics.Log($"Recording region={_activeRegion} canvas={_sourceCanvasBounds} crop={crop.Left},{crop.Top},{crop.Width},{crop.Height} out={outW}x{outH} fps={ResolveFramerate(SettingsService.Instance.Settings.VideoFramerate, _fpsDevices)} api={(UsesGraphicsCapture ? "WGC" : "DDA")} monitors={string.Join(";", _sourceMonitors)}");
         StartRecorder(_sources.Cast<RecordingSourceBase>().ToList(), width, height, crop,
             overrideCodec, systemAudio: true, cursor);
     }
@@ -58,7 +58,7 @@ public sealed class RecordingService : IDisposable
         PrepareTempPath();
         bool cursor = SettingsService.Instance.Settings.CaptureVideoCursor;
         var wr = WindowTargets.Bounds(hwnd);
-        _fpsDevice = DeviceMostCovering(new Rectangle(wr.X, wr.Y, Math.Max(1, wr.Width), Math.Max(1, wr.Height)));
+        _fpsDevices = DevicesTouching(new Rectangle(wr.X, wr.Y, Math.Max(1, wr.Width), Math.Max(1, wr.Height)));
         var source = new WindowRecordingSource(hwnd)
         {
             IsBorderRequired = false,
@@ -135,7 +135,7 @@ public sealed class RecordingService : IDisposable
             VideoEncoderOptions = new VideoEncoderOptions
             {
                 Encoder = encoder,
-                Framerate = ResolveFramerate(s.VideoFramerate, _fpsDevice),
+                Framerate = ResolveFramerate(s.VideoFramerate, _fpsDevices),
                 Bitrate = bitrate,
                 IsFixedFramerate = false,
                 IsHardwareEncodingEnabled = true,
@@ -224,18 +224,8 @@ public sealed class RecordingService : IDisposable
             throw new InvalidOperationException("No display recording sources are available.");
     }
 
-    private static string? DeviceMostCovering(Rectangle region)
-    {
-        string? best = null;
-        long bestArea = 0;
-        foreach (var (name, bounds) in EnumerateMonitors())
-        {
-            var r = Rectangle.Intersect(region, bounds);
-            long area = (long)Math.Max(0, r.Width) * Math.Max(0, r.Height);
-            if (area > bestArea) { bestArea = area; best = name; }
-        }
-        return best;
-    }
+    internal static string[] DevicesTouching(Rectangle region)
+        => EnumerateMonitors().Where(m => Intersects(region, m.Bounds)).Select(m => m.DeviceName).ToArray();
 
     private static IEnumerable<(string DeviceName, Rectangle Bounds)> EnumerateMonitors()
     {
@@ -254,15 +244,20 @@ public sealed class RecordingService : IDisposable
         return list;
     }
 
-    /// <summary>Maps the VideoFramerate setting to fps; 0 = native (refresh rate of
-    /// <paramref name="device"/>, the display being recorded, or the primary one).</summary>
-    public static int ResolveFramerate(int setting, string? device = null)
+    /// <summary>Maps the VideoFramerate setting to fps; 0 = native: the highest refresh rate of
+    /// <paramref name="devices"/> (the displays being recorded), or the primary display's.
+    /// A slower display just repeats frames, which the variable-rate encoder skips.</summary>
+    public static int ResolveFramerate(int setting, IReadOnlyList<string>? devices = null)
     {
         if (setting > 0) return Math.Clamp(setting, 10, 240);
-        var dm = new DEVMODE { dmSize = (short)Marshal.SizeOf<DEVMODE>() };
-        if (EnumDisplaySettings(device, ENUM_CURRENT_SETTINGS, ref dm) && dm.dmDisplayFrequency > 1)
-            return Math.Clamp(dm.dmDisplayFrequency, 10, 240);
-        return 60;
+        int hz = 0;
+        foreach (var device in devices is { Count: > 0 } ? devices : new string?[] { null })
+        {
+            var dm = new DEVMODE { dmSize = (short)Marshal.SizeOf<DEVMODE>() };
+            if (EnumDisplaySettings(device, ENUM_CURRENT_SETTINGS, ref dm) && dm.dmDisplayFrequency > 1)
+                hz = Math.Max(hz, dm.dmDisplayFrequency);
+        }
+        return hz > 0 ? Math.Clamp(hz, 10, 240) : 60;
     }
 
     internal static (int w, int h) ResolveOutputSize(string resolution, int captureW, int captureH)
