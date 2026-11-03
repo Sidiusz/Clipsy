@@ -37,12 +37,15 @@ public sealed class VideoPipelineTests : IDisposable
     }
 
     [Theory]
-    [InlineData("VP9")]
-    [InlineData("AV1")]
-    public async Task TranscodesToModernCodecs(string codec)
+    [InlineData("VP9", "mkv")]
+    [InlineData("AV1", "mkv")]
+    [InlineData("VP9", "mp4")]
+    [InlineData("AV1", "mp4")]
+    [InlineData("VP9", "avi")]
+    public async Task TranscodesToModernCodecs(string codec, string container)
     {
         if (!FFmpegService.Instance.IsAvailable) return;
-        var output = Path.Combine(_dir, codec + ".mkv");
+        var output = Path.Combine(_dir, codec + "." + container);
         Assert.True(await FFmpegService.Instance.TranscodeAsync(MakeClip(), output, codec, 2));
         Assert.True(new FileInfo(output).Length > 1000);
     }

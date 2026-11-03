@@ -182,7 +182,9 @@ public sealed class FFmpegService
             args.AddRange(new[] { "-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1" });
         }
         args.AddRange(new[] { "-b:v", $"{Math.Clamp(bitrateMbps, 1, 50)}M" });
-        args.AddRange(encoders.Contains("libopus") ? new[] { "-c:a", "libopus", "-b:a", "128k" } : new[] { "-c:a", "copy" });
+        // Opus only where every player expects it; MP4/AVI keep the recorder's AAC.
+        bool opus = encoders.Contains("libopus") && Path.GetExtension(output).Equals(".mkv", StringComparison.OrdinalIgnoreCase);
+        args.AddRange(opus ? new[] { "-c:a", "libopus", "-b:a", "128k" } : new[] { "-c:a", "copy" });
         return await RunToFileAsync(args, output, ct);
     }
 

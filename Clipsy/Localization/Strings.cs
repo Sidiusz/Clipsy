@@ -234,6 +234,7 @@ public static class Strings
         ["ShutdownSavingRecording"] = New("Saving the screen recording…", "Сохранение записи экрана…"),
         ["VideoConverting"]  = New("Converting the recording…", "Конвертация записи…"),
         ["WarnGifTruncated"] = New("The GIF was shortened: install FFmpeg for long clips.", "GIF укорочен: для длинных клипов установите FFmpeg."),
+        ["WarnTranscodeFailed"]  = New("{0} encoding failed — the video was saved as H.264.", "Не удалось закодировать в {0} — видео сохранено в H.264."),
         ["WarnConvertFailedMp4"] = New("{0} conversion failed — saved as MP4 instead ({1}).", "Не удалось конвертировать в {0} — сохранено как MP4 ({1})."),
         ["UpdateWaitRecording"] = New("Finish the recording before installing the update.", "Завершите запись перед установкой обновления."),
         ["ErrDialogCaption"] = New("Clipsy error",                    "Ошибка Clipsy"),

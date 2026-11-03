@@ -47,7 +47,7 @@ public sealed class RecordingController
     private bool _desktopDuplication;   // WGC failed: screen recordings use Desktop Duplication
     private long _startedTick;
     private string _outputFmt = "mp4";   // user-chosen container for the final file
-    private string? _transcodeCodec;     // VP9/AV1: recorded as H.264, re-encoded on save
+    private string? _transcodeCodec;     // VP9/AV1: recorded as H.264, re-encoded on save (not for GIF)
     private int _x, _y, _w, _h;
     private double _aspect;
     private StopMode _stopMode;
@@ -197,7 +197,7 @@ public sealed class RecordingController
             wantsTranscode = false;
         }
         _transcodeCodec = wantsTranscode ? settings.VideoCodec : null;
-        _outputFmt = wantsTranscode ? "mkv" : settings.VideoFormat ?? "mp4";
+        _outputFmt = settings.VideoFormat ?? "mp4";
         _micMuted = settings.MicrophoneEnabled && settings.MicrophoneMuted;
     }
 
@@ -708,11 +708,19 @@ public sealed class RecordingController
             return;
         }
 
-        var chosenFilter = filters[Math.Max(0, pick.FilterIndex - 1)];
-        var chosenFmt = SaveDialogService.ExtensionFromPattern(chosenFilter.Pattern);
+        // A typed extension we can write picks the format (the dialog already confirmed overwriting
+        // that name); otherwise the filter's is appended, and a new name must not replace a file.
+        var chosenFmt = SaveDialogService.ExtensionFromPattern(filters[Math.Max(0, pick.FilterIndex - 1)].Pattern);
         var dest = pick.Path;
-        if (!dest.EndsWith("." + chosenFmt, StringComparison.OrdinalIgnoreCase))
-            dest = Path.ChangeExtension(dest, "." + chosenFmt);
+        var typedFmt = Path.GetExtension(dest).TrimStart('.').ToLowerInvariant();
+        if (filters.Any(f => SaveDialogService.ExtensionFromPattern(f.Pattern) == typedFmt))
+            chosenFmt = typedFmt;
+        else
+        {
+            dest += "." + chosenFmt;
+            if (File.Exists(dest))
+                dest = SaveDialogService.UniquePath(Path.GetDirectoryName(dest)!, Path.GetFileNameWithoutExtension(dest), chosenFmt, timestamp: false);
+        }
 
         var actual = await ConvertOrMoveAsync(tempPath, dest, chosenFmt);
         var dir = Path.GetDirectoryName(actual);
@@ -745,24 +753,26 @@ public sealed class RecordingController
             return dest;
         }
 
-        if (destFmt == "mp4")
+        bool converted = false;
+        if (_transcodeCodec != null && ffmpeg.IsAvailable)
+        {
+            NotificationService.Info("VideoConverting");
+            converted = await ffmpeg.TranscodeAsync(src, dest, _transcodeCodec, SettingsService.Instance.Settings.VideoBitrateMbps) && NonEmpty(dest);
+            if (!converted)
+            {
+                Diagnostics.Log($"{_transcodeCodec} transcode failed; keeping H.264");
+                NotificationService.Post(NotificationLevel.Warning, "Clipsy",
+                    string.Format(Strings.Get("WarnTranscodeFailed"), _transcodeCodec), ToastCategory.Hint);
+            }
+        }
+        if (!converted && destFmt == "mp4")
         {
             await MoveAsync(src, dest);
             return dest;
         }
 
-        bool converted = false;
-        if (ffmpeg.IsAvailable)
-        {
-            if (_transcodeCodec != null && destFmt == "mkv")
-            {
-                NotificationService.Info("VideoConverting");
-                converted = await ffmpeg.TranscodeAsync(src, dest, _transcodeCodec, SettingsService.Instance.Settings.VideoBitrateMbps) && NonEmpty(dest);
-                if (!converted) Diagnostics.Log($"{_transcodeCodec} transcode failed; remuxing H.264 instead");
-            }
-            if (!converted)
-                converted = await ffmpeg.RemuxAsync(src, dest) && NonEmpty(dest);
-        }
+        if (!converted && ffmpeg.IsAvailable)
+            converted = await ffmpeg.RemuxAsync(src, dest) && NonEmpty(dest);
         if (converted)
         {
             TryDiscard(src);
@@ -905,7 +915,7 @@ public sealed class RecordingController
             foreach (var file in Directory.EnumerateFiles(dir, "*.partial.*"))
             {
                 var ext = Path.GetExtension(file).ToLowerInvariant();
-                if (ext is ".mp4" or ".mkv" or ".webm" or ".gif" or ".mov"
+                if (ext is ".mp4" or ".mkv" or ".avi" or ".webm" or ".gif" or ".mov"
                     && Path.GetFileNameWithoutExtension(file).EndsWith(".partial", StringComparison.OrdinalIgnoreCase))
                     TryDelete(file);
             }
