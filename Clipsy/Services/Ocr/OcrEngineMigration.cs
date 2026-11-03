@@ -9,7 +9,7 @@ using Clipsy.Localization;
 namespace Clipsy.Services;
 
 /// <summary>PP-OCRv5 is the default engine: fetches its models for the user's languages in the
-/// background (Windows OCR covers the gap) and offers existing Windows OCR / Tesseract users the switch once.</summary>
+/// background (Windows OCR covers the gap); Settings offers existing Windows OCR / Tesseract users the switch once.</summary>
 public static class OcrEngineMigration
 {
     public const string PpEngine = "PPOCRv5";
@@ -27,25 +27,26 @@ public static class OcrEngineMigration
                 SettingsService.Instance.SaveState();
             }
             if (!PpOcrV5Service.IsReady) _ = DownloadModelsAsync(DefaultModelKeys(), notify: false);
-            return;
         }
-        if (!s.OcrEngineOfferShown) ShowOffer();
     }
 
-    private static void ShowOffer()
+    public static bool OfferPending
     {
-        var s = SettingsService.Instance.Settings;
-        bool tesseract = string.Equals(s.OcrEngine, "Tesseract", StringComparison.OrdinalIgnoreCase);
-        var keys = ModelKeysForSwitch();
-        int mb = (int)Math.Ceiling(DownloadBytes(keys) / 1048576.0);
-        string body = string.Format(Strings.Get(tesseract ? "OcrOfferBodyTesseract" : "OcrOfferBodyWinRt"), mb);
-        NotificationService.OcrEngineOffer(
-            Strings.Get("OcrOfferTitle"), body,
-            keepText: Strings.Get("OcrOfferKeep"), keep: Decline,
-            switchText: Strings.Get("OcrOfferSwitch"), switchAction: () => _ = SwitchAsync());
+        get
+        {
+            var s = SettingsService.Instance.Settings;
+            return !s.OcrEngineOfferShown && !string.Equals(s.OcrEngine, PpEngine, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
-    private static void Decline()
+    public static string OfferBody()
+    {
+        bool tesseract = string.Equals(SettingsService.Instance.Settings.OcrEngine, "Tesseract", StringComparison.OrdinalIgnoreCase);
+        int mb = (int)Math.Ceiling(DownloadBytes(ModelKeysForSwitch()) / 1048576.0);
+        return string.Format(Strings.Get(tesseract ? "OcrOfferBodyTesseract" : "OcrOfferBodyWinRt"), mb);
+    }
+
+    public static void Decline()
     {
         SettingsService.Instance.Settings.OcrEngineOfferShown = true;
         SettingsService.Instance.SaveState();

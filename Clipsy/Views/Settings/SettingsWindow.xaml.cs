@@ -317,6 +317,7 @@ public sealed partial class SettingsWindow : Window
             SetForegroundWindow(_hwnd);
             StartTipRotation();
             MaybeShowChangelogAfterUpdate();
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, MaybeShowOcrOffer);
         }
         catch (Exception ex)
         {
@@ -1323,6 +1324,59 @@ public sealed partial class SettingsWindow : Window
         s.LastChangelogVersion = current;
         SettingsService.Instance.SaveState();
         ChangelogWindow.ShowWindow();
+    }
+
+    private const int OcrOfferLockSeconds = 5;
+    private bool _ocrOfferOpen;
+
+    // Asked once, here rather than in a toast: the choice deserves a read, so "keep" unlocks after a countdown.
+    private async void MaybeShowOcrOffer()
+    {
+        if (_ocrOfferOpen || !OcrEngineMigration.OfferPending || Content?.XamlRoot == null) return;
+        _ocrOfferOpen = true;
+        try
+        {
+            string keep = Strings.Get("OcrOfferKeep");
+            int left = OcrOfferLockSeconds;
+            var dlg = new ContentDialog
+            {
+                Title = Strings.Get("OcrOfferTitle"),
+                Content = new TextBlock { Text = OcrEngineMigration.OfferBody(), TextWrapping = TextWrapping.Wrap },
+                PrimaryButtonText = Strings.Get("OcrOfferSwitch"),
+                SecondaryButtonText = $"{keep} ({left})",
+                IsSecondaryButtonEnabled = false,
+                PrimaryButtonStyle = (Style)Application.Current.Resources["ClipsyButtonPrimary"],
+                SecondaryButtonStyle = (Style)Application.Current.Resources["ClipsyButton"],
+                // A default button gets the accent style, which would override these.
+                DefaultButton = ContentDialogButton.None,
+                XamlRoot = Content.XamlRoot,
+            };
+            var timer = DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromSeconds(1);
+            timer.Tick += (_, _) =>
+            {
+                if (--left > 0)
+                {
+                    dlg.SecondaryButtonText = $"{keep} ({left})";
+                    return;
+                }
+                timer.Stop();
+                dlg.SecondaryButtonText = keep;
+                dlg.IsSecondaryButtonEnabled = true;
+            };
+            // Esc can't skip the countdown either; after it, Esc keeps the current engine.
+            dlg.Closing += (_, e) =>
+            {
+                if (e.Result == ContentDialogResult.None && left > 0) e.Cancel = true;
+            };
+            timer.Start();
+            var result = await dlg.ShowAsync();
+            timer.Stop();
+            if (result == ContentDialogResult.Primary) _ = OcrEngineMigration.SwitchAsync();
+            else OcrEngineMigration.Decline();
+        }
+        catch (Exception ex) { Diagnostics.Log("SettingsWindow.OcrOffer", ex); }
+        finally { _ocrOfferOpen = false; }
     }
 
     private void OnUpdateActionClick(object sender, RoutedEventArgs e)

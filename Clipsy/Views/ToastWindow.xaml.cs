@@ -321,13 +321,6 @@ public sealed partial class ToastWindow : Window
         SetupActionButton(Action1Btn, opts.Action1Icon, opts.Action1Tooltip, isPrimary: false);
         SetupActionButton(Action2Btn, opts.Action2Icon, opts.Action2Tooltip, isPrimary: opts.Action2IsPrimary);
         SetupActionButton(Action3Btn, opts.Action3Icon, opts.Action3Tooltip, isPrimary: false);
-
-        bool textActions = !string.IsNullOrEmpty(opts.Action1Text) || !string.IsNullOrEmpty(opts.Action2Text);
-        TextActions.Visibility = textActions ? Visibility.Visible : Visibility.Collapsed;
-        TextAction1Btn.Content = opts.Action1Text;
-        TextAction1Btn.Visibility = string.IsNullOrEmpty(opts.Action1Text) ? Visibility.Collapsed : Visibility.Visible;
-        TextAction2Btn.Content = opts.Action2Text;
-        TextAction2Btn.Visibility = string.IsNullOrEmpty(opts.Action2Text) ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private static void ResetActionButton(Button btn)
@@ -340,11 +333,11 @@ public sealed partial class ToastWindow : Window
 
     private static void SetupActionButton(Button btn, string? icon, string? tooltip, bool isPrimary)
     {
+        // Toast windows are pooled: an earlier primary button must not stay orange.
+        btn.Style = (Style)Application.Current.Resources[isPrimary ? "ClipsyButtonPrimary" : "ClipsyButtonGhost"];
         if (string.IsNullOrEmpty(icon)) return;
 
         btn.Content = new FontIcon { Glyph = icon, FontSize = 13 };
-        if (isPrimary)
-            btn.Style = (Style)Application.Current.Resources["ClipsyButtonPrimary"];
         if (!string.IsNullOrEmpty(tooltip))
             ToolTipService.SetToolTip(btn, tooltip);
         btn.Visibility = Visibility.Visible;

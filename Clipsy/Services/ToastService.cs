@@ -28,9 +28,6 @@ public static class ToastService
         public string? Action3Icon     { get; init; }
         public string? Action3Tooltip  { get; init; }
         public Action? Action3Callback { get; init; }
-        // Labelled buttons under the text instead of icons, for choices that need words.
-        public string? Action1Text     { get; init; }
-        public string? Action2Text     { get; init; }
         // When true the toast never auto-dismisses — it stays until the user
         // clicks an action or Close. Used for update prompts.
         public bool    Persistent      { get; init; }
