@@ -4,6 +4,13 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.0.13
+
+Screen recordings through Windows Graphics Capture (no more drops to 2 fps), reliable saving under
+load, a region that keeps its proportions and shows nothing around it when resized during recording,
+VP9/AV1 in the chosen format, notifications kept out of recordings, and the PP-OCRv5 offer in Settings.
+See [1.0.13.md](.github/release-notes/1.0.13.md).
+
 ## 1.0.12
 
 Select app is back, the capture overlay works at display scaling other than 100%, a picked window is
