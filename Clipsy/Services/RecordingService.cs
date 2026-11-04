@@ -137,7 +137,8 @@ public sealed class RecordingService : IDisposable
                 Encoder = encoder,
                 Framerate = ResolveFramerate(s.VideoFramerate, _fpsDevices),
                 Bitrate = bitrate,
-                IsFixedFramerate = false,
+                // Variable-rate MP4s declare no frame rate: players guess (60 fps showed as 120) and editors drift.
+                IsFixedFramerate = true,
                 IsHardwareEncodingEnabled = true,
                 IsThrottlingDisabled = false,
                 IsLowLatencyEnabled = false,

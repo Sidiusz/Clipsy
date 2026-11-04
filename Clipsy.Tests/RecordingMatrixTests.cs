@@ -55,6 +55,7 @@ public class RecordingMatrixTests(ITestOutputHelper output)
                     output.WriteLine($"{name}: {got}");
                     if (!m.Success) output.WriteLine(info.Length > 400 ? info[^400..] : info);
                     if (got != $"{(codec == "H.265" ? "hevc" : "h264")} {ew}x{eh}") failures.Add($"{name}: expected {ew}x{eh}, got {got}");
+                    if (!info.Contains($", {fps} fps,")) failures.Add($"{name}: frame rate isn't declared as {fps}");
                 }
                 finally
                 {
