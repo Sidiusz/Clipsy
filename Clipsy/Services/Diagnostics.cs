@@ -33,6 +33,8 @@ public static class Diagnostics
         }
     }
 
+    public static string LogDirectory => Path.GetDirectoryName(LogPath)!;
+
     private const long MaxLogBytes = 2 * 1024 * 1024;
 
     /// <summary>Keeps one previous generation (name.old.log) once the file passes 2 MB.</summary>

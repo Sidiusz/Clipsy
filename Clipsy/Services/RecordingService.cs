@@ -31,6 +31,13 @@ public sealed class RecordingService : IDisposable
 
     public static string TempDirectory => Path.Combine(Path.GetTempPath(), "Clipsy");
 
+    // ScreenRecorderLib's own log: start/finalize timings and failures with HRESULTs.
+    public static string NativeLogPath => Path.Combine(Diagnostics.LogDirectory, "recorder.log");
+
+    private static long _lastEndedTick;
+    private long _startedTick;
+    private string _summary = string.Empty;
+
     /// <summary>Screen recordings capture through Windows Graphics Capture; Desktop Duplication
     /// misses updates from some apps (flip-model windows) and only re-sends a frame every 500 ms.</summary>
     public bool UsesGraphicsCapture { get; private set; }
@@ -163,6 +170,19 @@ public sealed class RecordingService : IDisposable
             },
         };
 
+        options.LogOptions = new LogOptions
+        {
+            IsLogEnabled = true,
+            LogSeverityLevel = LogLevel.Info,
+            LogFilePath = NativeLogPath,
+        };
+        Diagnostics.RotateIfLarge(NativeLogPath);
+        long sincePrevious = _lastEndedTick == 0 ? -1 : Environment.TickCount64 - _lastEndedTick;
+        _summary = $"codec={(overrideCodec ?? s.VideoCodec)} out={outW}x{outH} fps={options.VideoEncoderOptions.Framerate} " +
+                   $"bitrate={s.VideoBitrateMbps}Mbps api={(sources[0] is WindowRecordingSource ? "window" : UsesGraphicsCapture ? "WGC" : "DDA")} " +
+                   $"systemAudio={systemAudio} mic={(mic ? (s.MicrophoneMuted ? "muted" : "on") : "off")} appAudio={_appAudio != null} cursor={cursor}";
+        Diagnostics.Log($"Recorder start: {_summary} sincePrevious={(sincePrevious < 0 ? "none" : sincePrevious + "ms")}");
+        _startedTick = Environment.TickCount64;
         _recorder = Recorder.CreateRecorder(options);
         _recorder.OnRecordingComplete += OnComplete;
         _recorder.OnRecordingFailed += OnFailed;
@@ -173,6 +193,7 @@ public sealed class RecordingService : IDisposable
     // The app audio follows the encoder's own timeline, so pauses and a slow start stay in sync.
     private void OnStatusChanged(object? sender, RecordingStatusEventArgs e)
     {
+        Diagnostics.LogInBackground($"Recorder status: {e.Status} at {Environment.TickCount64 - _startedTick}ms");
         if (e.Status == RecorderStatus.Recording) _appAudio?.Resume();
         else _appAudio?.Pause();
     }
@@ -427,12 +448,18 @@ public sealed class RecordingService : IDisposable
 
     private void OnComplete(object? sender, RecordingCompleteEventArgs e)
     {
+        _lastEndedTick = Environment.TickCount64;
+        long size = -1;
+        try { size = new FileInfo(e.FilePath).Length; } catch { }
+        Diagnostics.Log($"Recorder complete after {_lastEndedTick - _startedTick}ms, {size} bytes");
         DisposeAppAudio(); // closes the raw audio file before it is muxed
         RecordingComplete?.Invoke(e.FilePath);
     }
 
     private void OnFailed(object? sender, RecordingFailedEventArgs e)
     {
+        _lastEndedTick = Environment.TickCount64;
+        Diagnostics.Log($"Recorder failed after {_lastEndedTick - _startedTick}ms: {e.Error} ({_summary}); details in {NativeLogPath}");
         DisposeAppAudio();
         RecordingFailed?.Invoke(e.Error);
     }
