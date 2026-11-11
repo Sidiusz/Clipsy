@@ -4,6 +4,11 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.1.1
+
+Links to the website and GitHub on the Info page, and a fix for Settings that could stop opening.
+See [1.1.1.md](.github/release-notes/1.1.1.md).
+
 ## 1.1.0
 
 Fixes for a capture overlay that opened late on a heavily loaded PC, region recordings on single-monitor
