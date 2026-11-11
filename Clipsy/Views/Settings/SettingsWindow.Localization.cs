@@ -45,7 +45,8 @@ public sealed partial class SettingsWindow
         HelperTessLang.Text  = string.Format(Strings.Get("HelperTessLang"), tessMin, tessMax, Strings.Get("UnitMB"));
         // Tess rows carry localized Install/Delete button text; rebuild so a
         // language switch re-renders them instead of keeping the old language.
-        BuildTessLangRows();
+        // Not mid-download: a rebuilt row would lose its progress and never show as installed.
+        if (_tessDownloadCts.Count == 0) BuildTessLangRows();
         LblTranslateService.Text = Strings.Get("LblTranslateService");
         HelperTranslation.Text   = Strings.Get("HelperTranslation");
         LblTranslateFrom.Text    = Strings.Get("LblTranslateFrom");
@@ -125,7 +126,7 @@ public sealed partial class SettingsWindow
         var defaultSuffix = " " + Strings.Get("SuffixDefault");
         OcrTesseract.Content = Strings.Get("OptTesseract");
         OcrPpOcrV5.Content = Strings.Get("OptPpOcrV5") + defaultSuffix;
-        BuildPpOcrModelRows();
+        if (_ppOcrDownloadCts.Count == 0) BuildPpOcrModelRows();
         OcrWinRt.Content   = Strings.Get("OptWinRtOcr");
         TrSvcBing.Content     = Strings.Get("OptBing") + defaultSuffix;
         TrSvcGoogle.Content   = Strings.Get("OptGoogle");
