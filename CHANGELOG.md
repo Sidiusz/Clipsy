@@ -6,7 +6,7 @@ Detailed notes for every release (English and Russian) are in
 
 ## 1.1.0
 
-Fixes for a capture overlay that opened late under game load, region recordings on single-monitor
+Fixes for a capture overlay that opened late under load, region recordings on single-monitor
 PCs, selection and the eyedropper at display scaling above 100%, the recording toolbar, the tray
 menu, notifications, hotkeys after sleep, and updates.
 See [1.1.0.md](.github/release-notes/1.1.0.md).
