@@ -108,7 +108,9 @@ public sealed partial class MainWindow : Window
     {
         TrayIcon.LeftClickCommand  = CaptureCommand;
         TrayIcon.RightClickCommand = ShowMenuCommand;
-        TrayIcon.ForceCreate();
+        // The library's default puts the whole process into Windows efficiency mode.
+        TrayIcon.ForceCreate(enablesEfficiencyMode: false);
+        Services.CapturePriority.LeaveEfficiencyMode();
     }
 
     private void ApplyLocalization()

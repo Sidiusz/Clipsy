@@ -42,6 +42,36 @@ internal static class CapturePriority
         }
     }
 
+    /// <summary>Opts out of Windows efficiency mode (Idle priority class plus CPU throttling): a hotkey app
+    /// in it waits seconds for CPU time under a game. Also stops Windows throttling the windowless process itself.</summary>
+    public static void LeaveEfficiencyMode()
+    {
+        try
+        {
+            var self = GetCurrentProcess();
+            var state = new PROCESS_POWER_THROTTLING_STATE { Version = 1, ControlMask = POWER_THROTTLING_EXECUTION_SPEED, StateMask = 0 };
+            if (!SetProcessInformation(self, ProcessPowerThrottling, ref state, Marshal.SizeOf<PROCESS_POWER_THROTTLING_STATE>()))
+                Diagnostics.Log($"Disabling power throttling failed err=0x{Marshal.GetLastWin32Error():X}");
+            uint cls = GetPriorityClass(self);
+            if (cls is IDLE_PRIORITY_CLASS or BELOW_NORMAL_PRIORITY_CLASS)
+            {
+                SetPriorityClass(self, NORMAL_PRIORITY_CLASS);
+                Diagnostics.Log($"Priority class was 0x{cls:X}; set to Normal.");
+            }
+        }
+        catch (Exception ex) when (ex is EntryPointNotFoundException or DllNotFoundException) { }
+    }
+
+    private const int ProcessPowerThrottling = 4;
+    private const uint POWER_THROTTLING_EXECUTION_SPEED = 1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PROCESS_POWER_THROTTLING_STATE { public uint Version, ControlMask, StateMask; }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetProcessInformation(IntPtr process, int infoClass, ref PROCESS_POWER_THROTTLING_STATE info, int size);
+
     public static void Boost()
     {
         lock (_lock)
