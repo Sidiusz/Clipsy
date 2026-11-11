@@ -18,7 +18,6 @@ public sealed partial class SettingsWindow
         public string GroupLabel { get; init; } = string.Empty;
         public Visibility GroupVisibility { get; init; } = Visibility.Collapsed;
         // First group sits flush under the column header, which already draws the line above it.
-        public Thickness GroupMargin { get; init; } = new(0, 8, 0, 2);
         public Thickness GroupBorder { get; init; } = new(0, 1, 0, 1);
         // The next group's border already separates the last row of a group.
         public Visibility SeparatorVisibility { get; init; } = Visibility.Visible;
@@ -136,7 +135,6 @@ public sealed partial class SettingsWindow
                 Binding = s.Binding,
                 GroupLabel = s.GroupKey == null ? string.Empty : Strings.Get(s.GroupKey),
                 GroupVisibility = s.GroupKey == null ? Visibility.Collapsed : Visibility.Visible,
-                GroupMargin = i == 0 ? new Thickness(0, 0, 0, 2) : new Thickness(0, 8, 0, 2),
                 GroupBorder = i == 0 ? new Thickness(0, 0, 0, 1) : new Thickness(0, 1, 0, 1),
                 SeparatorVisibility = lastInGroup ? Visibility.Collapsed : Visibility.Visible,
                 IsGlobal = IsGlobalHotkey(s.Key),

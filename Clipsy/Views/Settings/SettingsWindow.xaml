@@ -1297,8 +1297,9 @@
                                                     <Border Grid.Row="0" Visibility="{Binding GroupVisibility}"
                                                             Background="{ThemeResource ClipsyBg1Brush}"
                                                             BorderBrush="{ThemeResource ClipsyBorderSubtleBrush}" BorderThickness="{Binding GroupBorder}"
-                                                            Margin="{Binding GroupMargin}" Padding="14,7">
-                                                        <TextBlock Text="{Binding GroupLabel}" Style="{StaticResource ClipsyLabel}" />
+                                                            Padding="8,8,14,8">
+                                                        <TextBlock Text="{Binding GroupLabel}" Style="{StaticResource ClipsyLabel}"
+                                                                   FontSize="13" Foreground="{ThemeResource ClipsyText2Brush}" />
                                                     </Border>
                                                     <Grid Grid.Row="1" Padding="14,6" ColumnSpacing="16">
                                                         <Grid.ColumnDefinitions>
