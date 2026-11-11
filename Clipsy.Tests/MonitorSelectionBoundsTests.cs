@@ -18,6 +18,22 @@ public class MonitorSelectionBoundsTests
         Assert.Equal(new Rect(x, expectedY, 300, 200), result);
     }
 
+    [Theory]
+    [InlineData(2560, 1440, 1.75)]
+    [InlineData(1920, 1080, 1.75)]
+    [InlineData(2560, 1440, 1.5)]
+    [InlineData(3840, 2160, 1.25)]
+    public void Region_pushed_into_a_corner_stays_there_at_fractional_scales(int pxW, int pxH, double scale)
+    {
+        var screen = new Rect(0, 0, pxW / scale, pxH / scale);
+        for (int px = 8; px < 700; px++)
+        {
+            var region = new Rect(100 / scale, 100 / scale, px / scale, px / scale);
+            var moved = MonitorSelectionBounds.Move(region, 1e6, 1e6, screen, new[] { screen });
+            Assert.True(moved.X > screen.Width / 4 && moved.Y > screen.Height / 4, $"{px}px region jumped to {moved.X};{moved.Y}");
+        }
+    }
+
     [Fact]
     public void Region_can_straddle_the_seam_and_move_to_the_other_monitor()
     {

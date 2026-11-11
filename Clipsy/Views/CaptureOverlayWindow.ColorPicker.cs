@@ -171,8 +171,8 @@ public sealed partial class CaptureOverlayWindow
         int srcSize = Math.Max(1, (int)Math.Round(magPx * DpiScale / 10.0));
 
         var scale = DpiScale;
-        int cx = (int)(cursorDip.X * scale);
-        int cy = (int)(cursorDip.Y * scale);
+        int cx = (int)Math.Round(cursorDip.X * scale);
+        int cy = (int)Math.Round(cursorDip.Y * scale);
         int srcW   = _eyeW;
         int srcH   = _eyeH;
         int stride = _eyedropperStride;
@@ -208,8 +208,9 @@ public sealed partial class CaptureOverlayWindow
     {
         if (_eyedropperPixels == null || _eyeW == 0) return Microsoft.UI.Colors.Black;
         var scale = DpiScale;
-        int px = Math.Clamp((int)(cursorDip.X * scale), 0, _eyeW - 1);
-        int py = Math.Clamp((int)(cursorDip.Y * scale), 0, _eyeH - 1);
+        // Rounded: the pointer's DIPs are floats, so pixel k arrives as k - 0.0001 at fractional scales.
+        int px = Math.Clamp((int)Math.Round(cursorDip.X * scale), 0, _eyeW - 1);
+        int py = Math.Clamp((int)Math.Round(cursorDip.Y * scale), 0, _eyeH - 1);
         int i = py * _eyedropperStride + px * 4; // BGRA
         return Color.FromArgb(0xFF, _eyedropperPixels[i + 2], _eyedropperPixels[i + 1], _eyedropperPixels[i]);
     }

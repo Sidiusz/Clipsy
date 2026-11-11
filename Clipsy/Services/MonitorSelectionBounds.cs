@@ -5,7 +5,8 @@ namespace Clipsy.Services;
 /// <summary>Moves a region within the actual desktop, including selections spanning adjacent monitors.</summary>
 internal static class MonitorSelectionBounds
 {
-    private const double CoordinateTolerance = 1e-7;
+    // Rect stores floats: at fractional display scales a clamped edge lands ~1e-4 past the monitor's.
+    private const double CoordinateTolerance = 0.01;
     public static Rect Move(Rect selection, double x, double y, Rect canvas, IReadOnlyList<Rect> monitors)
     {
         double maxX = Math.Max(canvas.X, canvas.Right - selection.Width);
