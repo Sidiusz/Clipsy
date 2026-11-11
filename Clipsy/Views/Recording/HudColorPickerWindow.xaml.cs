@@ -60,15 +60,21 @@ public sealed partial class HudColorPickerWindow : Window
         _appWindow.MoveAndResize(new RectInt32(-32000, -32000, w, h));
         Activate();
         SetForegroundWindow(_hwnd);
+        // Reopened at the same size no SizeChanged follows, and the picker would stay parked.
+        if (Root.ActualHeight >= 10) PlaceAtAnchor(Root.ActualWidth, Root.ActualHeight);
     }
 
     private void OnRootSizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (_repositioning || e.NewSize.Height < 10) return;
+        PlaceAtAnchor(e.NewSize.Width, e.NewSize.Height);
+    }
 
+    private void PlaceAtAnchor(double rootW, double rootH)
+    {
         double scale = GetDpiScale();
-        int w = (int)Math.Ceiling(e.NewSize.Width  * scale);
-        int h = (int)Math.Ceiling(e.NewSize.Height * scale);
+        int w = (int)Math.Ceiling(rootW * scale);
+        int h = (int)Math.Ceiling(rootH * scale);
 
         int x = _anchorX + _anchorW / 2 - w / 2;
         int y = _anchorY - h - AnchorGap;

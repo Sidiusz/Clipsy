@@ -213,6 +213,7 @@ public sealed partial class RecordingHudWindow : Window
     // Placement is in physical pixels on the region's monitor; the XAML size is DIPs of that monitor.
     public void PositionBelowRegion(int regionX, int regionY, int regionW, int regionH)
     {
+        _region = (regionX, regionY, regionW, regionH);
         var region = new RECT { Left = regionX, Top = regionY, Right = regionX + regionW, Bottom = regionY + regionH };
         IntPtr monitor = MonitorFromRect(ref region, MONITOR_DEFAULTTONEAREST);
         var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
@@ -318,10 +319,18 @@ public sealed partial class RecordingHudWindow : Window
     {
         if (_paused) return;
         var elapsed = _accumulated + (DateTime.UtcNow - _startedAt);
-        TimerText.Text = elapsed.TotalHours >= 1
+        bool hours = elapsed.TotalHours >= 1;
+        TimerText.Text = hours
             ? elapsed.ToString(@"hh\:mm\:ss")
             : elapsed.ToString(@"mm\:ss");
+        if (hours == _showsHours) return;
+        // The window was sized for "mm:ss"; the wider text would clip the last button.
+        _showsHours = hours;
+        if (_region is var (x, y, w, h)) PositionBelowRegion(x, y, w, h);
     }
+
+    private bool _showsHours;
+    private (int X, int Y, int W, int H)? _region;
 
     private void OnHideTick(object? s, object e)
     {
