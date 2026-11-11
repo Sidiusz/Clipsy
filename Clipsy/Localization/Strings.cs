@@ -141,8 +141,8 @@ public static class Strings
         ["LblEyedropperCopyHex"]  = New("Copy picked HEX",              "Копировать HEX цвета"),
         ["HelperEyedropperCopyHex"] = New("Copy the selected color as #RRGGBB to the clipboard.", "После выбора цвета копировать #RRGGBB в буфер обмена."),
         ["LblWindowAudio"]      = New("Window recordings: only the app's sound", "Запись окна: только звук приложения"),
-        ["HelperWindowAudio"]   = New("When you record a window, only that app is heard: no Discord, browser or system sounds. Needs FFmpeg and Windows 11. Default: on.",
-                                      "При записи окна слышно только это приложение: без Discord, браузера и системных звуков. Нужны FFmpeg и Windows 11. По умолчанию: вкл."),
+        ["HelperWindowAudio"]   = New("Record only the sound of the app whose window is recorded. Needs FFmpeg and Windows 11. Default: on.",
+                                      "Записывать только звук приложения, окно которого записывается. Нужны FFmpeg и Windows 11. По умолчанию: вкл."),
         ["LblVideoCursor"]      = New("Include cursor",            "Включить курсор"),
         ["HelperVideoCursor"]   = New("Show the mouse pointer in recordings. Default: on.", "Показывать указатель мыши в записях. По умолчанию: вкл."),
         ["LblAfterSave"]        = New("After-save behavior",       "Поведение после сохранения"),
@@ -249,7 +249,7 @@ public static class Strings
                                      "С установленным FFmpeg доступны VP9, AV1 и заметно лучшее качество GIF."),
         // Microphone settings
         ["LblMicEnabled"]       = New("Record microphone",                     "Записывать микрофон"),
-        ["HelperMic"]           = New("Makes the microphone available while recording. Enabled by default; the first recording starts muted, and the last mute state is remembered.", "Делает микрофон доступным во время записи. По умолчанию функция включена, первая запись начинается с выключенным микрофоном, а последнее состояние запоминается."),
+        ["HelperMic"]           = New("The microphone is turned on with its button on the recording toolbar. The first recording starts with it off, then the last state is kept. Default: on.", "Микрофон включается кнопкой на панели записи. Первая запись начинается с выключенным микрофоном, дальше запоминается последнее состояние. По умолчанию: вкл."),
         ["LblMicDevice"]        = New("Input device",                          "Устройство ввода"),
         ["HelperMicDevice"]     = New("Leave on default to use the system microphone.", "Оставьте «по умолчанию», чтобы использовать системный микрофон."),
         ["OptMicDefault"]       = New("Default system microphone",             "Системный микрофон по умолчанию"),
@@ -406,7 +406,7 @@ public static class Strings
         // Notification settings labels
         ["LblNotifyMaster"]         = New("Show notifications",                            "Показывать уведомления"),
         ["LblNotifyDuration"]       = New("Display duration",                              "Время показа"),
-        ["HelperNotifyDuration"]    = New("How long non-persistent notifications stay visible.",   "Сколько времени обычные уведомления остаются на экране."),
+        ["HelperNotifyDuration"]    = New("How long notifications stay on screen, except the update notification. Default: 5 s", "Сколько времени уведомления остаются на экране, кроме уведомления об обновлении. По умолчанию: 5 с"),
         ["NotifyDurationValue"]     = New("{0} s",                                             "{0} с"),
         ["LblNotifyScreenshot"]     = New("Screenshot saved",                              "Скриншот сохранён"),
         ["LblNotifyErrors"]         = New("Errors",                                        "Ошибки"),
