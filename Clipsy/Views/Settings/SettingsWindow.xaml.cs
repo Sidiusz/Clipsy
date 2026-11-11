@@ -409,6 +409,7 @@ public sealed partial class SettingsWindow : Window
         {
             if (_open != null)
             {
+                if (_open._appWindow?.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } p) p.Restore();
                 _open.Activate();
                 _open.BringToFront();
                 return;

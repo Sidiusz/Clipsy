@@ -112,7 +112,12 @@ public sealed partial class ChangelogWindow : Window
 
     public static void ShowWindow()
     {
-        if (_open != null) { _open.Activate(); return; }
+        if (_open != null)
+        {
+            if (_open._appWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } p) p.Restore();
+            _open.Activate();
+            return;
+        }
         var w = new ChangelogWindow();
         _open = w;
         w.CenterOnScreen();
@@ -124,9 +129,14 @@ public sealed partial class ChangelogWindow : Window
     {
         var area = DisplayArea.GetFromWindowId(
             Win32Interop.GetWindowIdFromWindow(_hwnd), DisplayAreaFallback.Primary).WorkArea;
-        _appWindow.Move(new PointInt32(
-            area.X + (area.Width - 560) / 2, area.Y + (area.Height - 680) / 2));
+        // The size is in DIPs: scaled by the window's DPI, never larger than the work area.
+        double scale = Math.Max(1.0, GetDpiForWindow(_hwnd) / 96.0);
+        int w = Math.Min((int)Math.Round(560 * scale), area.Width);
+        int h = Math.Min((int)Math.Round(680 * scale), area.Height);
+        _appWindow.MoveAndResize(new RectInt32(area.X + (area.Width - w) / 2, area.Y + (area.Height - h) / 2, w, h));
     }
+
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
 
     private void ArmReveal()
     {
