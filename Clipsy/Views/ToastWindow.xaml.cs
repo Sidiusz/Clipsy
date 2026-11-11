@@ -79,7 +79,7 @@ public sealed partial class ToastWindow : Window
         _appWindow.Show(false);
     }
 
-    internal void ShowToast(ToastService.ToastOptions opts, int index)
+    internal void ShowToast(ToastService.ToastOptions opts, int stackOffsetPx)
     {
         Prewarm();
         StopRenderHandler();
@@ -96,7 +96,7 @@ public sealed partial class ToastWindow : Window
         _isInUse = true;
 
         ApplyOptions(opts);
-        CalculateSlot(index);
+        CalculateSlot(stackOffsetPx);
 
         _currentX = _offscreenX;
         _currentY = _targetY;
@@ -122,17 +122,20 @@ public sealed partial class ToastWindow : Window
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += _renderHandler;
     }
 
-    internal void PositionAtSlot(int index)
+    internal void PositionAtSlot(int stackOffsetPx)
     {
         if (!_isInUse || _isFadingOut)
             return;
 
-        CalculateSlot(index);
+        CalculateSlot(stackOffsetPx);
         if (_revealPending) return; // the reveal animates to the new slot
         AnimateTo(_targetX, _targetY, RepositionMs, EaseOutCubic);
     }
 
-    private void CalculateSlot(int index)
+    /// <summary>This toast's height plus the gap to the one above it.</summary>
+    internal int StackExtentPx { get; private set; }
+
+    private void CalculateSlot(int stackOffsetPx)
     {
         double scale = DpiScale();
         _w = (int)(ToastW * scale);
@@ -144,7 +147,8 @@ public sealed partial class ToastWindow : Window
         GetMonitorInfo(MonitorFromWindow(_hwnd, MONITOR_DEFAULTTOPRIMARY), ref mi);
 
         _targetX = mi.rcWork.right - _w - margin;
-        _targetY = mi.rcWork.bottom - _h - margin - index * (_h + gap);
+        _targetY = mi.rcWork.bottom - _h - margin - stackOffsetPx;
+        StackExtentPx = _h + gap;
         _offscreenX = mi.rcWork.right;
     }
 

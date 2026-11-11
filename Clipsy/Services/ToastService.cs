@@ -132,7 +132,7 @@ public static class ToastService
         opts.Category is ToastCategory.Update or ToastCategory.Hint
         || (opts.Category == ToastCategory.Prompt && opts.Persistent);
 
-    private static bool UserIsBusy()
+    internal static bool UserIsBusy()
     {
         try
         {
@@ -221,7 +221,7 @@ public static class ToastService
 
         try
         {
-            toast.ShowToast(opts, _active.Count);
+            toast.ShowToast(opts, _active.Sum(a => a.Window.StackExtentPx));
             _active.Add(new ActiveToast(toast, key, opts.Persistent));
         }
         catch (Exception ex)
@@ -252,8 +252,13 @@ public static class ToastService
 
     internal static void RepositionAll()
     {
-        for (int i = 0; i < _active.Count; i++)
-            _active[i].Window.PositionAtSlot(i);
+        // Toasts differ in height: each sits above the real heights of those below it.
+        int offset = 0;
+        foreach (var a in _active)
+        {
+            a.Window.PositionAtSlot(offset);
+            offset += a.Window.StackExtentPx;
+        }
     }
 
     private const int QUNS_BUSY = 2;
