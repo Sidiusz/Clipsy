@@ -12,6 +12,7 @@ namespace Clipsy.Tests;
 
 // Records the primary monitor with every output setting through the real RecordingService.
 // Settings change in memory only. No UI, no sound, but GPU encoding: opt-in.
+[Collection("Recording")] // one recorder at a time: they share the settings and the GPU encoder
 public class RecordingMatrixTests(ITestOutputHelper output)
 {
     [Fact]
@@ -47,8 +48,8 @@ public class RecordingMatrixTests(ITestOutputHelper output)
                     service.Stop();
                     if (!finished.Wait(TimeSpan.FromSeconds(30))) { failures.Add($"{name}: never finished"); continue; }
                     if (failed != null) { failures.Add($"{name}: {failed}"); continue; }
-                    bool released = RecordingController.WaitUntilReleasedAsync(done!, 10_000).GetAwaiter().GetResult();
-                    if (!released) output.WriteLine($"{name}: file still locked after 10 s");
+                    bool released = RecordingController.WaitUntilReleasedAsync(done!, 60_000).GetAwaiter().GetResult();
+                    if (!released) output.WriteLine($"{name}: file still locked after 60 s");
                     var info = Probe(done!);
                     var m = Regex.Match(info, @"Video: (\w+).*?, (\d+)x(\d+)");
                     string got = m.Success ? $"{m.Groups[1].Value} {m.Groups[2].Value}x{m.Groups[3].Value}" : "no video";

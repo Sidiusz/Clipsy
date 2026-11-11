@@ -13,7 +13,7 @@ public class RecordingRegionTests
     [InlineData("480p", 2560, 1440, 852, 480)]
     [InlineData("720p", 1300, 900, 1040, 720)]
     [InlineData("720p", 640, 480, 640, 480)]   // never upscaled
-    [InlineData("native", 1301, 901, 1301, 901)]
+    [InlineData("native", 1301, 901, 1300, 900)]   // encoders need even sizes
     public void Output_size_scales_down_to_the_chosen_height(string res, int w, int h, int ow, int oh)
         => Assert.Equal((ow, oh), RecordingService.ResolveOutputSize(res, w, h));
 

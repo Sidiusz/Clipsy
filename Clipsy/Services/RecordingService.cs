@@ -19,6 +19,11 @@ public sealed class RecordingService : IDisposable
     private readonly List<DisplayRecordingSource> _sources = new();
     private readonly List<Rectangle> _sourceMonitors = new(); // parallel to _sources
     private Rectangle _sourceCanvasBounds;
+    // One display: ScreenRecorderLib draws a lone source unscaled into a surface the size of the
+    // video frame (the screen's top-left corner), so no frame size is set and the display is scaled instead.
+    private bool _singleSource;
+    private double _canvasScale = 1.0;
+    private int _outW, _outH;
     private Rectangle _activeRegion;
     private double _outputAspect;
     private string[]? _fpsDevices; // displays whose refresh rate "native" fps follows
@@ -47,13 +52,14 @@ public sealed class RecordingService : IDisposable
         PrepareTempPath();
         bool cursor = SettingsService.Instance.Settings.CaptureVideoCursor;
         UsesGraphicsCapture = !desktopDuplication && ModernScreenCaptureService.IsSupported;
-        BuildSources(x, y, width, height, cursor);
         _fpsDevices = DevicesTouching(new Rectangle(x, y, width, height));
         _activeRegion = new Rectangle(x, y, width, height);
         var (outW, outH) = ResolveOutputSize(SettingsService.Instance.Settings.VideoResolution, width, height);
         _outputAspect = (double)outW / outH;
+        (_outW, _outH) = (outW, outH);
+        BuildSources(x, y, width, height, cursor);
         var crop = GetCanvasCrop(_activeRegion);
-        Diagnostics.Log($"Recording region={_activeRegion} canvas={_sourceCanvasBounds} crop={crop.Left},{crop.Top},{crop.Width},{crop.Height} out={outW}x{outH} fps={ResolveFramerate(SettingsService.Instance.Settings.VideoFramerate, _fpsDevices)} api={(UsesGraphicsCapture ? "WGC" : "DDA")} monitors={string.Join(";", _sourceMonitors)}");
+        Diagnostics.Log($"Recording region={_activeRegion} canvas={_sourceCanvasBounds} scale={_canvasScale:0.###} crop={crop.Left},{crop.Top},{crop.Width},{crop.Height} out={outW}x{outH} fps={ResolveFramerate(SettingsService.Instance.Settings.VideoFramerate, _fpsDevices)} api={(UsesGraphicsCapture ? "WGC" : "DDA")} monitors={string.Join(";", _sourceMonitors)}");
         StartRecorder(_sources.Cast<RecordingSourceBase>().ToList(), width, height, crop,
             overrideCodec, systemAudio: true, cursor);
     }
@@ -135,7 +141,7 @@ public sealed class RecordingService : IDisposable
             OutputOptions = new OutputOptions
             {
                 RecorderMode = RecorderMode.Video,
-                OutputFrameSize = new ScreenSize(outW, outH),
+                OutputFrameSize = _singleSource ? null : new ScreenSize(outW, outH),
                 SourceRect = sourceRect,
                 Stretch = StretchMode.Uniform,
             },
@@ -224,9 +230,14 @@ public sealed class RecordingService : IDisposable
     {
         _sources.Clear();
         _sourceMonitors.Clear();
-        _sourceCanvasBounds = ScreenFreezeService.GetVirtualScreenBounds();
+        var monitors = EnumerateMonitors().ToList();
+        if (monitors.Count == 0)
+            throw new InvalidOperationException("No display recording sources are available.");
+        _sourceCanvasBounds = monitors.Select(m => m.Bounds).Aggregate(Rectangle.Union);
         var region = new Rectangle(rx, ry, rw, rh);
-        foreach (var (name, bounds) in EnumerateMonitors())
+        _singleSource = monitors.Count == 1;
+        _canvasScale = _singleSource && _outH < (rh & ~1) ? (double)_outH / rh : 1.0;
+        foreach (var (name, bounds) in monitors)
         {
             bool active = Intersects(region, bounds);
             var source = new DisplayRecordingSource(name)
@@ -239,12 +250,18 @@ public sealed class RecordingService : IDisposable
                 RecorderApi = UsesGraphicsCapture ? RecorderApi.WindowsGraphicsCapture : RecorderApi.DesktopDuplication,
                 IsBorderRequired = false,
             };
+            if (_canvasScale < 1)
+            {
+                source.OutputSize = new ScreenSize(Even(bounds.Width * _canvasScale), Even(bounds.Height * _canvasScale));
+                source.Stretch = StretchMode.Fill;
+            }
             _sources.Add(source);
             _sourceMonitors.Add(bounds);
         }
-        if (_sources.Count == 0)
-            throw new InvalidOperationException("No display recording sources are available.");
     }
+
+    // Tests narrow the displays to one to record the way a single-monitor PC does.
+    internal static Func<Rectangle, bool>? MonitorFilter { get; set; }
 
     internal static string[] DevicesTouching(Rectangle region)
         => EnumerateMonitors().Where(m => Intersects(region, m.Bounds)).Select(m => m.DeviceName).ToArray();
@@ -259,7 +276,7 @@ public sealed class RecordingService : IDisposable
             {
                 var r = new Rectangle(mi.rcMonitor.left, mi.rcMonitor.top,
                     mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top);
-                list.Add((mi.szDevice, r));
+                if (MonitorFilter?.Invoke(r) != false) list.Add((mi.szDevice, r));
             }
             return true;
         }, IntPtr.Zero);
@@ -288,7 +305,8 @@ public sealed class RecordingService : IDisposable
         {
             "480p" => 480, "720p" => 720, "1080p" => 1080, "1440p" => 1440, _ => 0
         };
-        if (targetH == 0 || captureH <= targetH) return (captureW, captureH);
+        // Encoders need even sizes; an odd one failed the recording outright on a single display.
+        if (targetH == 0 || captureH <= targetH) return (Math.Max(2, captureW & ~1), Math.Max(2, captureH & ~1));
         double scale = (double)targetH / captureH;
         int w = Math.Max(2, (int)(captureW * scale) & ~1);
         int h = Math.Max(2, targetH & ~1);
@@ -418,12 +436,22 @@ public sealed class RecordingService : IDisposable
     private ScreenRect GetCanvasCrop(Rectangle region)
     {
         var clipped = Rectangle.Intersect(region, _sourceCanvasBounds);
-        if (clipped.Width <= 0 || clipped.Height <= 0)
-            return new ScreenRect(0, 0, 1, 1);
+        if (clipped.Width < 2 || clipped.Height < 2)
+            return new ScreenRect(0, 0, 2, 2);
         clipped = FitAspect(clipped, _outputAspect);
-        return new ScreenRect(clipped.X - _sourceCanvasBounds.X, clipped.Y - _sourceCanvasBounds.Y,
-            clipped.Width, clipped.Height);
+        int x = clipped.X - _sourceCanvasBounds.X, y = clipped.Y - _sourceCanvasBounds.Y;
+        int w = Math.Max(2, clipped.Width & ~1), h = Math.Max(2, clipped.Height & ~1);
+        if (_canvasScale >= 1) return new ScreenRect(x, y, w, h);
+        // The display was scaled down to the video's size; a crop within 2 px of the frame takes its exact size.
+        int sw = Even(w * _canvasScale), sh = Even(h * _canvasScale);
+        if (Math.Abs(sw - _outW) <= 2) sw = _outW;
+        if (Math.Abs(sh - _outH) <= 2) sh = _outH;
+        int sx = Math.Clamp((int)Math.Round(x * _canvasScale), 0, Math.Max(0, Even(_sourceCanvasBounds.Width * _canvasScale) - sw));
+        int sy = Math.Clamp((int)Math.Round(y * _canvasScale), 0, Math.Max(0, Even(_sourceCanvasBounds.Height * _canvasScale) - sh));
+        return new ScreenRect(sx, sy, sw, sh);
     }
+
+    private static int Even(double v) => Math.Max(2, (int)Math.Round(v) & ~1);
 
     // The video frame is fixed at start; letterboxing a differently shaped crop would fill the bars
     // with the screen around the region, so the crop is trimmed to the frame's shape instead.

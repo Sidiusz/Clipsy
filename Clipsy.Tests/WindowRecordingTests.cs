@@ -9,6 +9,7 @@ using Xunit;
 
 namespace Clipsy.Tests;
 
+[Collection("Recording")]
 public class WindowRecordingTests
 {
     [Theory]
