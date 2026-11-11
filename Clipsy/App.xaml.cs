@@ -255,6 +255,7 @@ public partial class App : Application
             _uiQueue?.TryEnqueue(() => RecordingController.Current?.StopFromHotkey());
             return;
         }
+        if (Hotkey is { } hotkey) CaptureOverlayHost.NoteKeyTime(hotkey.LastKeyTime);
         CaptureOverlayHost.RequestOverlay();
     }
 

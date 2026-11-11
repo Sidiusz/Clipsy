@@ -216,10 +216,12 @@ public sealed partial class CaptureOverlayWindow : Window
 
     // Re-cloaks and re-arms the cloak→reveal handshake; used by ctor and reuse.
     private int _composedCount;
+    private bool _revealedByWatchdog;
     private void ArmReveal()
     {
         _cloaked = true;
         _revealed = false;
+        _revealedByWatchdog = false;
         try
         {
             int cloak = 1;
@@ -713,7 +715,7 @@ public sealed partial class CaptureOverlayWindow : Window
         // issued while hidden is dropped, leaving last capture's drawings.
         _drawing?.InvalidateCommitted();
         PlayIntroAnimations();
-        CaptureOverlayHost.OnRevealed(this);
+        CaptureOverlayHost.OnRevealed(this, _revealedByWatchdog);
     }
 
     // Composition ticks can stall under load; force the reveal so the overlay
@@ -727,6 +729,7 @@ public sealed partial class CaptureOverlayWindow : Window
         wd.Tick += (_, _) =>
         {
             if (_revealed || _closed || session != _session) return;
+            _revealedByWatchdog = true;
             _cloaked = false;
             var b = _frame.VirtualBounds;
             SetOverlayClientBounds(b.X, b.Y, b.Width, b.Height, SWP_NOACTIVATE);

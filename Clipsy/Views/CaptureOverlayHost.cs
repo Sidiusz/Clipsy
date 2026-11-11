@@ -73,9 +73,17 @@ public static class CaptureOverlayHost
         Interlocked.Exchange(ref _requestTick, Environment.TickCount64);
         // Pressing the hotkey again revives a request an Esc cancelled while it was pending.
         Volatile.Write(ref _pendingCancelled, 0);
-        if (Interlocked.CompareExchange(ref _requestInFlight, 1, 0) == 0)
-            _captureSignal.Set();
+        if (Interlocked.CompareExchange(ref _requestInFlight, 1, 0) != 0) return;
+        // Before the worker wakes: at normal priority it would queue behind a game's threads.
+        CapturePriority.Boost();
+        _captureSignal.Set();
     }
+
+    private static int _keyDelayMs = -1;
+
+    /// <summary>Hotkey thread: when the capture key was pressed (message time), to log how late it reached us.</summary>
+    internal static void NoteKeyTime(uint messageTime)
+        => Volatile.Write(ref _keyDelayMs, (int)Math.Min(60_000u, unchecked((uint)Environment.TickCount - messageTime)));
 
     private static void CaptureLoop()
     {
@@ -91,10 +99,14 @@ public static class CaptureOverlayHost
                 // the first frames and the first input all wait on CPU/GPU time otherwise.
                 CapturePriority.Boost();
                 var sw = Stopwatch.StartNew();
-                var windows = WindowTargets.VisibleInZOrder();
+                // Alongside the screenshot: the list is for the menu only and must not delay the frame.
+                var windows = System.Threading.Tasks.Task.Run(WindowTargets.VisibleInZOrder);
                 var frame = _freeze.Capture();
-                frame.Windows = windows;
+                long frameMs = sw.ElapsedMilliseconds;
+                try { frame.Windows = windows.GetAwaiter().GetResult(); }
+                catch (Exception ex) { Diagnostics.LogInBackground($"Window list failed: {ex.Message}"); }
                 long captureMs = sw.ElapsedMilliseconds;
+                _lastStages = $"frame={frameMs}ms {ModernScreenCaptureService.LastStages}";
                 var dq = _dispatcher;
                 long enqueuedTick = Environment.TickCount64;
                 // High priority: jump ahead of queued toast/layout work so the overlay appears first.
@@ -190,7 +202,8 @@ public static class CaptureOverlayHost
     {
         long totalMs = Math.Max(0, Environment.TickCount64 - requestTick);
         var b = frame.VirtualBounds;
-        Diagnostics.LogInBackground($"Overlay open ({mode}): total={totalMs}ms workerWait={workerWaitMs}ms capture={captureMs}ms queue={queueMs}ms ui={uiMs}ms " +
+        int key = Interlocked.Exchange(ref _keyDelayMs, -1);
+        Diagnostics.LogInBackground($"Overlay open ({mode}): total={totalMs}ms key={(key < 0 ? "n/a" : key + "ms")} workerWait={workerWaitMs}ms capture={captureMs}ms ({_lastStages}) queue={queueMs}ms ui={uiMs}ms " +
             $"frame={frame.PixelWidth}x{frame.PixelHeight} bounds={b.X},{b.Y},{b.Width}x{b.Height} monitors={frame.Monitors.Count}");
     }
 
@@ -207,10 +220,15 @@ public static class CaptureOverlayHost
     }
 
     /// <summary>The overlay is on screen: keep the boost a moment for the first input, then drop it.</summary>
-    internal static void OnRevealed(CaptureOverlayWindow win)
+    internal static void OnRevealed(CaptureOverlayWindow win, bool byWatchdog)
     {
-        if (_current == win) CapturePriority.RestoreAfter(BoostAfterRevealMs);
+        if (_current != win) return;
+        CapturePriority.RestoreAfter(BoostAfterRevealMs);
+        long ms = Math.Max(0, Environment.TickCount64 - Interlocked.Read(ref _requestTick));
+        Diagnostics.LogInBackground($"Overlay on screen {ms}ms after the request{(byWatchdog ? " (frames stalled; revealed by the watchdog)" : "")}");
     }
+
+    private static string _lastStages = string.Empty;
 
     internal static void Dismiss(CaptureOverlayWindow win)
     {

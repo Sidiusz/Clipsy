@@ -55,6 +55,7 @@ internal static class ModernScreenCaptureService
 
     private static async Task<ScreenFreezeService.FrozenFrame> CaptureAsync(bool includeCursor)
     {
+        ResetStages();
         var bounds = ScreenFreezeService.GetVirtualScreenBounds();
         var targets = EnumerateTargets();
         if (bounds.Width <= 0 || bounds.Height <= 0 || targets.Count == 0)
@@ -114,12 +115,40 @@ internal static class ModernScreenCaptureService
         finally { if (uninitialize) RoUninitialize(); }
     }
 
+    // Slowest monitor's stage times of the last capture, for the overlay's timing log.
+    private static long _setupMs, _firstFrameMs, _readbackMs, _copyMs;
+
+    public static string LastStages
+        => $"session={Interlocked.Read(ref _setupMs)}ms firstFrame={Interlocked.Read(ref _firstFrameMs)}ms readback={Interlocked.Read(ref _readbackMs)}ms copy={Interlocked.Read(ref _copyMs)}ms";
+
+    private static void ResetStages()
+    {
+        Interlocked.Exchange(ref _setupMs, 0);
+        Interlocked.Exchange(ref _firstFrameMs, 0);
+        Interlocked.Exchange(ref _readbackMs, 0);
+        Interlocked.Exchange(ref _copyMs, 0);
+    }
+
+    private static void NoteStages(long setup, long firstFrame, long readback, long copy)
+    {
+        Max(ref _setupMs, setup);
+        Max(ref _firstFrameMs, firstFrame);
+        Max(ref _readbackMs, readback);
+        Max(ref _copyMs, copy);
+        static void Max(ref long slot, long value)
+        {
+            long seen;
+            while (value > (seen = Interlocked.Read(ref slot)) && Interlocked.CompareExchange(ref slot, value, seen) != seen) { }
+        }
+    }
+
     private static Task<CapturedMonitor> CaptureMonitorAsync(IDirect3DDevice device, IntPtr hMonitor, bool includeCursor)
         => CaptureItemAsync(device, CreateItem(hMonitor, window: false), includeCursor, MonitorFrameTimeout);
 
     private static async Task<CapturedMonitor> CaptureItemAsync(
         IDirect3DDevice device, GraphicsCaptureItem item, bool includeCursor, TimeSpan timeout)
     {
+        long setupStart = System.Diagnostics.Stopwatch.GetTimestamp();
         var size = item.Size;
         using var pool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             device, DirectXPixelFormat.B8G8R8A8UIntNormalized, 1, size);
@@ -142,13 +171,19 @@ internal static class ModernScreenCaptureService
         };
 
         pool.FrameArrived += handler;
+        long setup = (long)System.Diagnostics.Stopwatch.GetElapsedTime(setupStart).TotalMilliseconds;
         try
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             session.StartCapture();
             using var frame = await tcs.Task.WaitAsync(timeout);
+            long arrived = sw.ElapsedMilliseconds;
             using var bitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(
                 frame.Surface, BitmapAlphaMode.Ignore);
-            return CopySoftwareBitmap(bitmap);
+            long read = sw.ElapsedMilliseconds;
+            var copy = CopySoftwareBitmap(bitmap);
+            NoteStages(setup, arrived, read - arrived, sw.ElapsedMilliseconds - read);
+            return copy;
         }
         finally { pool.FrameArrived -= handler; }
     }

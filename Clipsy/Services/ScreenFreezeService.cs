@@ -126,7 +126,12 @@ public sealed class ScreenFreezeService
     internal static void ForceOpaque(byte[] bgra)
     {
         var px = MemoryMarshal.Cast<byte, uint>(bgra.AsSpan());
-        for (int i = 0; i < px.Length; i++) px[i] |= 0xFF000000u;
+        // A whole-desktop frame is tens of MB: SIMD makes this pass several times shorter.
+        var mask = new System.Numerics.Vector<uint>(0xFF000000u);
+        int i = 0, step = System.Numerics.Vector<uint>.Count;
+        for (; i <= px.Length - step; i += step)
+            (new System.Numerics.Vector<uint>(px.Slice(i, step)) | mask).CopyTo(px.Slice(i, step));
+        for (; i < px.Length; i++) px[i] |= 0xFF000000u;
     }
 
     public static Rectangle GetVirtualScreenBounds()

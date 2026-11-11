@@ -311,12 +311,25 @@ public sealed class HotkeyService : IDisposable
     [DllImport("user32.dll")]
     private static extern IntPtr SetTimer(IntPtr hWnd, IntPtr nIDEvent, uint uElapse, IntPtr lpTimerFunc);
 
+    private volatile uint _keyTime;
+
+    /// <summary>Message time (GetTickCount) of the key event being handled, for latency logs.</summary>
+    public uint LastKeyTime => _keyTime;
+
+    [DllImport("user32.dll")]
+    private static extern int GetMessageTime();
+
     private IntPtr LowLevelKbProc(int nCode, IntPtr wParam, IntPtr lParam)
     {
         try
         {
-            if (nCode == HC_ACTION && HandleLowLevelKey(wParam.ToInt32(), Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam).vkCode))
-                return new IntPtr(1); // swallow so the OS shortcut doesn't also fire
+            if (nCode == HC_ACTION)
+            {
+                var key = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+                _keyTime = key.time;
+                if (HandleLowLevelKey(wParam.ToInt32(), key.vkCode))
+                    return new IntPtr(1); // swallow so the OS shortcut doesn't also fire
+            }
         }
         catch (Exception ex)
         {
@@ -373,6 +386,7 @@ public sealed class HotkeyService : IDisposable
                 int id = wParam.ToInt32();
                 if (id == HOTKEY_CAPTURE)
                 {
+                    _keyTime = unchecked((uint)GetMessageTime());
                     _captureCallback?.Invoke();
                 }
                 else if (id == HOTKEY_RECORD)
