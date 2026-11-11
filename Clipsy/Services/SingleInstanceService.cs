@@ -14,7 +14,8 @@ namespace Clipsy.Services;
 public static class SingleInstanceService
 {
     /// <summary>Busy: alive and recording, so it must never be replaced.</summary>
-    public enum ProbeResult { Alive, Busy, Hung, NoAnswer }
+    /// <summary>Unreachable: an instance owns the pipe but runs at another elevation, so it can't be asked anything.</summary>
+    public enum ProbeResult { Alive, Busy, Hung, NoAnswer, Unreachable }
 
     private const int MaxServerInstances = 4;
     private const int HungAfterMs = 30_000;
@@ -205,6 +206,11 @@ public static class SingleInstanceService
                 // Connected but mute is not proof of a hang (heavy load, slow start): never kill on it.
                 _ => ProbeResult.NoAnswer,
             };
+        }
+        // The pipe's owner check fails between an elevated and a normal process.
+        catch (UnauthorizedAccessException)
+        {
+            return ProbeResult.Unreachable;
         }
         catch
         {

@@ -126,7 +126,9 @@ public static class CliService
             return DeserializeResponse(response);
 
         // Writing settings.json behind a running app would be overwritten by its next save.
-        if (SingleInstanceService.Probe(out int pid) != SingleInstanceService.ProbeResult.NoAnswer || pid != 0)
+        var probe = SingleInstanceService.Probe(out int pid);
+        if (probe == SingleInstanceService.ProbeResult.Unreachable) return new CliResult(3, DifferentElevation);
+        if (probe != SingleInstanceService.ProbeResult.NoAnswer || pid != 0)
             return new CliResult(3, "Clipsy is running but did not answer. Try again.");
         return CliConfigService.Execute(args);
     }
@@ -134,7 +136,7 @@ public static class CliService
     // Graceful shutdown (finishes a recording); waits for the process so installers can replace files.
     private static CliResult Quit()
     {
-        if (SingleInstanceService.Probe(out int pid) == SingleInstanceService.ProbeResult.NoAnswer)
+        if (SingleInstanceService.Probe(out int pid) is SingleInstanceService.ProbeResult.NoAnswer or SingleInstanceService.ProbeResult.Unreachable)
         {
             // Elevated (the uninstaller) fails the pipe's owner check; the quit event still reaches this user's Clipsy.
             if (!SingleInstanceService.TrySignalQuit())
@@ -179,6 +181,7 @@ public static class CliService
     }
 
     private const int StartingExitCode = 3;
+    private const string DifferentElevation = "Clipsy is running with different administrator rights than this command. Run the command the same way Clipsy runs.";
 
     private static CliResult ExecuteUiCommand(string command)
     {
@@ -190,6 +193,9 @@ public static class CliService
         }
         else
         {
+            // Starting a second instance here would only fight the running one.
+            if (SingleInstanceService.Probe(out _) == SingleInstanceService.ProbeResult.Unreachable)
+                return new CliResult(3, DifferentElevation);
             var exe = Environment.ProcessPath;
             if (string.IsNullOrWhiteSpace(exe)) return new CliResult(4, "Cannot resolve Clipsy executable path.");
             Process.Start(new ProcessStartInfo { FileName = exe, UseShellExecute = true });

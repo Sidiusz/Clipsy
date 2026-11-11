@@ -24,7 +24,16 @@ public static class Program
         if (CliService.TryRun(args, out int cliExitCode))
             return cliExitCode;
 
-        using var mutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
+        Mutex mutex;
+        bool createdNew;
+        try { mutex = new Mutex(initiallyOwned: true, MutexName, out createdNew); }
+        catch (UnauthorizedAccessException)
+        {
+            // An elevated instance owns the mutex; a normal launch can't even open it.
+            Diagnostics.Log("Clipsy is already running elevated; leaving it running.");
+            return 0;
+        }
+        using var mutexLifetime = mutex;
         if (!createdNew && !TakeOver(mutex))
             return 0;
 
@@ -71,6 +80,10 @@ public static class Program
                 case SingleInstanceService.ProbeResult.Alive:
                 case SingleInstanceService.ProbeResult.Busy:
                     SingleInstanceService.TrySendRequest(CliService.SerializeRequest("activate", Array.Empty<string>()), out _);
+                    return false;
+                case SingleInstanceService.ProbeResult.Unreachable:
+                    // A healthy instance that merely can't be reached must never be replaced (it may be recording).
+                    Diagnostics.Log("Clipsy is already running at a different elevation; leaving it running.");
                     return false;
                 case SingleInstanceService.ProbeResult.Hung:
                     // A UI stall can pass (heavy load, a slow resume): replace it only if it stays hung.
