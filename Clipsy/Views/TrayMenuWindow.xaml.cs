@@ -54,6 +54,13 @@ public sealed partial class TrayMenuWindow : Window
 
         Activated += OnActivated;
         Closed += (_, _) => PrepareForShutdown();
+        // Alt+F4 would destroy the menu for the rest of the session: hide it instead.
+        _appWindow.Closing += (_, e) =>
+        {
+            if (_closed) return;
+            e.Cancel = true;
+            HideMenu(restoreFocus: true);
+        };
         RootGrid.KeyDown += (_, e) =>
         {
             if (e.Key == Windows.System.VirtualKey.Escape) { HideMenu(restoreFocus: true); e.Handled = true; }
