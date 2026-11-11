@@ -164,7 +164,11 @@ public partial class App : Application
         _idleTimer = dq.CreateTimer();
         _idleTimer.Interval = TimeSpan.FromSeconds(15);
         _idleTimer.IsRepeating = true;
-        _idleTimer.Tick += (_, _) => UpdateManager.MaybeAutoDownload();
+        _idleTimer.Tick += (_, _) =>
+        {
+            UpdateManager.MaybeAutoDownload();
+            UpdateManager.NotifyPending();
+        };
         _idleTimer.Start();
     }
 

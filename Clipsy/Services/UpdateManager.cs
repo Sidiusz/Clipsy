@@ -76,17 +76,29 @@ public static class UpdateManager
                 SetPhase(UpdatePhase.UpToDate);
                 return;
             }
-            bool isNew = Info?.Version != info.Version;
             Info = info;
             _downloadFailed = false;
             SetPhase(UpdatePhase.Available);
-            if (isNew && !force) NotifyAvailable(info);
+            if (force) _notifiedVersion = info.Version; // the user is looking at the result
+            else NotifyPending();
         }
         catch (Exception ex)
         {
             Diagnostics.Log("UpdateManager.CheckAsync", ex);
             SetPhase(UpdatePhase.Failed);
         }
+    }
+
+    private static string? _notifiedVersion;
+
+    /// <summary>Update toasts are held back over fullscreen apps; this shows one once the user is free.</summary>
+    public static void NotifyPending()
+    {
+        if (Info is not { } info || _notifiedVersion == info.Version) return;
+        if (Phase is not (UpdatePhase.Available or UpdatePhase.Downloading or UpdatePhase.Ready)) return;
+        if (ToastService.UserIsBusy()) return;
+        _notifiedVersion = info.Version;
+        NotifyAvailable(info);
     }
 
     private static void NotifyAvailable(UpdateInfo info)
@@ -163,15 +175,13 @@ public static class UpdateManager
             NotificationService.Warning("UpdateWaitRecording");
             return;
         }
-        if (_installer.Launch())
-            App.Current.ExitApp();
-        else
-        {
-            _installer.Dispose();
-            _installer = null;
-            _downloadFailed = true;
-            SetPhase(UpdatePhase.Failed);
-        }
+        // No exit here: the installer asks Clipsy to quit once it really installs, so a cancelled
+        // wizard doesn't leave Clipsy closed.
+        if (_installer.Launch()) return;
+        _installer.Dispose();
+        _installer = null;
+        _downloadFailed = true;
+        SetPhase(UpdatePhase.Failed);
     }
 
     public static void SkipCurrent()
