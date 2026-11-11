@@ -1,34 +1,50 @@
 # Clipsy
 
-Screenshot and screen recording tool for Windows. Lives in the tray, pops up an overlay when you hit a hotkey, and gets out of your way.
+Screenshot and screen recording tool for Windows 10 and 11
 
-<img width="1074" height="917" alt="image" src="https://github.com/user-attachments/assets/0fa0da84-7bcf-4067-9d8b-86a12910e965" />
+[Website](https://sidiusz.github.io/Clipsy/) · [Download](https://github.com/Sidiusz/Clipsy/releases/latest) · [На русском](https://sidiusz.github.io/Clipsy/ru/)
 
-## What it does
+![Drawing on a screenshot](site/shots/draw.webp)
 
-- Capture a region, window or full screen with a hotkey
-- Draw on screenshots: pencil, shapes, lines, arrows, text
-- Color picker and eyedropper with magnifier
-- Screen recording including a region border and floating HUD
-- GIF export
-- Mic toggle while recording
-- OCR text recognition on captures (Windows OCR, Tesseract or PP-OCRv5), with translation
-- Copy to clipboard, save to file, or open the saved folder right away
-- Light and dark theme
-- Customizable hotkeys
-- Multiple languages
+Clipsy is a small, fast alternative to the Windows Snipping Tool. It lets you take a screenshot and draw on it right away, recognize and translate text from the screen, and record video or GIF. And all of it in one app!
 
-## Install
+## Features
 
-Download the installer from the [Releases](https://github.com/Sidiusz/Clipsy/releases) page, or grab the portable zip if you don't want to install anything.
+- **Screenshots**: easy capture of one or several monitors, as well as individual apps
+- **Drawing**: a simple editor right on top of the screenshot: pencil, shapes, lines, arrows and text
+- **Screen recording**: a region or a window to popular video formats, with drawing, microphone and the sound of individual apps
+- **GIF export**: a recording saved as an animated GIF with adjustable frame rate and colours
+- **Text recognition**: text copied straight from the screen, with translation
+- **Colour picker**: precise colour picking from any point on the screen with a magnifier
+- **Hotkeys**: your own shortcuts in place of the default ones, including an instant screenshot without the overlay
+- **Copy or save**: to the clipboard or to a file, with the folder opened afterwards
+- **Light and dark themes**: the same look as Windows, or the one you choose
+- **English and Russian**: the interface in either language
+- **Command line**: screenshots and settings from scripts through `clipsy-cli`
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Text recognition and translation](site/shots/ocr.webp) | ![Video recording](site/shots/record.webp) |
+| Text recognition and translation | Video recording |
+| ![Colour picker with a magnifier](site/shots/picker.webp) | ![Light and dark themes](site/shots/settings-video.webp) |
+| Colour picker with a magnifier | Light and dark themes |
+
+## Download
+
+- [Installer](https://github.com/Sidiusz/Clipsy/releases/latest): with updates from inside the app
+- [Portable version](https://github.com/Sidiusz/Clipsy/releases/latest): a zip archive, nothing to install
+
+Requirements: Windows 10 (1809 or newer) or Windows 11, 64-bit. What changed in each version is on the [Releases](https://github.com/Sidiusz/Clipsy/releases) page.
 
 ## Privacy
 
-Captures, recordings and OCR stay on your PC. Translation is the exception: the recognized text is sent to the service chosen in Settings (Google Translate or MyMemory). Update checks contact GitHub; FFmpeg, Tesseract languages and PP-OCRv5 models are downloaded only when you install them, and are verified by checksum.
+Screenshots, recordings and recognized text stay on your PC. The only exception is translation: the text you translate is sent to the service chosen in Settings (Google Translate or MyMemory). Clipsy contacts GitHub to check for updates. FFmpeg, Tesseract languages and PP-OCRv5 models are downloaded only when you install them, and each download is checked against its checksum.
 
 ## Command line
 
-`Clipsy.exe` is both the desktop app and the CLI. Because it is a GUI program, shells don't wait for it; use `clipsy-cli.exe` (installed next to it) in scripts to get the output and exit code. Headless commands do not open the capture UI.
+Use `clipsy-cli.exe`, installed next to `Clipsy.exe`, in scripts: shells wait for it and get its output and exit code.
 
 ```text
 clipsy-cli status [--json]
@@ -47,21 +63,30 @@ clipsy-cli install [SETUP.exe] [--silent|--very-silent] [--dir PATH] [--desktop]
 clipsy-cli uninstall [--silent|--very-silent] [--keep-data] [--log PATH] [--json]
 ```
 
-`capture`, `open-settings`, `quit` and `config` talk to the running Clipsy through a named pipe private to the current user and session. If Clipsy is not running, `capture` and `open-settings` start it first; `config` then edits the settings file directly. `quit` exits gracefully (a recording in progress is saved first) and waits for the process to end. `screenshot` is headless and can return machine-readable metadata with `--json`.
+- `capture` and `open-settings` start Clipsy if it isn't running
+- `config` changes the settings of the running Clipsy, or the settings file when Clipsy is closed
+- `quit` saves a recording in progress before Clipsy exits
+- `screenshot` works without the capture overlay; `--json` prints the file details
+- `install` and `uninstall` return before setup finishes; run the setup or uninstaller itself when you need its exit code
 
-CLI exit codes are `0` for success, `2` for invalid arguments, `3` when the requested app/installer resource is unavailable or not ready, and `4` for an operation failure. Installer and uninstaller wrappers are detached because they may replace or remove the executable that launched them; use the setup/uninstaller executable directly when you need its final Inno Setup process exit code.
+| Exit code | Meaning |
+|---|---|
+| `0` | Success |
+| `2` | Invalid arguments |
+| `3` | Clipsy or the installer is unavailable or not ready |
+| `4` | The operation failed |
 
 ## Building from source
 
-```
+You need the .NET 8 SDK. `build.ps1` installs Inno Setup 6 if it's missing.
+
+```text
 dotnet test Clipsy.Tests\Clipsy.Tests.csproj -p:Platform=x64
 installer\build.ps1
 ```
 
-The tests include an OCR quality corpus (skipped unless PP-OCRv5 models are installed) and video conversion checks (skipped without FFmpeg). `build.ps1` publishes the app and `clipsy-cli`, syncs the version, and writes the installer and a portable zip into `installer\output`.
+The installer and the portable zip are written to `installer\output`. OCR quality tests are skipped without PP-OCRv5 models, and video tests without FFmpeg.
 
 ## License
 
-See [LICENSE](LICENSE) — personal and internal use only.
-
-<img width="926" height="633" alt="image" src="https://github.com/user-attachments/assets/9c13cc4f-4337-4726-85fa-1fa54367c28c" />
+[Clipsy Personal & Internal-Use License](LICENSE): personal and internal use only.
