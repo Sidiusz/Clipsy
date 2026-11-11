@@ -65,8 +65,12 @@ public sealed class FFmpegService
                 var buf = new byte[1 << 20];
                 long done = 0, lastMb = -1;
                 int read;
-                while ((read = await stream.ReadAsync(buf, ct)) > 0)
+                // HttpClient.Timeout ends with the headers; a stalled body would otherwise hang forever.
+                using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                while (true)
                 {
+                    stall.CancelAfter(TimeSpan.FromSeconds(60));
+                    if ((read = await stream.ReadAsync(buf, stall.Token)) <= 0) break;
                     await fs.WriteAsync(buf.AsMemory(0, read), ct);
                     done += read;
                     long mb = done / 1_048_576;
@@ -100,6 +104,7 @@ public sealed class FFmpegService
         }
         catch (OperationCanceledException)
         {
+            if (!ct.IsCancellationRequested) Diagnostics.Log("FFmpeg download stalled for 60 s; gave up.");
             return false;
         }
         catch (Exception ex)
