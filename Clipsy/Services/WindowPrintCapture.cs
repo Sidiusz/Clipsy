@@ -15,6 +15,9 @@ internal static class WindowPrintCapture
     {
         // PrintWindow waits on the window's thread, so a hung app would block the capture.
         if (IsIconic(hwnd) || IsHungAppWindow(hwnd) || !GetWindowRect(hwnd, out var r)) return null;
+        // A DPI-unaware window is stretched by Windows on a scaled display but prints at its own smaller size.
+        if (GetDpiForMonitor(MonitorFromWindow(hwnd, 2 /* NEAREST */), 0, out uint monitorDpi, out _) == 0
+            && GetDpiForWindow(hwnd) is var windowDpi and not 0 && windowDpi != monitorDpi) return null;
         int width = r.Right - r.Left, height = r.Bottom - r.Top;
         var crop = Rectangle.Intersect(new Rectangle(bounds.X - r.Left, bounds.Y - r.Top, bounds.Width, bounds.Height),
             new Rectangle(0, 0, width, height));
@@ -58,6 +61,9 @@ internal static class WindowPrintCapture
     private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsIconic(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+    [DllImport("shcore.dll")] private static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsHungAppWindow(IntPtr hwnd);
 }
