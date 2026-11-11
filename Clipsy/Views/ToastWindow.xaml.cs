@@ -398,9 +398,11 @@ public sealed partial class ToastWindow : Window
         DwmSetWindowAttribute(_hwnd, DWMWA_CLOAK, ref value, sizeof(int));
     }
 
+    // Toasts show on the primary monitor; while parked off-screen the window has the nearest monitor's DPI.
     private double DpiScale()
     {
-        uint dpi = GetDpiForWindow(_hwnd);
+        if (GetDpiForMonitor(MonitorFromWindow(_hwnd, MONITOR_DEFAULTTOPRIMARY), 0, out uint dpi, out _) != 0 || dpi == 0)
+            dpi = GetDpiForWindow(_hwnd);
         if (dpi == 0) dpi = GetDpiForSystem();
         return dpi == 0 ? 1.0 : dpi / 96.0;
     }
@@ -458,6 +460,7 @@ public sealed partial class ToastWindow : Window
     [DllImport("user32.dll")] private static extern bool   SetLayeredWindowAttributes(IntPtr h, uint key, byte alpha, uint flags);
     [DllImport("user32.dll")] private static extern bool   SetWindowPos(IntPtr h, IntPtr z, int x, int y, int cx, int cy, int flags);
     [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr h, int flags);
+    [DllImport("shcore.dll")] private static extern int    GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
     [DllImport("user32.dll")] private static extern bool   GetMonitorInfo(IntPtr hMon, ref MONITORINFO mi);
     [DllImport("user32.dll")] private static extern uint   GetDpiForWindow(IntPtr h);
     [DllImport("user32.dll")] private static extern uint   GetDpiForSystem();
