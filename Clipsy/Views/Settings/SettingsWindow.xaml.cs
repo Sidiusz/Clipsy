@@ -173,6 +173,7 @@ public sealed partial class SettingsWindow : Window
             SettingsService.Instance.SettingsChanged -= OnGlobalSettingsChanged;
             UpdateManager.StateChanged -= RenderUpdateStatus;
             if (_open == this) _open = null;
+            if (_spare == this) _spare = null;
         };
 
         UpdateManager.StateChanged += RenderUpdateStatus;
@@ -407,6 +408,9 @@ public sealed partial class SettingsWindow : Window
     {
         try
         {
+            // A window closed from outside must not be reused: every later open would throw.
+            if (_open is { _windowClosed: true }) _open = null;
+            if (_spare is { _windowClosed: true }) _spare = null;
             if (_open != null)
             {
                 if (_open._appWindow?.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } p) p.Restore();
