@@ -58,7 +58,7 @@ dotnet test Clipsy.Tests\Clipsy.Tests.csproj -p:Platform=x64
 installer\build.ps1
 ```
 
-The tests include an OCR quality corpus (skipped unless PP-OCRv5 models are installed) and video conversion checks (skipped without FFmpeg). `build.ps1` publishes the app and `clipsy-cli`, syncs the version, and writes the installer, a portable zip and `SHA256SUMS.txt` into `installer\output`.
+The tests include an OCR quality corpus (skipped unless PP-OCRv5 models are installed) and video conversion checks (skipped without FFmpeg). `build.ps1` publishes the app and `clipsy-cli`, syncs the version, and writes the installer and a portable zip into `installer\output`.
 
 ## License
 

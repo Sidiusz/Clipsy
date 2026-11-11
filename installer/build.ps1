@@ -5,7 +5,7 @@
 .DESCRIPTION
     Publishes the WinUI 3 app (plus the clipsy-cli console shim) self-contained for
     win-x64, compiles installer\output\Clipsy-Setup-<ver>.exe, and writes the portable
-    zip and SHA256SUMS.txt next to it.
+    zip next to it.
     Auto-installs Inno Setup 6 if it is not already on the machine, using
     winget when available, otherwise a direct download from jrsoftware.org.
 
@@ -215,14 +215,6 @@ $zipPath = Join-Path $outputDir "Clipsy-$Version-win-x64.zip"
 Write-Host "Creating portable archive $zipPath ..." -ForegroundColor Cyan
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Compress-Archive -Path (Join-Path $publishDir '*') -DestinationPath $zipPath -CompressionLevel Optimal
-
-$sumsPath = Join-Path $outputDir "SHA256SUMS.txt"
-$artifacts = @("Clipsy-Setup-$Version.exe", "Clipsy-$Version-win-x64.zip")
-$lines = foreach ($name in $artifacts) {
-    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $outputDir $name)).Hash.ToLowerInvariant()
-    "$hash  $name"
-}
-[System.IO.File]::WriteAllLines($sumsPath, [string[]]$lines)
 
 Write-Host "Done. Output: $outputDir" -ForegroundColor Green
 Get-ChildItem $outputDir | Format-Table Name, Length, LastWriteTime

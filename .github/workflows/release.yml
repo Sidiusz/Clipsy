@@ -51,14 +51,13 @@ jobs:
           $version = $env:GITHUB_REF_NAME
           $installer = "installer/output/Clipsy-Setup-$version.exe"
           $portable = "installer/output/Clipsy-$version-win-x64.zip"
-          $sums = "installer/output/SHA256SUMS.txt"
           $notes = ".github/release-notes/$version.md"
           # A draft of this version is finished in place rather than duplicated.
           cmd /c "gh release view $version >nul 2>&1"
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $version $installer $portable $sums --clobber
+            gh release upload $version $installer $portable --clobber
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             gh release edit $version --title $version --notes-file $notes --draft=false --latest
           } else {
-            gh release create $version $installer $portable $sums --title $version --notes-file $notes
+            gh release create $version $installer $portable --title $version --notes-file $notes
           }
