@@ -112,8 +112,12 @@ public sealed partial class SettingsWindow
 
         if (LblAuthor != null)        LblAuthor.Text        = Strings.Get("LblAuthorHeader");
         if (LblMit != null)           LblMit.Text           = Strings.Get("LblMit");
-        if (LblGithubLine != null)    LblGithubLine.Text    = Strings.Get("LblGithubLine");
-        if (LinkGithubOpen != null)   LinkGithubOpen.Content = Strings.Get("BtnOpen");
+        if (LblLinksLine != null)     LblLinksLine.Text     = Strings.Get("LblLinksLine");
+        if (LinkWebsite != null)
+        {
+            LinkWebsite.Content = Strings.Get("BtnWebsite");
+            LinkWebsite.NavigateUri = new Uri(Strings.Lang == "ru" ? "https://sidiusz.github.io/Clipsy/ru/" : "https://sidiusz.github.io/Clipsy/");
+        }
         if (LblLikeClipsy != null)    LblLikeClipsy.Text    = Strings.Get("LblLikeClipsy");
         if (LblLikeClipsyHint != null) LblLikeClipsyHint.Text = Strings.Get("LblLikeClipsyHint");
         if (LblStarBtn != null)       LblStarBtn.Text       = Strings.Get("BtnStar");

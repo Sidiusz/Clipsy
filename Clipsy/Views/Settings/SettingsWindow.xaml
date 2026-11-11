@@ -1531,15 +1531,19 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
-                                            <TextBlock Text="github.com/Sidiusz/Clipsy"
+                                            <TextBlock Text="sidiusz.github.io/Clipsy"
                                                        Style="{StaticResource ClipsyBodyStrong}" />
-                                            <TextBlock x:Name="LblGithubLine" Text="Source, issues, releases"
+                                            <TextBlock x:Name="LblLinksLine" Text="Website, source code, issues and releases"
                                                        Style="{StaticResource ClipsyHelper}" />
                                         </StackPanel>
-                                        <HyperlinkButton x:Name="LinkGithubOpen" Grid.Column="1"
-                                                         Content="Open"
-                                                         NavigateUri="https://github.com/Sidiusz/Clipsy"
-                                                         VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4"
+                                                    VerticalAlignment="Center">
+                                            <HyperlinkButton x:Name="LinkWebsite"
+                                                             Content="Website"
+                                                             NavigateUri="https://sidiusz.github.io/Clipsy/" />
+                                            <HyperlinkButton Content="GitHub"
+                                                             NavigateUri="https://github.com/Sidiusz/Clipsy" />
+                                        </StackPanel>
                                     </Grid>
 
                                 </StackPanel>

@@ -362,11 +362,11 @@ public static class Strings
         ["SectionLabelBinding"]   = New("BINDING",                                         "КОМБИНАЦИЯ"),
         ["LblLikeClipsy"]         = New("Like Clipsy?",                                    "Нравится Clipsy?"),
         ["LblLikeClipsyHint"]     = New("Star it on GitHub - that's enough.",              "Поставьте звезду на GitHub - этого достаточно."),
-        ["LblGithubLine"]         = New("Source, issues, releases",                        "Исходники, баги, релизы."),
+        ["LblLinksLine"]          = New("Website, source code, issues and releases",       "Сайт, исходники, баги и релизы"),
         ["LblAuthorHeader"]       = New("Author",                                          "Автор"),
         ["LblMit"]                = New("CPIUL-1.0 license",                               "Лицензия CPIUL-1.0"),
         ["BtnStar"]               = New("Star",                                            "Star"),
-        ["BtnOpen"]               = New("Open",                                            "Открыть"),
+        ["BtnWebsite"]            = New("Website",                                         "Сайт"),
 
         // Hotkey row labels
         ["HkGroupGeneral"]        = New("Capture", "Захват"),
