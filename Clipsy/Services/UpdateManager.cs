@@ -52,7 +52,8 @@ public static class UpdateManager
             if (Phase is UpdatePhase.Downloading or UpdatePhase.Ready) return;
 
             SetPhase(UpdatePhase.Checking);
-            var result = await UpdateService.CheckLatestAsync();
+            // Off the UI thread: the request starts synchronously (proxy lookup can take seconds).
+            var result = await Task.Run(() => UpdateService.CheckLatestAsync());
             if (result.Status == UpdateCheckStatus.Failed)
             {
                 if (force) NotificationService.Warning("UpdateCheckFailed");
