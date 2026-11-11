@@ -165,6 +165,7 @@ public sealed class HotkeyService : IDisposable
             if (_hwnd == IntPtr.Zero) { ready.Set(); return; }
 
             DoRegister();
+            SetTimer(_hwnd, RehookTimerId, 60_000, IntPtr.Zero);
             ready.Set();
 
             while (_running && GetMessageW(out var msg, IntPtr.Zero, 0, 0))
@@ -293,6 +294,23 @@ public sealed class HotkeyService : IDisposable
         }
     }
 
+    // Windows silently drops a low-level hook that once timed out (sleep, a frozen process),
+    // leaving a dead handle: a fresh one is installed every minute.
+    private void RefreshLowLevelHook()
+    {
+        if (_llHook == IntPtr.Zero || _llProc == null || _heldVk != 0) return;
+        var fresh = SetWindowsHookExW(WH_KEYBOARD_LL, _llProc, GetModuleHandle(null), 0);
+        if (fresh == IntPtr.Zero) return;
+        UnhookWindowsHookEx(_llHook);
+        _llHook = fresh;
+    }
+
+    private const int WM_TIMER = 0x0113;
+    private static readonly IntPtr RehookTimerId = new(1);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetTimer(IntPtr hWnd, IntPtr nIDEvent, uint uElapse, IntPtr lpTimerFunc);
+
     private IntPtr LowLevelKbProc(int nCode, IntPtr wParam, IntPtr lParam)
     {
         try
@@ -372,6 +390,11 @@ public sealed class HotkeyService : IDisposable
                     var cb = _quick[qi].Callback;
                     if (cb != null) _dispatcher.TryEnqueue(() => cb());
                 }
+                return IntPtr.Zero;
+            }
+            if (msg == WM_TIMER && wParam == RehookTimerId)
+            {
+                RefreshLowLevelHook();
                 return IntPtr.Zero;
             }
             if (msg == WM_USER_REREG)
