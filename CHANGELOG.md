@@ -4,6 +4,13 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.1.0
+
+A capture overlay that opens fast while a game loads the PC (Clipsy no longer runs in Windows
+efficiency mode), correct region recordings on single-monitor PCs, constant frame rate recordings,
+fixes for display scaling of 125–175%, and a batch of tray, notification, hotkey and update fixes.
+See [1.1.0.md](.github/release-notes/1.1.0.md).
+
 ## 1.0.13
 
 Screen recordings through Windows Graphics Capture (no more drops to 2 fps), reliable saving under
