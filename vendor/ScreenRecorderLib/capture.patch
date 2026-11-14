@@ -1,0 +1,77 @@
+diff --git a/ScreenRecorderLibNative/RecordingManager.cpp b/ScreenRecorderLibNative/RecordingManager.cpp
+index 104dedd..2310c14 100644
+--- a/ScreenRecorderLibNative/RecordingManager.cpp
++++ b/ScreenRecorderLibNative/RecordingManager.cpp
+@@ -13,6 +13,7 @@
+ #include "Cleanup.h"
+ #include "Screengrab.h"
+ #include "DynamicWait.h"
++#include "FramePacing.h"
+ #include "HighresTimer.h"
+ 
+ #pragma comment(lib, "dxguid.lib")
+@@ -529,6 +530,10 @@ REC_RESULT RecordingManager::StartRecorderLoop(_In_ const std::vector<RECORDING_
+ 		m_OutputManager->GetMediaTimeStamp(&timestamp);
+ 		INT64 durationSinceLastFrame100Nanos = timestamp - lastFrameStartPos100Nanos;
+ 		INT64 nanosRemaining = max(0, videoFrameDuration100Nanos - durationSinceLastFrame100Nanos);
++		if (recorderMode == RecorderModeInternal::Video && GetEncoderOptions()->GetIsFixedFramerate()) {
++			// Keep capture work inside the frame budget instead of adding it to every interval.
++			nanosRemaining = FramePacing::TimeUntilNextFrame(timestamp, lastFrameStartPos100Nanos, videoFrameDuration100Nanos);
++		}
+ 		return HundredNanosToMillisDouble(nanosRemaining);
+ 		});
+ 
+diff --git a/ScreenRecorderLibNative/ScreenCaptureManager.cpp b/ScreenRecorderLibNative/ScreenCaptureManager.cpp
+index d9a8072..35302e3 100644
+--- a/ScreenRecorderLibNative/ScreenCaptureManager.cpp
++++ b/ScreenRecorderLibNative/ScreenCaptureManager.cpp
+@@ -543,15 +543,8 @@ UINT ScreenCaptureManager::GetUpdatedOverlayCount()
+ 
+ void ScreenCaptureManager::InvalidateCaptureSources()
+ {
+-	m_IsInitialFrameWriteComplete = false;
+-	for each (CAPTURE_THREAD * threadObject in m_CaptureThreads)
+-	{
+-		threadObject->ThreadData->TotalUpdatedFrameCount = 0;
+-		if (threadObject->ThreadData) {			
+-			threadObject->ThreadData->LastUpdateTimeStamp.QuadPart == 0;
+-		}
+-		QueryPerformanceCounter(&m_LastAcquiredFrameTimeStamp);
+-	}
++	// Captured surfaces stay valid while paused; mark them unread without waiting for a repaint.
++	m_LastAcquiredFrameTimeStamp.QuadPart = 0;
+ }
+ std::vector<CAPTURE_RESULT *> ScreenCaptureManager::GetCaptureResults()
+ {
+@@ -1399,4 +1392,4 @@ void ProcessCaptureHRESULT(_In_ HRESULT hr, _Inout_ CAPTURE_RESULT *pResult, _In
+ 			pResult->Error = L"Unexpected error, aborting capture";
+ 			break;
+ 	}
+-}
+\ No newline at end of file
++}
+diff --git a/ScreenRecorderLibNative/WindowsGraphicsCapture.cpp b/ScreenRecorderLibNative/WindowsGraphicsCapture.cpp
+index ae8dd46..0c11445 100644
+--- a/ScreenRecorderLibNative/WindowsGraphicsCapture.cpp
++++ b/ScreenRecorderLibNative/WindowsGraphicsCapture.cpp
+@@ -220,6 +220,13 @@ HRESULT WindowsGraphicsCapture::StartCapture(_In_ RECORDING_SOURCE_BASE &recordi
+ 			m_framePool = winrt::Direct3D11CaptureFramePool::CreateFreeThreaded(direct3DDevice, winrt::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, m_CaptureItem.Size());
+ 
+ 			m_session = m_framePool.CreateCaptureSession(m_CaptureItem);
++			if (auto timing = m_session.try_as<winrt::IGraphicsCaptureSession5>()) {
++				// Windows defaults to 16 ms, which can undershoot 60 fps on high-refresh displays.
++				try { timing.MinUpdateInterval(winrt::Windows::Foundation::TimeSpan{ 0 }); }
++				catch (winrt::hresult_error const &ex) {
++					LOG_WARN(L"Could not remove WGC capture interval: %ls", ex.message().c_str());
++				}
++			}
+ 
+ 			if (IsGraphicsCaptureIsBorderRequiredPropertyAvailable()) {
+ 				m_session.IsBorderRequired(recordingSource.IsBorderRequired.value_or(true));
+@@ -578,4 +585,4 @@ HRESULT WindowsGraphicsCapture::GetNextFrame(_In_ DWORD timeoutMillis, _Inout_ G
+ 		hr = HRESULT_FROM_WIN32(dwErr);
+ 	}
+ 	return hr;
+-}
+\ No newline at end of file
++}

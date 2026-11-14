@@ -39,6 +39,9 @@ jobs:
       - name: Test
         run: dotnet test Clipsy.Tests/Clipsy.Tests.csproj -c Release -p:Platform=x64
 
+      - name: Recorder frame pacing
+        run: ./vendor/ScreenRecorderLib/test-frame-pacing.ps1
+
       - name: Build release artifacts
         shell: powershell
         run: .\installer\build.ps1 -Version $env:GITHUB_REF_NAME

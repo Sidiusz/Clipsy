@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <PackageId>ScreenRecorderLib</PackageId>
+    <Version>6.6.0-clipsy.2</Version>
+    <Authors>Sverre Skodje</Authors>
+    <Description>ScreenRecorderLib 6.6.0 with Clipsy capture interval and frame pacing patches.</Description>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <NativeRecorderSourceDirectory Condition="'$(NativeRecorderSourceDirectory)' == ''">$(MSBuildThisFileDirectory)..\..\.tools\ScreenRecorderLib</NativeRecorderSourceDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="LICENSE;README.md" Pack="true" PackagePath="" />
+    <None Include="ScreenRecorderLib.targets" Pack="true" PackagePath="build" />
+    <None Include="$(NativeRecorderSourceDirectory)\ScreenRecorderLib\bin\x64\Release\ScreenRecorderLib.dll" Pack="true" PackagePath="build/x64" />
+    <None Include="$(NativeRecorderSourceDirectory)\ScreenRecorderLib\bin\ARM64\Release\ScreenRecorderLib.dll" Pack="true" PackagePath="build/ARM64" />
+  </ItemGroup>
+</Project>

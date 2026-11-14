@@ -23,6 +23,9 @@ jobs:
       - name: Build
         run: dotnet build Clipsy/Clipsy.csproj -c Release -p:Platform=x64
 
+      - name: Recorder frame pacing
+        run: ./vendor/ScreenRecorderLib/test-frame-pacing.ps1
+
       # OCR-quality and ffmpeg cases skip themselves: the runner has no models or ffmpeg.
       - name: Test
         run: dotnet test Clipsy.Tests/Clipsy.Tests.csproj -c Release -p:Platform=x64

@@ -41,6 +41,7 @@ Thumbs.db
 
 # NuGet
 *.nupkg
+!vendor/packages/ScreenRecorderLib.6.6.0-clipsy.2.nupkg
 *.snupkg
 .nuget/
 

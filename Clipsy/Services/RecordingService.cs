@@ -14,6 +14,7 @@ namespace Clipsy.Services;
 public sealed class RecordingService : IDisposable
 {
     private Recorder? _recorder;
+    private RecordingTimerResolution? _timerResolution;
     // Register every monitor once so a live region can move/resize across
     // displays without trying to add recording sources after the encoder starts.
     private readonly List<DisplayRecordingSource> _sources = new();
@@ -189,11 +190,20 @@ public sealed class RecordingService : IDisposable
                    $"systemAudio={systemAudio} mic={(mic ? (s.MicrophoneMuted ? "muted" : "on") : "off")} appAudio={_appAudio != null} cursor={cursor}";
         Diagnostics.Log($"Recorder start: {_summary} sincePrevious={(sincePrevious < 0 ? "none" : sincePrevious + "ms")}");
         _startedTick = Environment.TickCount64;
-        _recorder = Recorder.CreateRecorder(options);
-        _recorder.OnRecordingComplete += OnComplete;
-        _recorder.OnRecordingFailed += OnFailed;
-        _recorder.OnStatusChanged += OnStatusChanged;
-        _recorder.Record(_tempPath);
+        _timerResolution = new RecordingTimerResolution();
+        try
+        {
+            _recorder = Recorder.CreateRecorder(options);
+            _recorder.OnRecordingComplete += OnComplete;
+            _recorder.OnRecordingFailed += OnFailed;
+            _recorder.OnStatusChanged += OnStatusChanged;
+            _recorder.Record(_tempPath);
+        }
+        catch
+        {
+            ReleaseTimerResolution();
+            throw;
+        }
     }
 
     // The app audio follows the encoder's own timeline, so pauses and a slow start stay in sync.
@@ -476,6 +486,7 @@ public sealed class RecordingService : IDisposable
 
     private void OnComplete(object? sender, RecordingCompleteEventArgs e)
     {
+        ReleaseTimerResolution();
         _lastEndedTick = Environment.TickCount64;
         long size = -1;
         try { size = new FileInfo(e.FilePath).Length; } catch { }
@@ -486,6 +497,7 @@ public sealed class RecordingService : IDisposable
 
     private void OnFailed(object? sender, RecordingFailedEventArgs e)
     {
+        ReleaseTimerResolution();
         _lastEndedTick = Environment.TickCount64;
         Diagnostics.Log($"Recorder failed after {_lastEndedTick - _startedTick}ms: {e.Error} ({_summary}); details in {NativeLogPath}");
         DisposeAppAudio();
@@ -494,21 +506,31 @@ public sealed class RecordingService : IDisposable
 
     public void Dispose()
     {
-        lock (_recorderLock)
+        try
         {
-            if (_recorder != null)
+            lock (_recorderLock)
             {
-                _recorder.OnRecordingComplete -= OnComplete;
-                _recorder.OnRecordingFailed -= OnFailed;
-                _recorder.OnStatusChanged -= OnStatusChanged;
-                _recorder.Dispose();
-                _recorder = null;
-                _sources.Clear();
-                _sourceMonitors.Clear();
+                if (_recorder != null)
+                {
+                    _recorder.OnRecordingComplete -= OnComplete;
+                    _recorder.OnRecordingFailed -= OnFailed;
+                    _recorder.OnStatusChanged -= OnStatusChanged;
+                    _recorder.Dispose();
+                    _recorder = null;
+                    _sources.Clear();
+                    _sourceMonitors.Clear();
+                }
             }
         }
-        DisposeAppAudio();
+        finally
+        {
+            DisposeAppAudio();
+            ReleaseTimerResolution();
+        }
     }
+
+    private void ReleaseTimerResolution()
+        => System.Threading.Interlocked.Exchange(ref _timerResolution, null)?.Dispose();
 
     private delegate bool MonitorEnumProc(IntPtr hMon, IntPtr hdc, IntPtr rect, IntPtr data);
 
