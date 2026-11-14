@@ -3,7 +3,7 @@
 
 #define ClipsyName "Clipsy"
 #ifndef ClipsyVersion
-#define ClipsyVersion "1.1.1"
+#define ClipsyVersion "1.1.2"
 #endif
 #define ClipsyPublisher "Sidiusz"
 #define ClipsyURL "https://github.com/Sidiusz/Clipsy"

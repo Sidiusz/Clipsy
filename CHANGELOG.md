@@ -4,6 +4,11 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.1.2
+
+Smoother 60 fps recordings on high-refresh displays and while recording games, plus a fix for
+recordings that stalled after resuming unchanged content. See [1.1.2.md](.github/release-notes/1.1.2.md).
+
 ## 1.1.1
 
 Links to the website and GitHub on the Info page, and a fix for Settings that could stop opening.
