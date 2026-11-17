@@ -7,10 +7,11 @@ namespace Clipsy.Tests;
 public class TranslationTests
 {
     [Fact]
-    public void FallbackStartsWithChosenServiceAndTriesEveryOther()
+    public void ManualAlternativesPreferGoogleAndExcludeSelectedService()
     {
-        Assert.Equal(new[] { "Google", "Bing", "MyMemory" }, TranslationService.FallbackOrder("Google").ToArray());
-        Assert.Equal(new[] { "Bing", "Google", "MyMemory" }, TranslationService.FallbackOrder("unknown").ToArray());
+        Assert.Equal(new[] { "Google", "MyMemory" }, TranslationService.Alternatives("Bing").ToArray());
+        Assert.Equal(new[] { "Bing", "MyMemory" }, TranslationService.Alternatives("Google").ToArray());
+        Assert.Equal("Google", TranslationService.NormalizeService("unknown"));
     }
 
     [Fact]
@@ -21,10 +22,9 @@ public class TranslationTests
     }
 
     [Fact]
-    public async Task TimedOutProviderFallsBackAndReportsProgress()
+    public async Task TimedOutProviderReturnsItsErrorWithoutContactingOthers()
     {
         var attempted = new List<string>();
-        var progress = new List<string>();
         CancellationToken firstToken = default;
         var result = await TranslationService.TranslateAsync("Hello", "en", "ru", "Bing",
             (service, _, _, _, ct) =>
@@ -35,12 +35,12 @@ public class TranslationTests
                     firstToken = ct;
                     return new TaskCompletionSource<TranslationResult>().Task;
                 }
-                return Task.FromResult(new TranslationResult("Привет"));
-            }, TimeSpan.FromMilliseconds(30), progress: new InlineProgress(progress.Add));
+                throw new Exception("Another provider must not receive the text");
+            }, TimeSpan.FromMilliseconds(30));
 
-        Assert.Equal("Привет", result.Text);
-        Assert.Equal(new[] { "Bing", "Google" }, attempted);
-        Assert.Equal(attempted, progress);
+        Assert.Null(result.Text);
+        Assert.Equal("TranslateTimeout", result.ErrorKey);
+        Assert.Equal(new[] { "Bing" }, attempted);
         Assert.True(firstToken.IsCancellationRequested);
     }
 
@@ -60,13 +60,18 @@ public class TranslationTests
     }
 
     [Fact]
-    public async Task EveryProviderTimingOutReturnsAnError()
+    public async Task ProviderFailureDoesNotAutomaticallySwitchOrSendMoreChunks()
     {
-        var result = await TranslationService.TranslateAsync("Hello", "en", "ru", "Bing",
-            (_, _, _, _, _) => new TaskCompletionSource<TranslationResult>().Task,
-            TimeSpan.FromMilliseconds(20));
+        var attempted = new List<string>();
+        var result = await TranslationService.TranslateAsync(new string('a', 2200), "en", "ru", "Bing",
+            (service, _, _, _, _) =>
+            {
+                attempted.Add(service);
+                return Task.FromResult(new TranslationResult(null, "TranslateQuota"));
+            }, TimeSpan.FromSeconds(1));
         Assert.Null(result.Text);
-        Assert.Equal("TranslateNetwork", result.ErrorKey);
+        Assert.Equal("TranslateQuota", result.ErrorKey);
+        Assert.Equal(new[] { "Bing" }, attempted);
     }
 
     [Theory]
@@ -100,19 +105,14 @@ public class TranslationTests
         Assert.Equal("en", result.TargetLanguage);
     }
 
-    private sealed class InlineProgress(Action<string> report) : IProgress<string>
-    {
-        public void Report(string value) => report(value);
-    }
-
     // Hits the network; runs only with CLIPSY_LIVE=1.
     [Fact]
-    public async System.Threading.Tasks.Task LiveBingTranslatesBothWays()
+    public async System.Threading.Tasks.Task LiveDefaultServiceTranslatesBothWays()
     {
         if (System.Environment.GetEnvironmentVariable("CLIPSY_LIVE") != "1") return;
-        var ru = await TranslationService.TranslateAsync("Screenshot copied to clipboard.", "auto", "ru", "Bing");
+        var ru = await TranslationService.TranslateAsync("Screenshot copied to clipboard.", "auto", "ru");
         Assert.Contains("буфер", ru.Text);
-        var en = await TranslationService.TranslateAsync("Скриншот скопирован в буфер обмена.", "auto", "en", "Bing");
+        var en = await TranslationService.TranslateAsync("Скриншот скопирован в буфер обмена.", "auto", "en");
         Assert.Contains("clipboard", en.Text);
     }
 }

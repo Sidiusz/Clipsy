@@ -31,11 +31,14 @@ public static class Strings
         ["NoTextFound"]         = New("No text found", "Текст не найден"),
         ["Copied"]              = New("Copied", "Скопировано"),
         ["TranslateUnavailable"]= New("Translation unavailable", "Перевод недоступен"),
-        ["TranslateQuota"]      = New("Translation limit reached. Try again later or switch the service in Settings.", "Лимит перевода исчерпан. Попробуйте позже или смените сервис в настройках."),
+        ["TranslateQuota"]      = New("Translation limit reached. Try again later or choose another service.", "Лимит перевода исчерпан. Попробуйте позже или выберите другой сервис."),
         ["TranslateNetwork"]    = New("Translation service is unreachable. Check the connection.", "Сервис перевода недоступен. Проверьте подключение."),
+        ["TranslateTimeout"]    = New("The service did not respond in time. Try again or choose another service.", "Сервис не ответил вовремя. Попробуйте ещё раз или выберите другой сервис."),
+        ["TranslateSwitchTo"]   = New("Switch to {0}", "Сменить на {0}"),
+        ["TipTranslateService"] = New("Choose translation service", "Выбрать сервис перевода"),
         ["TranslatingWith"]     = New("Translating with {0}…", "Перевод через {0}…"),
         ["TipTranslateSwap"]    = New("Swap languages", "Поменять языки местами"),
-        ["TranslateNotice"]     = New("To translate, the recognized text will be sent to {0}; if it's unavailable, to {1}. Continue?", "Для перевода распознанный текст будет отправлен в {0}, а если он недоступен — в {1}. Продолжить?"),
+        ["TranslateNotice"]     = New("To translate, the recognized text will be sent to {0}. Continue?", "Для перевода распознанный текст будет отправлен в {0}. Продолжить?"),
 
         // Capture overlay - bottom toolbar tooltips
         ["TipRecord"]           = New("Record",     "Запись"),

@@ -89,7 +89,7 @@ public sealed partial class CaptureOverlayWindow
         _ocrCts?.Cancel();
         _ocrCts = null;
         _translateRun++;
-        // Esc or a closed overlay stops remaining chunks and fallbacks from being sent.
+        // Esc or a closed overlay stops remaining chunks from being sent.
         _translateCts?.Cancel();
         _translateCts = null;
         _lastTranslation = null;
@@ -303,6 +303,7 @@ public sealed partial class CaptureOverlayWindow
 
     private string? _lastTranslateSource;
     private TranslationResult? _lastTranslation;
+    private string? _suggestedTranslateService;
     private int _translateRun;
     private System.Threading.CancellationTokenSource? _translateCts;
     private Flyout? _translateConsentFlyout;
@@ -322,12 +323,13 @@ public sealed partial class CaptureOverlayWindow
         _translateCts?.Cancel();
         _translateCts = null;
         var cfg = SettingsService.Instance.Settings;
+        string service = TranslationService.NormalizeService(cfg.TranslateService);
 
         // Text leaves the machine only after the user agrees once, here in the overlay:
         // Cancel or dismissing sends nothing (TranslationConsented records the consent).
         if (!cfg.TranslationConsented)
         {
-            if (!await ConfirmTranslationAsync(cfg.TranslateService)) return;
+            if (!await ConfirmTranslationAsync(service)) return;
             cfg.TranslationConsented = true;
             SettingsService.Instance.SaveState();
             if (run != _translateRun || !_inOcrMode) return;
@@ -335,7 +337,10 @@ public sealed partial class CaptureOverlayWindow
 
         _lastTranslateSource = text;
         _lastTranslation = null;
-        TranslateTarget.Text = string.Format(Strings.Get("TranslatingWith"), TranslationService.DisplayName(cfg.TranslateService));
+        TranslateTarget.Text = string.Format(Strings.Get("TranslatingWith"), TranslationService.DisplayName(service));
+        TranslateServiceBtn.Content = TranslationService.DisplayName(service);
+        TranslateSwitchBtn.Visibility = Visibility.Collapsed;
+        _suggestedTranslateService = null;
         TranslatePanel.Width = OcrTextPanel.ActualWidth;
         TranslatePanel.Visibility = Visibility.Visible;
         UpdateTranslateButtons();
@@ -345,14 +350,9 @@ public sealed partial class CaptureOverlayWindow
 
         var cts = _translateCts = new System.Threading.CancellationTokenSource();
         TranslationResult result;
-        var progress = new Progress<string>(service =>
-        {
-            if (run == _translateRun && _inOcrMode && ReferenceEquals(_translateCts, cts))
-                TranslateTarget.Text = string.Format(Strings.Get("TranslatingWith"), TranslationService.DisplayName(service));
-        });
         try
         {
-            result = await TranslationService.TranslateAsync(text, from, to, cfg.TranslateService, cts.Token, progress);
+            result = await TranslationService.TranslateAsync(text, from, to, service, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -370,19 +370,27 @@ public sealed partial class CaptureOverlayWindow
         }
         // A slower earlier request (language switched meanwhile) must not overwrite the newer one.
         if (run != _translateRun || !_inOcrMode) return;
-        _lastTranslation = result.Text != null ? result : null;
-        UpdateTranslateButtons();
-        TranslateTarget.Text = result.Text ?? Strings.Get(result.ErrorKey ?? "TranslateUnavailable");
+        ShowTranslationResult(result, service);
     }
 
-    // Names the chosen service and the fallbacks, since any of them may receive the text.
+    private void ShowTranslationResult(TranslationResult result, string service)
+    {
+        _lastTranslation = result.Text != null ? result : null;
+        UpdateTranslateButtons();
+        TranslateServiceBtn.Content = TranslationService.DisplayName(service);
+        TranslateTarget.Text = result.Text ?? $"{TranslationService.DisplayName(service)}: {Strings.Get(result.ErrorKey ?? "TranslateUnavailable")}";
+        _suggestedTranslateService = result.Text == null ? TranslationService.Alternatives(service).FirstOrDefault() : null;
+        TranslateSwitchBtn.Visibility = _suggestedTranslateService != null ? Visibility.Visible : Visibility.Collapsed;
+        if (_suggestedTranslateService != null)
+            TranslateSwitchBtn.Content = string.Format(Strings.Get("TranslateSwitchTo"), TranslationService.DisplayName(_suggestedTranslateService));
+    }
+
     private Task<bool> ConfirmTranslationAsync(string service)
     {
         var tcs = new TaskCompletionSource<bool>();
-        var names = TranslationService.FallbackOrder(service).Select(TranslationService.DisplayName).ToList();
         var message = new TextBlock
         {
-            Text = string.Format(Strings.Get("TranslateNotice"), names[0], string.Join(", ", names.Skip(1))),
+            Text = string.Format(Strings.Get("TranslateNotice"), TranslationService.DisplayName(service)),
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 320,
         };
@@ -435,6 +443,35 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnTranslateToBtnClick(object sender, RoutedEventArgs e)
         => ShowLangFlyout((Button)sender, isFrom: false);
+
+    private void OnTranslateServiceClick(object sender, RoutedEventArgs e)
+    {
+        var flyout = new MenuFlyout();
+        string selected = SettingsService.Instance.Settings.TranslateService;
+        foreach (string service in TranslationService.Services)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = string.Format(Strings.Get("TranslateSwitchTo"), TranslationService.DisplayName(service)),
+                IsEnabled = !string.Equals(service, selected, StringComparison.OrdinalIgnoreCase),
+            };
+            item.Click += async (_, _) => await SetTranslateServiceAsync(service);
+            flyout.Items.Add(item);
+        }
+        flyout.ShowAt(TranslateServiceBtn);
+    }
+
+    private async void OnTranslateSwitchClick(object sender, RoutedEventArgs e)
+    {
+        if (_suggestedTranslateService is { } service) await SetTranslateServiceAsync(service);
+    }
+
+    private async Task SetTranslateServiceAsync(string service)
+    {
+        SettingsService.Instance.Settings.TranslateService = service;
+        SettingsService.Instance.SaveState();
+        if (!string.IsNullOrWhiteSpace(_lastTranslateSource)) await DoTranslateAsync(_lastTranslateSource);
+    }
 
     private async void OnTranslateSwapClick(object sender, RoutedEventArgs e)
     {

@@ -40,7 +40,7 @@ Requirements: Windows 10 (1809 or newer) or Windows 11, 64-bit. What changed in 
 
 ## Privacy
 
-Screenshots, recordings and recognized text stay on your PC. The only exception is translation: the text you translate is sent to the service chosen in Settings (Google Translate or MyMemory). Clipsy contacts GitHub to check for updates. FFmpeg, Tesseract languages and PP-OCRv5 models are downloaded only when you install them, and each download is checked against its checksum.
+Screenshots, recordings and recognized text stay on your PC. The only exception is translation: the text you translate is sent only to your selected service (Google Translate by default, Microsoft Translator, or MyMemory). If it fails, Clipsy shows an error and lets you switch services directly in the translation panel. Clipsy contacts GitHub to check for updates. FFmpeg, Tesseract languages and PP-OCRv5 models are downloaded only when you install them, and each download is checked against its checksum.
 
 ## Command line
 

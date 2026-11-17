@@ -17,7 +17,7 @@ public sealed record TranslationResult(string? Text, string? ErrorKey = null,
     string? SourceLanguage = null, string? TargetLanguage = null);
 
 /// <summary>Translation via Microsoft (Bing web translator), Google (unofficial endpoint) or MyMemory,
-/// falling back to the next service when one fails. Text leaves the machine; the overlay asks the
+/// using only the selected service. Text leaves the machine; the overlay asks the
 /// user once before the first request.</summary>
 public static class TranslationService
 {
@@ -28,7 +28,7 @@ public static class TranslationService
     private static readonly TimeSpan ProviderTimeout = TimeSpan.FromSeconds(5);
 
     public const string Bing = "Bing", Google = "Google", MyMemory = "MyMemory";
-    public static readonly IReadOnlyList<string> Services = new[] { Bing, Google, MyMemory };
+    public static readonly IReadOnlyList<string> Services = new[] { Google, Bing, MyMemory };
 
     public static string DisplayName(string service) => service switch
     {
@@ -37,14 +37,11 @@ public static class TranslationService
         _ => "MyMemory",
     };
 
-    // The chosen service first, then the rest in quality order.
-    internal static IEnumerable<string> FallbackOrder(string service)
-    {
-        var first = Services.FirstOrDefault(s => string.Equals(s, service, StringComparison.OrdinalIgnoreCase)) ?? Bing;
-        yield return first;
-        foreach (var s in Services)
-            if (s != first) yield return s;
-    }
+    internal static string NormalizeService(string service)
+        => Services.FirstOrDefault(s => string.Equals(s, service, StringComparison.OrdinalIgnoreCase)) ?? Google;
+
+    internal static IEnumerable<string> Alternatives(string service)
+        => Services.Where(s => s != NormalizeService(service));
 
     private static readonly HttpClient _http = CreateClient();
 
@@ -75,12 +72,12 @@ public static class TranslationService
     }
 
     public static Task<TranslationResult> TranslateAsync(string text, string from, string to,
-        string service = Bing, CancellationToken ct = default, IProgress<string>? progress = null)
-        => TranslateAsync(text, from, to, service, TranslateChunkAsync, ProviderTimeout, ct, progress);
+        string service = Google, CancellationToken ct = default)
+        => TranslateAsync(text, from, to, service, TranslateChunkAsync, ProviderTimeout, ct);
 
     internal static async Task<TranslationResult> TranslateAsync(string text, string from, string to,
         string service, Func<string, string, string, string, CancellationToken, Task<TranslationResult>> translate,
-        TimeSpan providerTimeout, CancellationToken ct = default, IProgress<string>? progress = null)
+        TimeSpan providerTimeout, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(text)) return new TranslationResult(string.Empty);
 
@@ -90,23 +87,13 @@ public static class TranslationService
         if (from == "auto" && source != null && confident && SameLanguage(source, to))
             to = SameLanguage(source, "en") ? "ru" : "en";
 
-        TranslationResult? firstFailure = null;
-        foreach (var svc in FallbackOrder(service))
-        {
-            ct.ThrowIfCancellationRequested();
-            progress?.Report(svc);
-            // MyMemory has no working auto-detect.
-            string svcFrom = svc == MyMemory && from == "auto" ? source ?? "en" : from;
-            var result = await TranslateWithAsync(svc, text, svcFrom, to, translate, providerTimeout, ct).ConfigureAwait(false);
-            ct.ThrowIfCancellationRequested();
-            if (result.Text != null)
-            {
-                if (firstFailure != null) Diagnostics.Log($"Translate: {service} failed ({firstFailure.ErrorKey}), used {svc}");
-                return result with { SourceLanguage = result.SourceLanguage ?? source, TargetLanguage = to };
-            }
-            firstFailure ??= result;
-        }
-        return firstFailure!;
+        ct.ThrowIfCancellationRequested();
+        service = NormalizeService(service);
+        // MyMemory has no working auto-detect.
+        string serviceFrom = service == MyMemory && from == "auto" ? source ?? "en" : from;
+        var result = await TranslateWithAsync(service, text, serviceFrom, to, translate, providerTimeout, ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        return result.Text != null ? result with { SourceLanguage = result.SourceLanguage ?? source, TargetLanguage = to } : result;
     }
 
     internal static (string From, string To) SwapLanguages(string from, string to, string uiLanguage,
@@ -146,7 +133,7 @@ public static class TranslationService
             string? detectedSource = null;
             foreach (var (chunk, separator) in chunks)
             {
-                ct.ThrowIfCancellationRequested(); // Esc in the overlay: send no further chunks
+                ct.ThrowIfCancellationRequested();
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 timeout.CancelAfter(providerTimeout);
                 var translated = await translate(service, chunk, from, to, timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false);
@@ -158,8 +145,8 @@ public static class TranslationService
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            Diagnostics.Log($"Translate ({service}) timed out; trying the next service");
-            return new TranslationResult(null, "TranslateNetwork");
+            Diagnostics.Log($"Translate ({service}) timed out");
+            return new TranslationResult(null, "TranslateTimeout");
         }
         catch (HttpRequestException ex)
         {

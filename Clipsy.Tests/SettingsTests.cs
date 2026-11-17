@@ -43,9 +43,10 @@ public sealed class SettingsTests : IDisposable
     }
 
     [Theory]
-    [InlineData("MyMemory", "Bing")]
+    [InlineData("MyMemory", "MyMemory")]
     [InlineData("Google", "Google")]
-    public void Version1TranslateServiceMigrates(string saved, string expected)
+    [InlineData("Bing", "Bing")]
+    public void Version1PreservesTranslationServiceChoice(string saved, string expected)
     {
         Directory.CreateDirectory(_dir);
         File.WriteAllText(Path.Combine(_dir, "settings.json"), $"{{\"SettingsVersion\":1,\"TranslateService\":\"{saved}\"}}");
@@ -53,6 +54,25 @@ public sealed class SettingsTests : IDisposable
         var svc = new SettingsService(_dir);
 
         Assert.Equal(expected, svc.Settings.TranslateService);
+    }
+
+    [Fact]
+    public void GoogleIsTheDefaultForNewOrMissingTranslationSettings()
+    {
+        Assert.Equal("Google", new SettingsService(_dir).Settings.TranslateService);
+        File.WriteAllText(Path.Combine(_dir, "settings.json"), "{\"SettingsVersion\":2}");
+        Assert.Equal("Google", new SettingsService(_dir).Settings.TranslateService);
+    }
+
+    [Theory]
+    [InlineData("Bing")]
+    [InlineData("Google")]
+    [InlineData("MyMemory")]
+    public void ExistingTranslationServiceIsPreserved(string service)
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "settings.json"), $"{{\"SettingsVersion\":2,\"TranslateService\":\"{service}\"}}");
+        Assert.Equal(service, new SettingsService(_dir).Settings.TranslateService);
     }
 
     [Fact]

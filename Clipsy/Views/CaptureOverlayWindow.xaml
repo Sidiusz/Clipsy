@@ -271,6 +271,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <Border Grid.Row="0"
                                 Background="{ThemeResource ClipsyBg2Brush}"
@@ -326,6 +327,15 @@
                                      Foreground="{ThemeResource ClipsyTextBrush}"
                                      FontSize="13" />
                         </ScrollViewer>
+                        <StackPanel Grid.Row="2" Spacing="6" Padding="12,0,12,10">
+                            <Button x:Name="TranslateServiceBtn" Click="OnTranslateServiceClick"
+                                    Padding="0" FontSize="11" HorizontalAlignment="Left"
+                                    Background="Transparent" BorderThickness="0"
+                                    Foreground="{ThemeResource ClipsyText3Brush}" />
+                            <Button x:Name="TranslateSwitchBtn" Click="OnTranslateSwitchClick"
+                                    Visibility="Collapsed" HorizontalAlignment="Left"
+                                    Style="{StaticResource ClipsyButtonGhost}" />
+                        </StackPanel>
                     </Grid>
                 </Border>
 

@@ -132,8 +132,8 @@ public sealed partial class SettingsWindow
         OcrPpOcrV5.Content = Strings.Get("OptPpOcrV5") + defaultSuffix;
         if (_ppOcrDownloadCts.Count == 0) BuildPpOcrModelRows();
         OcrWinRt.Content   = Strings.Get("OptWinRtOcr");
-        TrSvcBing.Content     = Strings.Get("OptBing") + defaultSuffix;
-        TrSvcGoogle.Content   = Strings.Get("OptGoogle");
+        TrSvcBing.Content     = Strings.Get("OptBing");
+        TrSvcGoogle.Content   = Strings.Get("OptGoogle") + defaultSuffix;
         TrSvcMyMemory.Content = Strings.Get("OptMyMemory");
         FmtPng.Content     = Strings.Get("OptPngLossless");
         FmtJpg.Content     = Strings.Get("OptJpgSmaller");
