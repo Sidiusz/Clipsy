@@ -427,7 +427,7 @@ public sealed partial class CaptureOverlayWindow
     {
         if (TranslateFromBtn == null || TranslateToBtn == null) return;
         var s = SettingsService.Instance.Settings;
-        TranslateFromBtn.Content = LangBadge(_lastTranslation?.SourceLanguage ?? s.TranslateFrom);
+        TranslateFromBtn.Content = LangBadge(s.TranslateFrom == "auto" ? _lastTranslation?.SourceLanguage ?? s.TranslateFrom : s.TranslateFrom);
         TranslateToBtn.Content   = LangBadge(_lastTranslation?.TargetLanguage ?? (s.TranslateTo == "ui" ? Strings.Lang : s.TranslateTo));
     }
 
@@ -478,13 +478,12 @@ public sealed partial class CaptureOverlayWindow
         var s = SettingsService.Instance.Settings;
         string source = _lastTranslateSource ?? OcrTextBox.Text;
         var pair = TranslationService.SwapLanguages(s.TranslateFrom, s.TranslateTo, Strings.Lang, source, _lastTranslation);
-        string nextText = _lastTranslation?.Text ?? source;
         s.TranslateFrom = pair.From;
         s.TranslateTo = pair.To;
+        _lastTranslation = null;
         SettingsService.Instance.SaveState();
         UpdateTranslateButtons();
-        OcrTextBox.Text = nextText;
-        if (!string.IsNullOrWhiteSpace(nextText)) await DoTranslateAsync(nextText);
+        if (!string.IsNullOrWhiteSpace(source)) await DoTranslateAsync(source);
     }
 
     private void ShowLangFlyout(Button anchor, bool isFrom)

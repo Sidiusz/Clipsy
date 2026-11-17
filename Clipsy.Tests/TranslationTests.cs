@@ -93,6 +93,16 @@ public class TranslationTests
     }
 
     [Fact]
+    public async Task ProviderDetectionDoesNotReplaceTheExplicitLanguagePair()
+    {
+        var result = await TranslationService.TranslateAsync("Hello", "ru", "en", "Google",
+            (_, _, _, _, _) => Task.FromResult(new TranslationResult("Hello", SourceLanguage: "en")),
+            TimeSpan.FromSeconds(1));
+        Assert.Equal("ru", result.SourceLanguage);
+        Assert.Equal("en", result.TargetLanguage);
+    }
+
+    [Fact]
     public async Task ExplicitLanguagePairIsNotSilentlyReversed()
     {
         var result = await TranslationService.TranslateAsync("Hello", "en", "en", "Bing",

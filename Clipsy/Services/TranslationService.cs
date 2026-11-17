@@ -93,7 +93,7 @@ public static class TranslationService
         string serviceFrom = service == MyMemory && from == "auto" ? source ?? "en" : from;
         var result = await TranslateWithAsync(service, text, serviceFrom, to, translate, providerTimeout, ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
-        return result.Text != null ? result with { SourceLanguage = result.SourceLanguage ?? source, TargetLanguage = to } : result;
+        return result.Text != null ? result with { SourceLanguage = from == "auto" ? result.SourceLanguage ?? source : from, TargetLanguage = to } : result;
     }
 
     internal static (string From, string To) SwapLanguages(string from, string to, string uiLanguage,
