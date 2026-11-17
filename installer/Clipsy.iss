@@ -74,17 +74,18 @@ Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDum
     ValueType: dword; ValueName: "DumpCount"; ValueData: "$00000003"; Check: IsAdminInstallMode
 
 [Run]
-Filename: "{app}\{#ClipsyExeName}"; Parameters: "{code:AutostartInitParameters}"; Flags: runhidden runasoriginaluser
-; Silent installs (updates, CLI) relaunch too unless /NOLAUNCH; never elevated.
+; Shell execution honors Windows elevation/compatibility requirements instead of failing with 740.
+Filename: "{app}\{#ClipsyExeName}"; Parameters: "{code:AutostartInitParameters}"; Flags: shellexec waituntilterminated runhidden runasoriginaluser
+; Silent installs (updates, CLI) relaunch too unless /NOLAUNCH, as the original user.
 ; open-settings starts Clipsy when it isn't running.
 Filename: "{app}\{#ClipsyExeName}"; Parameters: "open-settings"; Description: "{cm:LaunchProgram,{#ClipsyName}}"; \
-    Flags: nowait postinstall runasoriginaluser; Check: ShouldLaunchAfterInstall
+    Flags: shellexec nowait postinstall runasoriginaluser; Check: ShouldLaunchAfterInstall
 
 [UninstallRun]
 ; Elevated as the same account this is that user's HKCU. Under another admin's credentials it isn't
 ; (ExecAsOriginalUser is unavailable when uninstalling); Clipsy drops a Run entry left pointing at
 ; a missing exe the next time it starts.
-Filename: "{app}\{#ClipsyExeName}"; Parameters: "autostart-init --remove"; Flags: runhidden; RunOnceId: "ClipsyAutostartCleanup"
+Filename: "{app}\{#ClipsyExeName}"; Parameters: "autostart-init --remove"; Flags: shellexec waituntilterminated runhidden; RunOnceId: "ClipsyAutostartCleanup"
 
 [Code]
 const
@@ -188,9 +189,9 @@ begin
   Exe := ExpandConstant('{app}\{#ClipsyExeName}');
   if not FileExists(Exe) then exit;
   if AsOriginalUser then
-    ExecAsOriginalUser(Exe, 'quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+    ShellExecAsOriginalUser('', Exe, 'quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
   else
-    Exec(Exe, 'quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    ShellExec('', Exe, 'quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   // The watchdog follows the app out within a few seconds.
   for I := 1 to 20 do
   begin

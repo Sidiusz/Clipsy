@@ -51,7 +51,7 @@ public sealed class HotkeyService : IDisposable
     private bool _captureViaLL;
     private bool _recordViaLL;
     private bool _micViaLL;
-    private uint _heldVk;
+    private readonly HotkeyPressState _pressState = new();
 
     // Always-on shortcuts that act without the overlay (quick screenshot, quick recordings).
     private sealed class QuickKey
@@ -165,7 +165,7 @@ public sealed class HotkeyService : IDisposable
             if (_hwnd == IntPtr.Zero) { ready.Set(); return; }
 
             DoRegister();
-            SetTimer(_hwnd, RehookTimerId, 60_000, IntPtr.Zero);
+            SetTimer(_hwnd, RehookTimerId, 5_000, IntPtr.Zero);
             ready.Set();
 
             while (_running && GetMessageW(out var msg, IntPtr.Zero, 0, 0))
@@ -295,10 +295,17 @@ public sealed class HotkeyService : IDisposable
     }
 
     // Windows silently drops a low-level hook that once timed out (sleep, a frozen process),
-    // leaving a dead handle: a fresh one is installed every minute.
+    // leaving a dead handle. A missed key-up must not prevent recovery forever.
     private void RefreshLowLevelHook()
     {
-        if (_llHook == IntPtr.Zero || _llProc == null || _heldVk != 0) return;
+        _pressState.ReleaseIfUp(_pressState.HeldKey != 0
+            && (GetAsyncKeyState((int)_pressState.HeldKey) & 0x8000) != 0);
+        if (_pressState.HeldKey != 0) return;
+        if (_llHook == IntPtr.Zero || _llProc == null)
+        {
+            SyncLowLevelHook();
+            return;
+        }
         var fresh = SetWindowsHookExW(WH_KEYBOARD_LL, _llProc, GetModuleHandle(null), 0);
         if (fresh == IntPtr.Zero) return;
         UnhookWindowsHookEx(_llHook);
@@ -342,7 +349,7 @@ public sealed class HotkeyService : IDisposable
     {
         if (message == WM_KEYUP || message == WM_SYSKEYUP)
         {
-            if (vk == _heldVk) _heldVk = 0;
+            _pressState.Release(vk);
             return false;
         }
         if (message != WM_KEYDOWN && message != WM_SYSKEYDOWN) return false;
@@ -359,8 +366,7 @@ public sealed class HotkeyService : IDisposable
         else return false;
 
         // Auto-repeat while held must not retrigger.
-        if (_heldVk == vk) return true;
-        _heldVk = vk;
+        if (!_pressState.TryPress(vk)) return true;
         if (cb == null) return true;
         if (onUi) _dispatcher.TryEnqueue(() => cb());
         else cb(); // capture callback only signals the dedicated capture worker
