@@ -92,6 +92,8 @@ public sealed partial class CaptureOverlayWindow
         // Esc or a closed overlay stops remaining chunks and fallbacks from being sent.
         _translateCts?.Cancel();
         _translateCts = null;
+        _lastTranslation = null;
+        _lastTranslateSource = null;
         _translateConsentFlyout?.Hide();
         StopScanAnimation();
         OcrLayer.Visibility = Visibility.Collapsed;
@@ -300,6 +302,7 @@ public sealed partial class CaptureOverlayWindow
     }
 
     private string? _lastTranslateSource;
+    private TranslationResult? _lastTranslation;
     private int _translateRun;
     private System.Threading.CancellationTokenSource? _translateCts;
     private Flyout? _translateConsentFlyout;
@@ -331,7 +334,8 @@ public sealed partial class CaptureOverlayWindow
         }
 
         _lastTranslateSource = text;
-        TranslateTarget.Text = "...";
+        _lastTranslation = null;
+        TranslateTarget.Text = string.Format(Strings.Get("TranslatingWith"), TranslationService.DisplayName(cfg.TranslateService));
         TranslatePanel.Width = OcrTextPanel.ActualWidth;
         TranslatePanel.Visibility = Visibility.Visible;
         UpdateTranslateButtons();
@@ -341,13 +345,23 @@ public sealed partial class CaptureOverlayWindow
 
         var cts = _translateCts = new System.Threading.CancellationTokenSource();
         TranslationResult result;
+        var progress = new Progress<string>(service =>
+        {
+            if (run == _translateRun && _inOcrMode && ReferenceEquals(_translateCts, cts))
+                TranslateTarget.Text = string.Format(Strings.Get("TranslatingWith"), TranslationService.DisplayName(service));
+        });
         try
         {
-            result = await TranslationService.TranslateAsync(text, from, to, cfg.TranslateService, cts.Token);
+            result = await TranslationService.TranslateAsync(text, from, to, cfg.TranslateService, cts.Token, progress);
         }
         catch (OperationCanceledException)
         {
             return; // Esc, a closed overlay or a newer request
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log("Translation failed", ex);
+            result = new TranslationResult(null, "TranslateUnavailable");
         }
         finally
         {
@@ -356,6 +370,8 @@ public sealed partial class CaptureOverlayWindow
         }
         // A slower earlier request (language switched meanwhile) must not overwrite the newer one.
         if (run != _translateRun || !_inOcrMode) return;
+        _lastTranslation = result.Text != null ? result : null;
+        UpdateTranslateButtons();
         TranslateTarget.Text = result.Text ?? Strings.Get(result.ErrorKey ?? "TranslateUnavailable");
     }
 
@@ -403,8 +419,8 @@ public sealed partial class CaptureOverlayWindow
     {
         if (TranslateFromBtn == null || TranslateToBtn == null) return;
         var s = SettingsService.Instance.Settings;
-        TranslateFromBtn.Content = LangBadge(s.TranslateFrom);
-        TranslateToBtn.Content   = LangBadge(s.TranslateTo == "ui" ? Strings.Lang : s.TranslateTo);
+        TranslateFromBtn.Content = LangBadge(_lastTranslation?.SourceLanguage ?? s.TranslateFrom);
+        TranslateToBtn.Content   = LangBadge(_lastTranslation?.TargetLanguage ?? (s.TranslateTo == "ui" ? Strings.Lang : s.TranslateTo));
     }
 
     private static string LangBadge(string code) => code.ToLowerInvariant() switch
@@ -419,6 +435,20 @@ public sealed partial class CaptureOverlayWindow
 
     private void OnTranslateToBtnClick(object sender, RoutedEventArgs e)
         => ShowLangFlyout((Button)sender, isFrom: false);
+
+    private async void OnTranslateSwapClick(object sender, RoutedEventArgs e)
+    {
+        var s = SettingsService.Instance.Settings;
+        string source = _lastTranslateSource ?? OcrTextBox.Text;
+        var pair = TranslationService.SwapLanguages(s.TranslateFrom, s.TranslateTo, Strings.Lang, source, _lastTranslation);
+        string nextText = _lastTranslation?.Text ?? source;
+        s.TranslateFrom = pair.From;
+        s.TranslateTo = pair.To;
+        SettingsService.Instance.SaveState();
+        UpdateTranslateButtons();
+        OcrTextBox.Text = nextText;
+        if (!string.IsNullOrWhiteSpace(nextText)) await DoTranslateAsync(nextText);
+    }
 
     private void ShowLangFlyout(Button anchor, bool isFrom)
     {
@@ -456,6 +486,7 @@ public sealed partial class CaptureOverlayWindow
         var s = SettingsService.Instance.Settings;
         if (isFrom) s.TranslateFrom = code;
         else        s.TranslateTo   = code;
+        _lastTranslation = null;
         SettingsService.Instance.SaveState();
         UpdateTranslateButtons();
         if (!string.IsNullOrEmpty(_lastTranslateSource))

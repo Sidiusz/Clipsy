@@ -33,6 +33,8 @@ public static class Strings
         ["TranslateUnavailable"]= New("Translation unavailable", "Перевод недоступен"),
         ["TranslateQuota"]      = New("Translation limit reached. Try again later or switch the service in Settings.", "Лимит перевода исчерпан. Попробуйте позже или смените сервис в настройках."),
         ["TranslateNetwork"]    = New("Translation service is unreachable. Check the connection.", "Сервис перевода недоступен. Проверьте подключение."),
+        ["TranslatingWith"]     = New("Translating with {0}…", "Перевод через {0}…"),
+        ["TipTranslateSwap"]    = New("Swap languages", "Поменять языки местами"),
         ["TranslateNotice"]     = New("To translate, the recognized text will be sent to {0}; if it's unavailable, to {1}. Continue?", "Для перевода распознанный текст будет отправлен в {0}, а если он недоступен — в {1}. Продолжить?"),
 
         // Capture overlay - bottom toolbar tooltips

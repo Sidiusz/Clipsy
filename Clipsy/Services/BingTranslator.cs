@@ -55,7 +55,12 @@ internal static partial class BingTranslator
             var root = doc.RootElement;
             if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0
                 && root[0].TryGetProperty("translations", out var tr) && tr.GetArrayLength() > 0)
-                return new TranslationResult(tr[0].GetProperty("text").GetString() ?? string.Empty);
+            {
+                string? source = root[0].TryGetProperty("detectedLanguage", out var detected)
+                    && detected.TryGetProperty("language", out var language) ? language.GetString() : null;
+                source = source switch { "zh-Hans" => "zh-CN", "zh-Hant" => "zh-TW", _ => source };
+                return new TranslationResult(tr[0].GetProperty("text").GetString() ?? string.Empty, SourceLanguage: source);
+            }
 
             // {"statusCode":205} and friends: the session token went stale.
             int status = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("statusCode", out var sc) && sc.ValueKind == JsonValueKind.Number

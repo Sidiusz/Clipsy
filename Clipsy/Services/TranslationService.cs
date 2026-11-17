@@ -13,7 +13,8 @@ namespace Clipsy.Services;
 public sealed record TranslationLang(string Code, string En, string Ru);
 
 /// <param name="ErrorKey">Localization key describing why <paramref name="Text"/> is null.</param>
-public sealed record TranslationResult(string? Text, string? ErrorKey = null);
+public sealed record TranslationResult(string? Text, string? ErrorKey = null,
+    string? SourceLanguage = null, string? TargetLanguage = null);
 
 /// <summary>Translation via Microsoft (Bing web translator), Google (unofficial endpoint) or MyMemory,
 /// falling back to the next service when one fails. Text leaves the machine; the overlay asks the
@@ -24,6 +25,7 @@ public static class TranslationService
     private const int ChunkLimitMyMemoryBytes = 480;
     private const int ChunkLimitGoogleChars = 4500;
     private const int ChunkLimitBingChars = 1000;
+    private static readonly TimeSpan ProviderTimeout = TimeSpan.FromSeconds(5);
 
     public const string Bing = "Bing", Google = "Google", MyMemory = "MyMemory";
     public static readonly IReadOnlyList<string> Services = new[] { Bing, Google, MyMemory };
@@ -72,34 +74,65 @@ public static class TranslationService
         return c;
     }
 
-    public static async Task<TranslationResult> TranslateAsync(string text, string from, string to,
-        string service = Bing, CancellationToken ct = default)
+    public static Task<TranslationResult> TranslateAsync(string text, string from, string to,
+        string service = Bing, CancellationToken ct = default, IProgress<string>? progress = null)
+        => TranslateAsync(text, from, to, service, TranslateChunkAsync, ProviderTimeout, ct, progress);
+
+    internal static async Task<TranslationResult> TranslateAsync(string text, string from, string to,
+        string service, Func<string, string, string, string, CancellationToken, Task<TranslationResult>> translate,
+        TimeSpan providerTimeout, CancellationToken ct = default, IProgress<string>? progress = null)
     {
         if (string.IsNullOrWhiteSpace(text)) return new TranslationResult(string.Empty);
 
-        // Text already in the target language is translated the other way (Russian UI + Russian text → English).
+        // Auto-detected text already in the target language is translated the other way.
         bool confident = true;
         string? source = from == "auto" ? DetectLanguage(text, out confident) : from;
-        if (source != null && confident && SameLanguage(source, to)) to = SameLanguage(source, "en") ? "ru" : "en";
+        if (from == "auto" && source != null && confident && SameLanguage(source, to))
+            to = SameLanguage(source, "en") ? "ru" : "en";
 
         TranslationResult? firstFailure = null;
         foreach (var svc in FallbackOrder(service))
         {
             ct.ThrowIfCancellationRequested();
+            progress?.Report(svc);
             // MyMemory has no working auto-detect.
             string svcFrom = svc == MyMemory && from == "auto" ? source ?? "en" : from;
-            var result = await TranslateWithAsync(svc, text, svcFrom, to, ct);
+            var result = await TranslateWithAsync(svc, text, svcFrom, to, translate, providerTimeout, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
             if (result.Text != null)
             {
                 if (firstFailure != null) Diagnostics.Log($"Translate: {service} failed ({firstFailure.ErrorKey}), used {svc}");
-                return result;
+                return result with { SourceLanguage = result.SourceLanguage ?? source, TargetLanguage = to };
             }
             firstFailure ??= result;
         }
         return firstFailure!;
     }
 
-    private static async Task<TranslationResult> TranslateWithAsync(string service, string text, string from, string to, CancellationToken ct)
+    internal static (string From, string To) SwapLanguages(string from, string to, string uiLanguage,
+        string text, TranslationResult? result)
+    {
+        string target = result?.TargetLanguage ?? (to == "ui" ? uiLanguage : to);
+        string source = result?.SourceLanguage
+            ?? (from == "auto" ? DetectLanguage(text, out _) : from)
+            ?? (SameLanguage(target, "en") ? "ru" : "en");
+        if (result == null && from == "auto" && DetectLanguage(text, out bool confident) != null
+            && confident && SameLanguage(source, target))
+            target = SameLanguage(source, "en") ? "ru" : "en";
+        return (target, source);
+    }
+
+    private static Task<TranslationResult> TranslateChunkAsync(string service, string chunk, string from, string to, CancellationToken ct)
+        => service switch
+        {
+            Bing => BingTranslator.TranslateAsync(chunk, from, to, ct),
+            Google => TranslateChunkGoogleAsync(chunk, from, to, ct),
+            _ => TranslateChunkMyMemoryAsync(chunk, from, to, ct),
+        };
+
+    private static async Task<TranslationResult> TranslateWithAsync(string service, string text, string from, string to,
+        Func<string, string, string, string, CancellationToken, Task<TranslationResult>> translate,
+        TimeSpan providerTimeout, CancellationToken ct)
     {
         try
         {
@@ -110,23 +143,23 @@ public static class TranslationService
                 _ => PackChunks(text, s => Encoding.UTF8.GetByteCount(s), ChunkLimitMyMemoryBytes),
             };
             var sb = new StringBuilder();
+            string? detectedSource = null;
             foreach (var (chunk, separator) in chunks)
             {
                 ct.ThrowIfCancellationRequested(); // Esc in the overlay: send no further chunks
-                var translated = service switch
-                {
-                    Bing => await BingTranslator.TranslateAsync(chunk, from, to, ct),
-                    Google => await TranslateChunkGoogleAsync(chunk, from, to, ct),
-                    _ => await TranslateChunkMyMemoryAsync(chunk, from, to, ct),
-                };
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeout.CancelAfter(providerTimeout);
+                var translated = await translate(service, chunk, from, to, timeout.Token).WaitAsync(timeout.Token).ConfigureAwait(false);
                 if (translated.Text == null) return translated;
+                detectedSource ??= translated.SourceLanguage;
                 sb.Append(translated.Text).Append(separator);
             }
-            return new TranslationResult(sb.ToString().TrimEnd());
+            return new TranslationResult(sb.ToString().TrimEnd(), SourceLanguage: detectedSource);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return new TranslationResult(null, "TranslateNetwork"); // HttpClient timeout
+            Diagnostics.Log($"Translate ({service}) timed out; trying the next service");
+            return new TranslationResult(null, "TranslateNetwork");
         }
         catch (HttpRequestException ex)
         {
@@ -184,7 +217,8 @@ public static class TranslationService
             if (seg.ValueKind == JsonValueKind.Array && seg.GetArrayLength() > 0 && seg[0].ValueKind == JsonValueKind.String)
                 sb.Append(seg[0].GetString());
         }
-        return new TranslationResult(sb.ToString());
+        string? source = root.GetArrayLength() > 2 && root[2].ValueKind == JsonValueKind.String ? root[2].GetString() : null;
+        return new TranslationResult(sb.ToString(), SourceLanguage: source);
     }
 
     private static bool SameLanguage(string a, string b)

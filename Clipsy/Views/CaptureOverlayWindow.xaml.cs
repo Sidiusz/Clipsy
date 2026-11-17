@@ -386,6 +386,8 @@ public sealed partial class CaptureOverlayWindow : Window
         ToolTipService.SetToolTip(OcrSelectAllBtn, Strings.Get("TipOcrSelectAll"));
         ToolTipService.SetToolTip(OcrCopyBtn,      Strings.Get("TipOcrCopy"));
         ToolTipService.SetToolTip(OcrTranslateBtn, Strings.Get("TipOcrTranslate"));
+        ToolTipService.SetToolTip(TranslateSwapBtn, Strings.Get("TipTranslateSwap"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TranslateSwapBtn, Strings.Get("TipTranslateSwap"));
         ToolTipService.SetToolTip(OcrExitBtn,      Strings.Get("TipOcrExit"));
 
         OcrPanelTitle.Text       = Strings.Get("OcrRecognized").ToUpperInvariant();
