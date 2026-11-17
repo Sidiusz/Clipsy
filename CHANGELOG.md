@@ -4,6 +4,12 @@ Detailed notes for every release (English and Russian) are in
 [`.github/release-notes/`](.github/release-notes/) and on the
 [Releases](https://github.com/Sidiusz/Clipsy/releases) page; the in-app changelog shows the same text.
 
+## 1.1.3
+
+Google Translate by default, explicit translation service switching, a language swap that keeps
+recognized text intact, and fixes for Print Screen recovery and installer launch errors.
+See [1.1.3.md](.github/release-notes/1.1.3.md).
+
 ## 1.1.2
 
 Smoother 60 fps recordings on high-refresh displays and while recording games, plus a fix for
