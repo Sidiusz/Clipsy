@@ -6,8 +6,8 @@ Detailed notes for every release (English and Russian) are in
 
 ## 1.1.3
 
-Google Translate by default, explicit translation service switching, a language swap that keeps
-recognized text intact, and fixes for Print Screen recovery and installer launch errors.
+Google Translate by default, translation service selection and language swapping in the translation
+panel, and fixes for slow translation, Print Screen, and installer launch errors.
 See [1.1.3.md](.github/release-notes/1.1.3.md).
 
 ## 1.1.2
